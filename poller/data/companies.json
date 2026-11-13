@@ -1,0 +1,258 @@
+[
+  {
+    "name": "Perpay",
+    "city": "Philadelphia",
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "perpay"
+  },
+  {
+    "name": "Duolingo",
+    "city": "Pittsburgh/NYC",
+    "state": "PA/NY",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "duolingo"
+  },
+  {
+    "name": "Govini",
+    "city": "Pittsburgh",
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "govini"
+  },
+  {
+    "name": "Airtable",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "airtable"
+  },
+  {
+    "name": "Harmonic",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "harmonic"
+  },
+  {
+    "name": "NYT",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "thenewyorktimes"
+  },
+  {
+    "name": "Greenhouse Software",
+    "city": "NYC/Remote",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "greenhouse"
+  },
+  {
+    "name": "Valon",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "valon"
+  },
+  {
+    "name": "Permutive",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "permutive"
+  },
+  {
+    "name": "Braze",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "braze"
+  },
+  {
+    "name": "Thirty Madison",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "thirtymadison"
+  },
+  {
+    "name": "Redpanda",
+    "city": "NYC/Remote",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "redpandadata"
+  },
+  {
+    "name": "Gopuff",
+    "city": "Philadelphia",
+    "state": "PA",
+    "tier": "Mid",
+    "ats": "lever",
+    "slug": "gopuff"
+  },
+  {
+    "name": "Secureframe",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "lever",
+    "slug": "secureframe"
+  },
+  {
+    "name": "Ladders",
+    "city": "NYC/Philadelphia/Remote",
+    "state": "NY/PA",
+    "tier": "Mid",
+    "ats": "lever",
+    "slug": "ladders"
+  },
+  {
+    "name": "BlueMatrix",
+    "city": "NYC/Remote",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "lever",
+    "slug": "BlueMatrix"
+  },
+  {
+    "name": "Findigs",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "lever",
+    "slug": "findigs"
+  },
+  {
+    "name": "Regal",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "lever",
+    "slug": "regalvoice"
+  },
+  {
+    "name": "Duranta",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "lever",
+    "slug": "getduranta"
+  },
+  {
+    "name": "Radical AI",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "lever",
+    "slug": "RadicalAI"
+  },
+  {
+    "name": "Seek AI",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "lever",
+    "slug": "seekai"
+  },
+  {
+    "name": "Palantir",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "S",
+    "ats": "lever",
+    "slug": "palantir"
+  },
+  {
+    "name": "Harvey",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "A",
+    "ats": "ashby",
+    "slug": "harvey"
+  },
+  {
+    "name": "Category Labs",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "category-labs"
+  },
+  {
+    "name": "Eagle",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "eagle"
+  },
+  {
+    "name": "PermitFlow",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "permitflow"
+  },
+  {
+    "name": "Norm Ai",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "norm-ai"
+  },
+  {
+    "name": "Parabola",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "parabola-io"
+  },
+  {
+    "name": "Office Hours",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "office-hours"
+  },
+  {
+    "name": "Trayd",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "trayd"
+  },
+  {
+    "name": "LiveKit",
+    "city": "NYC/Remote",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "livekit"
+  },
+  {
+    "name": "Ashby",
+    "city": "NYC/Remote",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "ashby",
+    "slug": "ashby"
+  }
+]

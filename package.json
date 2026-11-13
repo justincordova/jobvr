@@ -19,7 +19,9 @@
     "db:up": "docker compose -f docker-compose.dev.yml up -d",
     "db:down": "docker compose -f docker-compose.dev.yml down",
     "prepare": "husky || true",
-    "fix": "biome check --write . && pnpm --filter @jobvr/web format"
+    "fix": "biome check --write . && pnpm --filter @jobvr/web format",
+    "poll": "pnpm --filter @jobvr/poller poll",
+    "seed": "pnpm --filter @jobvr/poller seed"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.7",
