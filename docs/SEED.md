@@ -60,22 +60,36 @@ Astronomer (NYC, Mid)
 
 ## Research
 
-Run `discover`; if found on Greenhouse/Lever/Ashby, seed with `track = true`;
-otherwise seed as `manual_only`.
+Run `discover`; if found on Greenhouse/Lever/Ashby, seed with `track = true`
+(status ok); otherwise seed as `ats = other`, `manual_only`, `track = false`.
+`city`/`state` = the region below (NYC → New York, NY; NJ → state NJ; PA → state PA).
 
-- NYC: Traba, Chalk, Loop, Sigma Computing, Northslope, Squarespace, Zocdoc,
-  Oscar Health, Enigma, Prelim, PointOne, HIFI, Confido
-- NJ: FanDuel, AvePoint, Zinnia, Incedo, Apprentice.io
-- PA: SoftWriters, Journey Robotics, IAM Robotics, Skild AI, Latitude AI,
-  Hellbender, Stack AV, Woolpert, SoundStack, Certara, FreedomPay, Vistar Media
+| Region | Mid | Startup | Corporate |
+|---|---|---|---|
+| NYC | Sigma Computing, Squarespace, Zocdoc, Oscar Health | Traba, Chalk, Loop, Northslope, Enigma, Prelim, PointOne, HIFI, Confido | — |
+| NJ | FanDuel, AvePoint, Zinnia, Incedo | Apprentice.io | — |
+| PA | FreedomPay, Vistar Media | SoftWriters, Journey Robotics, IAM Robotics, Skild AI, Latitude AI, Hellbender, Stack AV, SoundStack | Woolpert, Certara |
 
-## manual_only (unsupported ATS; track = false)
+## manual_only (unsupported ATS; `ats = other`, track = false, tier Corporate)
 
 Prudential, PNC, Audible, Comcast, Westinghouse, BAE Systems, Ahold Delhaize
 USA, Susquehanna/SIG, Bloomberg, MetLife, ASRC Federal, Leidos, Lockheed
 Martin, JPMorgan Chase, Verizon, ADP, NJ Transit, Boeing, Vanguard
 
-## Reference only (S/A, track = false)
+## Reference only (track = false)
 
-Stripe, Plaid, Ramp, Brex, Datadog, MongoDB, Cursor, Jane Street, HRT,
-Two Sigma, Citadel
+- Tier S: Stripe, Cursor, Jane Street, HRT, Two Sigma, Citadel
+- Tier A: Plaid, Ramp, Brex, Datadog, MongoDB
+
+Seeded with `ats = other`, `manual_only` unless `discover` finds them on a
+supported ATS, in which case they get that `ats`/`slug`, status ok, and stay
+`track = false` (S/A rule).
+
+## Seeding rules
+
+- Seed is insert-only (never overwrites an existing company, matched by
+  case-insensitive name).
+- Verified/"(old)" entries: `probe` the slug; responds → status ok; fails →
+  `needs_review` (kept, never dropped). The "(old)" marker is dropped from the slug.
+- `track = true` unless the tier is S or A (then false), or the company is
+  `manual_only` / has no slug (then false).

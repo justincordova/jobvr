@@ -10,71 +10,100 @@ and is structured so it can later move to AWS serverless with minimal change.
 
 ## Goals
 
-- See new matching new-grad SWE roles within ~15 minutes of them appearing.
-- One bundled push ("5 new jobs") per interval, never spam, respect quiet hours.
-- No duplicate jobs across sources; direct ATS data wins over aggregator data.
-- Track applications from the same app ("Applied" in the feed creates one).
-- Every behavior-shaping value is a setting stored in the DB and editable in the UI.
+- New matching roles appear in the feed within one poll interval (default 15
+  min) and are pushed within one push interval (default 60 min), outside quiet hours.
+- One bundled push ("5 new jobs") per interval; no push when nothing is new.
+- No duplicate jobs across sources; direct ATS data wins over SimplifyJobs data.
+- Track applications in the same app ("Applied" in the feed creates one).
+- Every user preference (filters, schedules, notifications, sources) is a
+  setting stored in the DB and editable in the UI. Operational constants live in
+  code and are listed under [Constants](#constants).
 - Adding a new job source = one adapter file + one registry entry.
 - Usable from Mac and phone anywhere via Tailscale.
 - Cost: $0/month while running on the PC.
 
 ## Non-Goals
 
-- Multi-user, signup, or public access.
+- Multi-user, signup, or public internet access.
 - Sources beyond the four MVP sources: no Workday, Amazon Jobs, iCIMS, Avature,
   custom career sites, other ATS platforms, HN, headless scraping, or anything
   requiring login or forbidden by terms (LinkedIn, Indeed, Glassdoor, Handshake).
-- SMS. Email digest (setting exists, feature not built in MVP).
-- AWS deployment in the MVP (deferred to a later phase; see "Future: AWS").
-- Auto-tracking discovered companies.
+- SMS. Email digest (the setting exists; the feature is not built in the MVP).
+- AWS deployment in the MVP (see [Future: AWS](#future-aws)).
+- Adding or tracking any company without an explicit user action.
 
 ## Architecture
 
-pnpm workspace monorepo. One Node process (Hono) serves the API, the built web
-SPA, and runs an in-process 5-minute scheduler tick. Postgres 17 runs beside it.
-Both run via `docker compose` on the Windows PC (Docker Desktop + WSL2,
-`restart: unless-stopped`). Access is over Tailscale; the tailnet is the auth
-boundary (`AUTH_MODE=none`).
+pnpm workspace monorepo. One Node process (Hono) serves the API and the built web
+SPA, and runs an in-process scheduler. Postgres 18 runs beside it. Both run via
+`docker compose` on the Windows PC (Docker Desktop + WSL2, `restart:
+unless-stopped`).
 
-A `tailscale/tailscale` sidecar container joins the tailnet as node `jobvr` and
-runs `tailscale serve` → `https://jobvr.<tailnet>.ts.net` with a valid TLS cert.
-HTTPS is required for the PWA service worker / install on the phone. No app or
-Postgres ports are published on the host, so nothing is reachable from the LAN
-(important because `AUTH_MODE=none`). Postgres is exposed only on the tailnet
-node for Mac access (TablePlus / Drizzle Studio).
+Access is over Tailscale, and the tailnet is the auth boundary
+(`AUTH_MODE=none`). A `tailscale/tailscale` sidecar container joins the tailnet
+as node `jobvr` and applies a serve config (`TS_SERVE_CONFIG`):
+
+- HTTPS `https://jobvr.<tailnet>.ts.net` → app:3000 (valid TLS cert; the PWA
+  service worker and phone install require a secure context).
+- TCP 5432 → postgres:5432, for Mac access (TablePlus / Drizzle Studio).
+
+No ports are published on the PC host, so nothing is reachable from the LAN
+(required because `AUTH_MODE=none`). Prerequisites: MagicDNS and HTTPS
+certificates enabled in the Tailscale admin console; `TS_AUTHKEY` in `.env`.
 
 ```
-jobvr/                          pnpm 12, Node 26
-├── core/     Zod schemas, Drizzle schema + migrations, repositories (Postgres),
-│             filters, freshness, dedupe, location matcher, URL normalizer,
-│             runPoll(), runNotify(), notifier (ntfy)
-├── poller/   sources/{greenhouse,lever,ashby,simplify}.ts + sources/index.ts
-│             scripts/{discover,seed}.ts · fixtures
-├── api/      from hono-starter; modules/{jobs,applications,companies,suggestions,settings}
-│             server.ts = API + static web/dist + scheduler tick
-├── web/      from react-starter; TanStack Router/Query, Tailwind + shadcn/ui, vite-plugin-pwa
-├── docker-compose.yml   app + postgres:17 + tailscale sidecar + nightly pg_dump backup (keep 14)
-└── Dockerfile           multi-stage (builds web, bundles api)
+jobvr/                       pnpm 12, Node 26
+├── core/      @jobvr/core   Zod schemas, Drizzle schema + migrations, repositories,
+│                            SourceAdapter interface, matching, freshness, dedupe,
+│                            runPoll(), runNotify(), runCleanup(), ntfy notifier
+├── poller/    @jobvr/poller src/sources/{greenhouse,lever,ashby,simplify}.ts,
+│                            src/sources/index.ts (registry), scripts/{poll,notify,
+│                            discover,seed}.ts, data/companies.json, fixtures
+├── api/       @jobvr/api    from hono-starter; modules/{jobs,applications,companies,
+│                            suggestions,settings}; server.ts (API + web/dist + scheduler)
+├── web/       @jobvr/web    from react-starter; TanStack Router/Query,
+│                            Tailwind + shadcn/ui, vite-plugin-pwa
+├── docker-compose.yml       PC: app + postgres + tailscale + backup; no host ports
+├── docker-compose.dev.yml   Mac: postgres only, published on 127.0.0.1:5432
+└── Dockerfile               multi-stage: builds web, bundles api
 ```
+
+Dependency direction: `core` ← `poller` ← `api`; `web` imports only the typed
+client exported by `api` (`@jobvr/api/client`). `core` never imports `poller`:
+`runPoll` receives the adapter registry as an argument (dependency injection),
+and `server.ts` / `scripts/poll.ts` wire them together.
+
+`core` and `poller` are internal packages consumed as TypeScript source (no
+build step): api's tsdown bundles them into `dist`, Vitest resolves them
+directly, and poller scripts run with `tsx`. The web app's types come from
+api's built `dist/client.d.ts` (the template's bundled-declarations approach,
+which avoids leaking api's `@/*` aliases), so root `typecheck`/`build` build
+the api client before the web app.
 
 ### Key Components
 
 - **Source adapters** (`poller/src/sources/`): one file per source, each
-  returning Zod-validated `SourceJob`s. Registered in `sources/index.ts`.
-- **runPoll** (`core`): fetch → normalize → filter → dedupe → baseline →
-  persist → suggestions → health. Guarded by an in-process "running" flag plus
-  `pg_try_advisory_lock` held on one dedicated connection for the run (so a
-  manual `pnpm poll` can't overlap the server's tick). Lock not acquired → skip.
-- **runNotify** (`core`): selects unnotified matching jobs, sends one ntfy push,
-  marks them notified.
-- **Scheduler**: `setInterval` tick every 5 min, plus one tick ~10 s after boot
-  (catch-up after reboots); poll/notify each check settings and their last-run
-  time and exit early if not due. (On AWS this becomes an EventBridge Scheduler
-  rule with identical logic.)
+  returning Zod-validated `SourceJob`s; registered in `sources/index.ts`.
+- **runPoll** (`core`): fetch → normalize → filter → dedupe/merge → baseline →
+  persist → closures → suggestions → health.
+- **runNotify** (`core`): selects pushable jobs, sends one ntfy push, marks them notified.
+- **runCleanup** (`core`): daily retention delete.
+- **Scheduler** (`api/server.ts`): a tick every 5 min plus one tick 10 s after
+  boot. Each tick calls runPoll, runNotify, and runCleanup in sequence; each checks
+  whether it is due and returns immediately if not. Disabled with
+  `SCHEDULER_ENABLED=false`. (On AWS this becomes an EventBridge Scheduler rule
+  invoking the same functions.)
+- **Locks**: runPoll and runNotify each take their own Postgres
+  `pg_try_advisory_lock` (distinct keys) on a dedicated connection held for the
+  run; if not acquired, they return immediately. The lock is released when the run
+  ends or the connection drops. This prevents overlap between the server's tick
+  and a manual `pnpm poll` / `pnpm notify`. The step order inside each run is
+  defined in [Poll](#poll-runpoll) and [Notify](#notify-runnotify). The manual
+  scripts pass `force: true` to skip the due check (and quiet hours for notify); `pnpm notify --dry-run` prints the
+  pushable jobs without sending or marking anything.
 - **Ports** (interfaces with swappable implementations): repositories (Postgres),
   `Notifier` (ntfy), auth middleware (`AUTH_MODE`: `none`; later `cognito`),
-  scheduler (in-process tick; later EventBridge).
+  scheduler (in-process; later EventBridge).
 - **API**: Hono + `@hono/zod-openapi`; typed `hc` client consumed by web.
 - **Web**: React + Vite SPA. Pages: Feed, Applications, Companies, Suggested, Settings.
 
@@ -82,284 +111,581 @@ jobvr/                          pnpm 12, Node 26
 
 ```
 tick (5 min) ─┬─> runPoll ─> adapters (HTTP, ETag) ─> filter ─> dedupe ─> Postgres
-              └─> runNotify ─> Postgres (unnotified jobs) ─> ntfy push ─> phone
-phone/Mac ── Tailscale ──> Hono (API + SPA) ──> Postgres
+              ├─> runNotify ─> Postgres (pushable jobs) ─> ntfy ─> phone
+              └─> runCleanup ─> Postgres
+phone/Mac ── Tailscale HTTPS ──> Hono (API + SPA) ──> Postgres
 ```
 
 ## Sources (MVP: exactly four)
 
-All four were verified on 2026-11-12. Every ATS API returns ETags (use
-`If-None-Match`) and 404 for unknown slugs.
+Verified 2026-11-12: all four respond, return ETags, and return 304 on a matching
+`If-None-Match`. The three ATS APIs return 404 for unknown slugs.
 
 | Source | Endpoint | Posted date | Notes |
 |---|---|---|---|
-| Greenhouse | `boards-api.greenhouse.io/v1/boards/{slug}/jobs` (no `content`) | `first_published` | Never use `updated_at` as posted date. No salary without `content`. |
-| Lever | `api.lever.co/v0/postings/{slug}?mode=json` | `createdAt` (epoch ms) | Large uncompressed payloads (Gopuff 7.8 MB, no gzip) → ETag/304 matters. `salaryRange` exists but is rare (0/776 at Gopuff). |
-| Ashby | `api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true` | `publishedAt` | Structured compensation (min/max/interval/currency). Gzip supported. |
-| SimplifyJobs | `raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json` | `date_posted` (epoch s, **day-granular**, midnight UTC) | ~12 MB / ~2 MB gzip, ~19k listings, updated ~every 30 min; 304 on unchanged ETag. Fields: `id, company_name, title, url, locations[], category, active, is_visible, date_posted, date_updated, sponsorship, degrees, source, company_url`. Categories are inconsistent ("Software", "Software Engineering"). Locations look like `NYC`, `New York, NY`, `Jersey City, NJ`, `Remote in USA`, `Remote in UK`. |
+| Greenhouse | `boards-api.greenhouse.io/v1/boards/{slug}/jobs` (no `content`) | `first_published` | Never use `updated_at` as a posted date. No salary without `content`. |
+| Lever | `api.lever.co/v0/postings/{slug}?mode=json` | `createdAt` (epoch ms) | Large uncompressed payloads (Gopuff 7.8 MB) → 304s matter. `salaryRange` exists but is rare. |
+| Ashby | `api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true` | `publishedAt` | Structured compensation. Only `isListed` jobs are kept. |
+| SimplifyJobs | `raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json` | `date_posted` (epoch s; about half are exact midnight UTC = day precision, the rest are real instants) | ~12 MB (~2 MB gzip), ~19k listings, committed ~every 30 min. Fields: `id, company_name, title, url, locations[], category, active, is_visible, date_posted, date_updated, sponsorship, degrees, source, company_url`. Categories are inconsistent ("Software", "Software Engineering"). Locations look like `NYC`, `New York, NY`, `Jersey City, NJ`, `Remote in USA`, `Remote in UK`. |
 
-All four confirmed to return 304 on `If-None-Match` (2026-11-12).
-
-### URL parsing (`parseUrl`)
-
-Greenhouse, Lever, and Ashby job IDs are globally unique, so canonical keys don't
-need a slug. `parseUrl` returns `{ sourceJobId, slug? }`:
-
-- Greenhouse: `{boards,job-boards,job-boards.eu,job-boards.anz}.greenhouse.io/{slug}/jobs/{id}`,
-  and any URL with a `gh_jid={id}` query param (company career pages embedding
-  Greenhouse; slug unknown — 43 of 1,190 active Simplify software listings).
-- Lever: `jobs.lever.co/{slug}/{uuid}[/apply]`.
-- Ashby: `jobs.ashbyhq.com/{slug}/{uuid}[/application]`.
-
-### Adapter interface
+### Adapter interface (defined in `core`)
 
 ```ts
-type SourceId = "greenhouse" | "lever" | "ashby" | "simplify";
+type SourceId = string;               // validated against the registry at runtime
 
 interface SourceAdapter {
-  id: SourceId;
-  scope: "company" | "global";
-  concurrency: number;                                   // ATS: 3, simplify: 1
-  fetch(ctx: FetchCtx): Promise<FetchResult>;           // ctx: { slug?, etag?, signal, http }
-  parseUrl?(url: string): { sourceJobId: string; slug?: string } | null;
-  probe?(slug: string, ctx: ProbeCtx): Promise<boolean>; // for `discover`
+  id: SourceId;                       // "greenhouse" | "lever" | "ashby" | "simplify" today
+  label: string;                      // UI name, e.g. "SimplifyJobs"
+  kind: "ats" | "aggregator";        // ats: one fetch per company slug; aggregator: one global fetch
+  idPrefix: string;                   // canonical ID prefix: "gh" | "lv" | "ab" | "sj"
+  concurrency: number;                // max in-flight fetches for this source
+  fetch(ctx: FetchCtx): Promise<FetchResult>;   // ctx: { slug?, etag?, signal, http }
+  parseUrl?(url: string): { sourceJobId: string; slug?: string } | null;  // ats only
+  probe?(slug: string, ctx: ProbeCtx): Promise<boolean>;                  // ats only; used by `discover`
 }
 
 type FetchResult =
-  | { status: "not_modified"; etag: string }
-  | { status: "ok"; etag?: string; jobs: SourceJob[] };
+  | { status: "not_modified" }
+  | { status: "ok"; etag: string | null; jobs: SourceJob[]; invalidCount: number };
 
-// SourceJob: source, sourceJobId, companyName, companySlug?, title, locations[],
-//            remote?, url, postedAt?, postedAtPrecision ("instant" | "day"),
-//            salary? { min?, max?, currency, interval }, meta?
+interface SourceJob {
+  source: SourceId;
+  sourceJobId: string;
+  companyName: string;
+  companySlug?: string;
+  title: string;
+  locations: string[];               // raw strings + adapter-added "Remote - US" (see below)
+  url: string;                        // job/apply URL
+  postedAt?: Date;
+  postedAtPrecision: "instant" | "day";
+  salary?: { min?: number; max?: number; currency: string; interval: "hour" | "week" | "month" | "year" };
+  meta?: { active?: boolean; visible?: boolean; category?: string };   // aggregators only
+}
 ```
 
-Shared HTTP helper: 15s timeout, 1 retry with jitter on network/5xx/429 (no retry
-on 4xx), `If-None-Match`, `User-Agent: jobvr (personal job alerts)`, 50 MB cap.
+Everything source-specific is derived from the registry (`poller/src/sources/index.ts`):
+valid `SourceId`s, the ATS values allowed in `companies.ats` / `suggestions.ats`
+(each `kind: "ats"` adapter's `id`, plus `other`), the "Enabled sources" options,
+canonical ID prefixes, and per-source concurrency. `ats` and `source` columns are
+`text` validated against the registry, so adding a source needs no migration.
+Rules below that say "ATS" or "aggregator" apply by `kind`; SimplifyJobs is the
+only aggregator today.
 
-## Data Model (Postgres, Drizzle)
+### Field mapping per adapter
+
+| Adapter | title | locations | url | postedAt (precision) | salary |
+|---|---|---|---|---|---|
+| Greenhouse | `title` | [`location.name`] | `absolute_url` | `first_published` (instant) | none |
+| Lever | `text` | `categories.allLocations`, else [`categories.location`]; + `Remote - US` when `workplaceType = "remote"` and `country = "US"` | `hostedUrl` | `createdAt` (instant) | `salaryRange` {min, max, currency, interval: `per-hour-wage` → hour, `per-week-salary` → week, `per-month-salary` → month, `per-year-salary` → year} |
+| Ashby | `title` (only `isListed = true`) | [`location`, ...`secondaryLocations[].location`]; + `Remote - US` when `workplaceType = "Remote"` and `address.postalAddress.addressCountry` ∈ {USA, US, United States, United States of America} (`isRemote` is not used: it is true for Hybrid jobs too) | `jobUrl` | `publishedAt` (instant) | first `compensation.summaryComponents` item with `compensationType = "Salary"`; interval `1 HOUR`/`1 WEEK`/`1 MONTH`/`1 YEAR` → hour/week/month/year; other intervals → none |
+| SimplifyJobs | `title` | `locations` | `url` | `date_posted` (day if `date_posted % 86400 = 0`, else instant) | none |
+
+`companyName` comes from the company record for ATS adapters and from
+`company_name` for SimplifyJobs; `meta` = {`active`, `is_visible`, `category`}.
+
+- Adapters throw on transport errors, non-2xx/304 statuses (including 404), and
+  when more than 50% of a non-empty response's items fail Zod validation (likely
+  a schema change). Individual invalid items are logged, counted, and skipped.
+  An empty job list is a valid success.
+- Adapters append `Remote - US` per the mapping table above.
+- Adapters return **all** listings (no filtering); filtering happens in runPoll.
+
+### URL parsing (`parseUrl`)
+
+Greenhouse job IDs, Lever posting UUIDs, and Ashby job UUIDs are globally unique,
+so canonical keys don't need a slug.
+
+**Slug case**: slugs are stored and sent to the APIs exactly as given (Lever is
+case-sensitive: `BlueMatrix` → 200, `bluematrix` → 404). Only comparisons
+(company matching, uniqueness) are case-insensitive.
+
+Query strings and fragments are ignored except the ID parameters named below.
+
+- Greenhouse: hosts `boards.greenhouse.io`, `job-boards.greenhouse.io`,
+  `job-boards.eu.greenhouse.io`, `job-boards.anz.greenhouse.io` with path
+  `/{slug}/jobs/{id}`; `boards.greenhouse.io/embed/job_app?token={id}` (slug
+  unknown); and any URL with a `gh_jid={id}` query parameter (company career
+  pages embedding Greenhouse; slug unknown — 43 of 1,190 active Simplify
+  software listings on 2026-11-12).
+- Lever: `jobs.lever.co/{slug}/{uuid}` with optional `/apply`. (`jobs.eu.lever.co`
+  is not recognized: the EU API is out of scope, so those become `sj:` jobs.)
+- Ashby: `jobs.ashbyhq.com/{slug}/{uuid}` with optional `/application`.
+
+### HTTP helper
+
+15 s timeout per request; one retry after 1–3 s jitter on network errors, 5xx,
+and 429 (honoring `Retry-After` up to 30 s); no retry on other 4xx; sends
+`If-None-Match` when an ETag is known and `Accept-Encoding: gzip`;
+`User-Agent: jobvr (personal job alerts)`; aborts responses over 50 MB.
+
+## Data Model (Postgres 18, Drizzle)
+
+All timestamps are `timestamptz`. Migrations run automatically on app start.
 
 | Table | Columns |
 |---|---|
-| `settings` | single row: `data` JSONB (Zod `Settings`, parsed with defaults on read so new settings fields need no migration), `last_visit_at`, `last_poll_at`, `last_push_at` |
-| `companies` | id, name, city, state, tier (S/A/Mid/Startup/Corporate), track, ats (greenhouse/lever/ashby/other), slug, careers_url, notes, status (ok/needs_review/manual_only) |
-| `source_state` | (source, company_id nullable) → etag, last_success_at, last_attempt_at, consecutive_failures, last_error, baselined_at |
-| `jobs` | id (canonical key), company_id?, company_name, title, locations text[], url, primary_source, posted_at?, first_seen_at, effective_at, salary_min/max? (annual USD), state (new/saved/hidden/applied), baseline, notified_at? |
-| `job_sources` | (job_id, source) → source_job_id, url, posted_at |
-| `applications` | id, job_id? (FK on delete set null), company/title/url snapshot, status (applied/oa/interview/offer/rejected), applied_at, notes |
-| `suggestions` | normalized_name PK, display_name, ats, slug, listing_count, sample_titles, last_seen_at, state (open/dismissed/added) |
+| `settings` | single row (`id = 1`): `data` JSONB (Zod `Settings`, parsed with defaults on read so new fields need no migration), `last_visit_at`, `last_poll_at`, `last_push_at`, `last_cleanup_at` |
+| `companies` | `id` uuid, `name` (unique, case-insensitive), `city`, `state` (free text, e.g. "Pittsburgh/NYC"), `tier` (S/A/Mid/Startup/Corporate), `track` bool, `ats` (text: a registered ATS adapter id or `other`), `slug` (nullable, case preserved; unique per `ats`, case-insensitive), `careers_url`, `notes`, `status` (ok/needs_review/manual_only), `created_at`, `updated_at` |
+| `source_state` | `key` text PK (`simplify` or `company:<uuid>`), `source`, `company_id` (FK, cascade delete, nullable), `etag`, `filters_hash`, `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error`, `baselined_at` |
+| `jobs` | `id` text PK (canonical ID), `company_id` (FK, set null), `company_name`, `title`, `locations` text[], `url`, `primary_source`, `first_seen_at`, `effective_at`, `salary_min_usd`, `salary_max_usd` (annual), `state` (new/saved/hidden/applied), `baseline` bool, `notified_at`, `closed_at`, `updated_at` |
+| `job_sources` | PK (`source`, `source_job_id`); `job_id` (FK, cascade delete; indexed); `url`, `title`, `posted_at`, `posted_at_precision` (instant/day), `removed_at`. A job can have several rows, including several from the same source (SimplifyJobs has duplicate listings). |
+| `applications` | `id` uuid, `job_id` (FK, set null, unique when not null), `company_name`, `title`, `url`, `status` (applied/oa/interview/offer/rejected), `applied_at`, `notes`, `updated_at` |
+| `suggestions` | `id` text PK (normalized company name), `display_name`, `ats` (registered ATS id or `other`), `slug` (nullable, case preserved), `listing_count`, `sample_titles` text[] (≤ 3), `last_seen_at`, `state` (open/dismissed/added) |
 
-Canonical job IDs: `gh:<id>`, `lv:<uuid>`, `ab:<uuid>`, `sj:<uuid>` (only when
-the Simplify URL isn't a parseable ATS URL). All timestamps are `timestamptz`.
+Indexes: `jobs(effective_at desc)`; partial `jobs(effective_at) where notified_at
+is null`; `jobs(company_id)`.
 
-Company for a job: ATS jobs → the polled company. Simplify jobs → match by ATS
-slug (if parsed) else normalized company name (lowercase, strip punctuation and
-suffixes like inc/llc/corp/technologies); no match → `company_id` null, tier
-`Unlisted`. Tier is never copied onto jobs; it's joined from `companies` at read
-time so tier edits apply immediately.
+### Company invariants (enforced by the API and seed script)
 
-Indexes: `jobs(effective_at desc)`, partial `jobs(notified_at) where notified_at is null`,
-`jobs(company_id, title)`.
+- `ats = other` ⇒ `status = manual_only` and `track = false`.
+- Supported `ats` with no `slug` ⇒ `track = false` (cannot be polled).
+- Changing a company's `ats` or `slug` deletes its `source_state` row, so the
+  next poll starts fresh with a new baseline.
 
-Retention: daily cleanup deletes jobs older than 30 days unless saved/applied.
+### Canonical job IDs
 
-## Pipeline Rules
+`<idPrefix>:<sourceJobId>` of the adapter that identifies the job:
+
+- `gh:<id>`, `lv:<uuid>`, `ab:<uuid>` for direct ATS listings, and for Simplify
+  listings whose URL an ATS adapter's `parseUrl` recognizes.
+- `sj:<simplify id>` for Simplify listings whose URL isn't recognized.
+
+The canonical ID is fixed when the job is inserted and never changes. Because a
+fuzzy merge can attach an ATS listing to an `sj:` job, lookups go through
+`job_sources` (see Dedupe), not only `jobs.id`.
+
+### Normalization helpers
+
+- **Company name**: lowercase; `&` → `and`; non-alphanumerics → spaces; drop the
+  tokens `the, inc, llc, ltd, corp, corporation, co, company`; collapse spaces.
+- **Keyword text** (titles and keywords alike): lowercase; every character other
+  than `a–z` and `0–9` becomes a space; split into tokens. A keyword matches when
+  its token sequence appears contiguously in the title's tokens. So `sr.` matches
+  "Sr." and "Sr"; `full stack` matches "Full-Stack"; `software engineer i`
+  doesn't match "Software Engineer II"; `lead` doesn't match "Leadership".
+- **Company for a job**: ATS jobs → the polled company. Simplify jobs → the
+  company with the same `ats` + `slug` (case-insensitive, when `parseUrl` returned
+  a slug), else the company with the same normalized name, else none (tier
+  `Unlisted`). Resolved on insert, and re-resolved on every later poll match
+  while `company_id` is null (so adding a company adopts its existing Simplify
+  jobs). Tier is never copied onto jobs; it is joined from `companies` at read time.
+
+## Matching Rules
+
+### Keyword rule
+
+A title passes the keyword rule for a source when:
+
+- **ATS sources**: ≥ 1 role keyword AND ≥ 1 level keyword AND 0 exclude keywords.
+- **Aggregator (SimplifyJobs)**: 0 exclude keywords, AND ≥ 1 level keyword only
+  if "Apply level keywords to Simplify" is on. (Role is covered by the category check.)
+
+### Location rule
+
+A job passes when any of its location strings matches any enabled named location:
+
+- **Alias locations** (NJ, PA, NYC, user-added): the location's tokens contain
+  any alias as a contiguous token sequence (same tokenization as keywords).
+- **Remote-US** (built-in rule, can be enabled/disabled but has no aliases): the
+  string contains the token `remote` AND either contains a US token sequence
+  (`us`, `usa`, `u s`, `u s a`, `united states`) or is exactly "remote" after
+  tokenization. "Remote", "Remote - US", "Remote in USA", "United States
+  (Remote)" match; "Remote in UK", "Remote - Europe", "Remote (EMEA)", "Remote -
+  Latin America", "New York, NY (Remote)" don't (the last one matches NYC instead).
+
+### Salary rule
+
+Only applies when a salary is listed in USD (other currencies are treated as
+unlisted). Annualize: hour × 2080, week × 52, month × 12. Passes when
+`salary_max_usd` (or `salary_min_usd` if there is no max) ≥ the min salary setting.
+Unlisted salary always passes.
+
+### Poll-time filter (decides what is stored)
+
+A listing is stored (inserted, or merged into an existing job) only if it passes
+the location rule AND the keyword rule for its source, AND (aggregators only)
+`meta.active` and `meta.visible` are true and `meta.category` is in the "Simplify
+categories" setting, AND its effective age ≤ 7 days — computed with the matched
+job's `first_seen_at` if it matches an in-memory job, else with `now`.
+
+### Visibility rules V (applied at read time with current settings)
+
+A stored job is visible when:
+
+1. It passes the location rule (on `jobs.locations`), and the keyword rule for
+   **at least one** of its `job_sources` rows, using that row's `title` and
+   source (so a Simplify job later merged with an ATS listing doesn't disappear
+   because the ATS rule is stricter).
+2. It passes the salary rule.
+3. It has at least one non-Simplify source, or "Show SimplifyJobs jobs" is on.
+4. `closed_at` is null — except in the saved/applied views, where closed jobs
+   appear with a "Closed" badge.
+
+Feed = V + UI filters. Pushes and "new since last visit" = V + the pushable rule
+(see [Notify](#notify-runnotify)).
+
+## Pipeline
+
+### Due checks
+
+A task is due when its last-run timestamp is null or `now − last ≥ interval − 60 s`
+(the 60 s tolerance stops tick jitter from turning a 15-min interval into 20).
+
+- runPoll: `last_poll_at`, interval = "Poll every". `last_poll_at` is set when a
+  run **starts**.
+- runNotify: `last_push_at`, interval = "Push summary every". `last_push_at` is
+  set only when a push is **sent**. So after a quiet period with nothing to send,
+  the first new job pushes on the next tick; after a push, new jobs wait for the
+  interval (bundling).
+- runCleanup: `last_cleanup_at`, interval = 24 h.
 
 ### Poll (`runPoll`)
 
-1. Lock (see runPoll above); load settings, companies, source_state, last 7 days of jobs.
-2. Fetch each enabled source within its concurrency limit. One company failing
-   never stops others. Polled companies: `track = true` AND tier in tracked tiers
-   AND status ≠ `manual_only` (`needs_review` companies are still polled so they
-   can recover).
-3. Normalize; compute canonical ID (Simplify jobs with ATS URLs use the ATS key via `parseUrl`).
-4. Poll-time filter (see Matching rules): location + title exclude for all;
-   role + level keywords for ATS jobs; Simplify: `active && is_visible` +
-   software category (level keywords off by default). Skip jobs with effective
-   age > 7 days.
-5. Dedupe against in-memory set: canonical key / normalized URL first, then same
-   company + title token Jaccard ≥ 0.85. Merge into `job_sources`; ATS fields win;
-   job ID never changes; `effective_at` recomputed as the min across sources.
-6. Baseline: if the company/source has no `baselined_at`, save new jobs with
-   `baseline = true` (shown in feed, never pushed, not counted as "new"), then set it.
-7. Suggestions: Simplify companies not in `companies` (and not dismissed/added)
-   → upsert with ATS detected from the apply URL via the adapters' `parseUrl`
-   (supported ATS with slug → one-click trackable; `gh_jid` URL without slug →
-   "find slug" via `discover`; anything else → `other`).
-8. Health: success resets failures (and returns `needs_review` → `ok` if it was
-   set by failures); failure increments + stores error; 3 consecutive failures →
-   company `needs_review`.
+Order: take the poll lock → due check → set `last_poll_at = now` → steps below.
 
-### Matching rules
-
-- All keyword matching is case-insensitive and **whole-word/phrase** (token
-  boundaries), so `software engineer i` doesn't match "II"/"Intern", `lead`
-  doesn't match "leadership", `sr.` matches "Sr." and "Sr".
-- ATS jobs pass if title has ≥ 1 **role** keyword AND ≥ 1 **level** keyword AND 0
-  **exclude** keywords. Simplify jobs: exclude only (level optional via setting).
-- Location: a job passes if any of its locations matches any alias of any
-  enabled named location. Remote-US matches "remote" only when the string has
-  no country, or a US country token (us/usa/united states/u.s.); "Remote in UK",
-  "Remote - Canada" do not match.
-- Salary: only applied when a salary is listed. Ranges are annualized (hourly ×
-  2080). Passes if listed max (or min when no max) ≥ min salary setting.
-
-If > 50% of a response's items fail Zod validation, the fetch counts as a failure
-(likely schema change). Individual invalid items are logged and skipped.
+1. **Load** into memory: settings, companies, all `source_state` rows, and all
+   jobs (with all their `job_sources` rows) where `effective_at ≥ now − 7 days`.
+2. **Targets**:
+   - Each **company** with `track = true` AND tier in "Tiers to track" AND
+     `status ≠ manual_only` AND `ats` is a registered ATS adapter AND `slug` is set
+     AND that `ats` is in "Enabled sources". (`needs_review` companies are still
+     polled so they can recover.)
+   - Each **aggregator** in "Enabled sources" (today: SimplifyJobs), once.
+3. **Fetch** all targets in parallel, at most `adapter.concurrency` in flight per
+   source. The run has a 5-minute fetch budget; fetches still running are
+   aborted and count as failures. One target failing never affects others.
+   Send `If-None-Match` only if the target's stored `filters_hash` equals the
+   current hash of (`FILTER_VERSION` code constant + locations + role/level/exclude
+   keywords + Simplify categories + Apply-level-to-Simplify). Otherwise fetch
+   unconditionally, so changed filters or matching code re-evaluate unchanged sources.
+4. **Process** results one target at a time: all ATS targets first, then
+   aggregators (so ATS data is in place before Simplify merges into it). Each
+   target's processing (steps 5–9) runs in **one DB transaction**. If it throws,
+   the transaction rolls back, the target counts as a failure, and its `etag` /
+   `filters_hash` are not updated (so the next poll refetches in full).
+   Database writes touch only the columns named in these steps, so concurrent
+   user actions (Save, Hide, Apply) are never overwritten.
+5. **Normalize and filter** each listing of an `ok` result: compute its
+   canonical ID and its **identity keys** = {(`source`, `sourceJobId`)} plus,
+   when an ATS adapter's `parseUrl` recognizes its URL, (that ATS id, parsed
+   `sourceJobId`). Resolve its company. Apply the poll-time filter; listings that
+   fail are not merged or inserted (they still count for closures in step 7).
+6. **Dedupe/merge** each passing listing against the in-memory set (which
+   includes jobs inserted earlier in this run):
+   1. **Exact**: a job that has a `job_sources` row matching any identity key, or
+      whose `id` equals the listing's canonical ID.
+   2. **Fuzzy** (only if no exact match): allowed only between an `sj:` side and
+      an ATS side — an incoming Simplify listing whose canonical ID is `sj:` vs. a
+      job that has an ATS source row, or an incoming ATS listing vs. a job whose
+      id starts with `sj:` and has no ATS source row. Requires same company (same
+      `company_id`, or same normalized name when either has none) AND title
+      token-set Jaccard ≥ 0.85 AND at least one shared named-location label
+      (both sides' locations match that label). If several jobs qualify, pick the
+      highest Jaccard, then the newest `effective_at`. Listings whose URLs
+      identify different ATS postings are never fuzzy-merged.
+   - **Match** → upsert the listing's `job_sources` row (`job_id`, `url`, `title`,
+     `posted_at`, `posted_at_precision`). If the listing is from an ATS source,
+     overwrite the job's `title`, `locations`, `url`, salary, `company_id`,
+     `company_name`, and set `primary_source` to that ATS. If the job's
+     `company_id` is null, re-resolve it. Recompute `effective_at` (see
+     Freshness). Never changed by a match: `id`, `state`, `first_seen_at`,
+     `baseline`, `notified_at`.
+   - **No match** → insert the job (`id` = canonical ID, `first_seen_at = now`,
+     `state = new`, `primary_source` = listing's source) and its `job_sources`
+     row. Both inserts use `ON CONFLICT DO NOTHING`; if the job insert conflicts
+     (a job older than the in-memory window), skip the listing.
+7. **Baseline**: if the target's `source_state.baselined_at` is null, jobs
+   inserted by this target in this run get `baseline = true`, and
+   `baselined_at = now` is set when the target's transaction commits. Baseline
+   jobs show in the feed but are never pushed or counted as "new".
+8. **Closures** (`ok` results only; uses the full unfiltered result). The
+   target's rows are, among in-memory jobs: for an aggregator, every
+   `job_sources` row with that source; for a company, rows with source = the
+   company's `ats` on jobs whose `company_id` is that company. A row is **live**
+   if its `source_job_id` is in the result and (aggregators) `meta.active` and
+   `meta.visible` are true; otherwise it is **removed**. Set `removed_at = now` on
+   newly removed rows and `removed_at = null` on live rows. Then for each affected
+   job: all rows removed → `closed_at = now` (if not already set); any row live →
+   `closed_at = null`. Jobs outside the 7-day window are not re-evaluated.
+9. **Suggestions** (aggregator targets with an `ok` result, when "Suggest
+   companies from SimplifyJobs" is on): take the listings that passed the
+   poll-time filter and resolved to no company; group them by normalized company
+   name. Per group: `ats` = the most common ATS among URLs recognized by `parseUrl`
+   (`other` if none); `slug` = the most common non-null slug for that ATS (null if
+   none); `listing_count` = group size; `sample_titles` = up to 3 titles;
+   `display_name` = the most common raw `company_name`. Insert new groups as
+   `open`; for existing rows update `listing_count`, `sample_titles`,
+   `last_seen_at` (and `ats`/`slug` only while `open`). Rows not in this run get
+   `listing_count = 0`. Open rows that now resolve to a company (by normalized
+   name, or `ats` + `slug`) become `added`.
+10. **Health** per target (outside the transaction, always written):
+    `last_attempt_at = now`. Success (`ok` or `not_modified`, with a committed
+    transaction) → `consecutive_failures = 0`, `last_error = null`,
+    `last_success_at = now`, and for `ok` store `etag` and `filters_hash`; a
+    `needs_review` company becomes `ok`. Failure → increment
+    `consecutive_failures`, store `last_error`; when it reaches 3, a company
+    becomes `needs_review`.
 
 ### Freshness
 
-`first_seen_at` = first time the job ID is seen. `effective_at` = earlier of
-`first_seen_at` and the source's posted date. Max job age governs pushes and
-"new" counts; the poller stores matching jobs up to 7 days old so the feed's
-3-day filter works.
-
-Day-granular posted dates (Simplify `date_posted` = midnight UTC) are treated
-as the **end** of that UTC day when computing `effective_at`. Otherwise a job
-posted at 7 pm ET would look ~24 h old on first sight and be dropped by the 24 h
-max age (especially after a quiet-hours hold). Old listings still come out old.
+- `first_seen_at` = when the job was inserted.
+- Each `job_sources` row has an **adjusted posted date**: `posted_at` when
+  precision is `instant`; the end of that UTC day (23:59:59.999) when precision
+  is `day`; none when `posted_at` is null.
+- `effective_at` = min(`first_seen_at`, all rows' adjusted posted dates).
+  Recomputed on every merge; it can only move earlier. Effective age =
+  `now − effective_at`. The feed shows and sorts by effective age.
+- The end-of-day rule stops a day-precision Simplify listing from looking up to
+  ~24 h older than it is (and missing the 24 h push window). Old listings still
+  come out old. Instant-precision dates are used as-is.
 
 ### Notify (`runNotify`)
 
-Due when `now − last_push_at ≥ pushEvery` and not in quiet hours
-(America/New_York, wraps midnight, DST-safe via `Intl`). Select jobs:
-unnotified, not baseline, not hidden, effective age ≤ max age, passing current
-settings (tier, salary, location, sources, show Simplify). The tier check uses
-the company's tier (or `Unlisted`), **not** its `track` flag — so Simplify jobs
-from manual_only Corporate companies (e.g. JPMorgan) still push, while jobs from
-S/A companies don't unless those tiers are enabled. If any → one ntfy push ("N new jobs", click URL → feed `?new=1`) →
-set `notified_at` + `last_push_at`. No jobs → no push. Held jobs roll into the
-next push; jobs that age out while held are dropped. ntfy failure → nothing
-marked, retried next tick.
+A job is **pushable** when it is visible (V), `baseline = false`, `notified_at`
+is null, `state ∈ {new, saved}`, effective age ≤ "Max job age", and its tier (the
+company's tier, or `Unlisted`) is in "Tiers to track". The tier check uses tier
+only, not the company's `track` flag — so Simplify jobs from a `manual_only`
+Corporate company push, while jobs from S/A companies don't unless those tiers
+are enabled.
 
-## Settings (DB, all editable in UI)
+Order: take the notify lock → due check → quiet-hours check (inside quiet hours
+→ return) → select pushable jobs → none: return with `last_push_at` unchanged →
+send one ntfy push (title "jobvr", body "N new jobs", click URL `PUBLIC_URL`) →
+on success, set `notified_at = now` on exactly the selected jobs and
+`last_push_at = now`; on failure, mark nothing (retried next tick).
 
-| Setting | Default |
+Jobs held during quiet hours roll into the first push after quiet hours end.
+Jobs that exceed max age while held are never pushed. If `NTFY_URL` is unset,
+runNotify logs a warning and returns without marking anything.
+
+**Quiet hours** are evaluated in America/New_York (via `Intl`, DST-safe) as the
+half-open range [start, end), wrapping midnight when start > end. start = end
+means no quiet hours.
+
+### Cleanup (`runCleanup`)
+
+Delete jobs with `effective_at < now − 30 days` and `state ∈ {new, hidden}`
+(`job_sources` cascade). Saved and applied jobs are kept indefinitely.
+
+## Settings (DB, all editable in the UI)
+
+`PATCH /api/settings` replaces each provided top-level field wholesale (arrays
+are replaced, not merged).
+
+| Setting | Default | Constraints |
+|---|---|---|
+| Locations | NJ → `nj`, `new jersey` · PA → `pa`, `pennsylvania`, `philadelphia`, `pittsburgh` · NYC → `nyc`, `new york`, `brooklyn`, `manhattan` · Remote-US (built-in rule); all enabled | Labels unique; ≥ 1 enabled |
+| Tiers to track | Mid, Startup, Corporate, Unlisted (S, A off) | Subset of S/A/Mid/Startup/Corporate/Unlisted. Controls which companies are polled, which jobs push, and the feed's default tier filter. `Unlisted` (added to the original list so Simplify jobs from companies not in your list can push) only affects jobs with no company. |
+| Role keywords (any) | software, engineer, engineering, developer, swe, sde, programmer, full stack, fullstack, backend, frontend | ≥ 1 |
+| Level keywords (any) | new grad, entry, junior, early career, associate, graduate, software engineer i | ≥ 1 |
+| Exclude keywords | senior, sr., staff, principal, lead, manager, director, iii, ii, intern, internship | — |
+| Apply level keywords to Simplify | Off | — |
+| Simplify categories | Software, Software Engineering | Matched case-insensitively against `category` |
+| Max job age (hours) | 24 | 1–168 |
+| Poll every (minutes) | 15 | 5–1440 |
+| Push summary every (minutes) | 60 | 5–1440 |
+| Quiet hours (ET) | 23:00–07:00 | `HH:MM` each |
+| Min salary (USD/yr, if listed) | 0 (none) | ≥ 0 |
+| Email digest | Off | Not implemented in MVP; shown disabled |
+| Enabled sources | greenhouse, lever, ashby, simplify | Controls **polling** only |
+| Show SimplifyJobs jobs | On | Controls **visibility** of Simplify-only jobs (rule V3) |
+| Suggest companies from SimplifyJobs | On | Controls suggestion generation only |
+
+## Environment
+
+Template variables (`NODE_ENV`, `LOG_LEVEL`, `PORT`, `HOST`, `APP_NAME`,
+`ALLOWED_ORIGINS`, `RATE_LIMIT_*`, `TRUST_PROXY`, `REQUEST_TIMEOUT_MS`) plus:
+
+| Variable | Purpose |
 |---|---|
-| Locations (label + aliases) | NJ → nj, new jersey · PA → pa, pennsylvania, philadelphia, pittsburgh · NYC → nyc, new york, brooklyn, manhattan · Remote-US → special rule (see Matching rules). State codes match as whole tokens, so "Jersey City, NJ" / "Malvern, PA" match without listing every town. |
-| Tiers to track | Mid, Startup, Corporate, Unlisted (S, A off) — controls which companies are polled and which jobs are pushed |
-| Role must include (any) | software, engineer, engineering, developer, swe, sde, programmer, full stack, backend, frontend |
-| Level must include (any) | new grad, entry, junior, early career, associate, graduate, software engineer i |
-| Title must exclude | senior, sr., staff, principal, lead, manager, director, iii, ii, intern, internship |
-| Apply level keywords to Simplify | Off |
-| Max job age (hours) | 24 |
-| Poll every (minutes) | 15 |
-| Push summary every (minutes) | 60 |
-| Quiet hours (ET) | 23:00–07:00 |
-| Min salary (if listed) | 0 (none); unknown salary passes |
-| Email digest | Off (not implemented in MVP) |
-| Enabled sources | greenhouse, lever, ashby, simplify |
-| Show SimplifyJobs jobs | On |
-| Suggest companies from SimplifyJobs | On |
-
-Secrets (ntfy topic URL) come from env, not the DB.
+| `DATABASE_URL` | Postgres connection string |
+| `NTFY_URL` | Full topic URL, e.g. `https://ntfy.sh/<long-random-topic>` (secret) |
+| `PUBLIC_URL` | Push click target, e.g. `https://jobvr.<tailnet>.ts.net` |
+| `AUTH_MODE` | `none` (MVP) |
+| `SCHEDULER_ENABLED` | `true` on the PC; `false` in Mac dev unless testing |
+| `TS_AUTHKEY` | Tailscale auth key (compose only) |
 
 ## API
 
-All under `/api`, response envelope `{ success, data?, error?, message?, count?, details? }`.
+All routes under `/api` use the template envelope `{ success, data?, error?,
+message?, count?, details? }`. Job IDs contain `:` and are URL-encoded in paths.
 
-| Route | Purpose |
+| Route | Behavior |
 |---|---|
-| `GET /api/jobs?age=1h\|24h\|72h&location=&company=&tier=&source=&state=` | Feed, newest `effective_at` first; hidden excluded unless `state=hidden`. Returns `lastVisitAt` and `newSinceLastVisit` = non-baseline jobs with `first_seen_at > last_visit_at` (uses first-seen, not posted, so late-discovered jobs count). |
-| `POST /api/jobs/visit` | Set `last_visit_at = now`. Web calls it right after the feed loads, keeping the returned `lastVisitAt` in memory to highlight "new" rows for that session (no unreliable "on leave" hook). |
-| `PATCH /api/jobs/:id` | `{ state: saved \| hidden \| new }` |
-| `POST /api/jobs/:id/apply` | Create application + set job `applied` (one transaction) |
-| `GET/POST /api/applications`, `PATCH/DELETE /api/applications/:id` | Tracker |
-| `GET/POST /api/companies`, `PATCH/DELETE /api/companies/:id` | Companies + joined health; status → ok resets failures |
-| `GET /api/suggestions`, `POST /api/suggestions/:id/add`, `POST /api/suggestions/:id/dismiss` | Add: supported ATS with known slug → company `track = true`, tier `Startup` (editable inline), status ok, baselined on first poll. Otherwise → `manual_only`, `track = false`. Nothing is added without a click. |
-| `GET /api/settings`, `PATCH /api/settings` | Partial update; includes last poll/push times |
-| `GET /health` | Uptime + last poll age |
-
-`POST /api/applications` also accepts manual entries (no `job_id`) for roles
-found elsewhere (e.g. Workday companies).
+| `GET /api/jobs` | Query (all optional; list params are comma-separated): `view` = `feed` (default; state new/saved, not closed) \| `saved` \| `applied` \| `hidden`; `age` = `1h` \| `today` (effective_at since 00:00 America/New_York) \| `3d` \| `all` (default `3d` for `feed`, `all` otherwise); `location` (named-location labels; job matches any); `company` (company IDs and/or `unlisted`); `tier` (tiers incl. `Unlisted`; default "Tiers to track" for `feed`, all otherwise); `source` (source ids; job matches if any of its sources is listed). Returns jobs passing V and the filters, sorted by `effective_at` desc (max 500), each with its sources, company tier, and an `isNew` flag; plus `lastVisitAt` and `newSinceLastVisit`. **New** = non-baseline, `state ∈ {new, saved}`, tier in "Tiers to track", effective age ≤ "Max job age", visible (V), and `first_seen_at > last_visit_at`; when `last_visit_at` is null nothing is new. `newSinceLastVisit` counts new jobs ignoring the UI filters. |
+| `POST /api/jobs/visit` | Sets `last_visit_at = now`. |
+| `PATCH /api/jobs/:id` | Body `{ state: "saved" \| "hidden" \| "new" }`. 409 if the job is `applied`. |
+| `POST /api/jobs/:id/apply` | In one transaction: create an application (snapshot of company/title/url, status `applied`, `applied_at = now`) and set the job's state to `applied`. 409 if an application already exists for the job. |
+| `GET /api/applications` | All applications. |
+| `POST /api/applications` | Manual entry without `job_id` (e.g. roles found on Workday). Body: `company_name`, `title` (required); `url`, `status` (default `applied`), `applied_at` (default now), `notes` (optional). |
+| `PATCH /api/applications/:id` | Update status, notes, applied_at. |
+| `DELETE /api/applications/:id` | Deletes it; if linked to a job in state `applied`, that job returns to `new`. |
+| `GET /api/companies` | All companies with health joined from `source_state`. |
+| `POST /api/companies`, `PATCH /api/companies/:id` | Validated against the company invariants. Setting `status` to `ok` resets `consecutive_failures`. |
+| `DELETE /api/companies/:id` | Deletes it; its jobs keep `company_name` with `company_id` set null. |
+| `GET /api/suggestions` | Open suggestions with `listing_count > 0`, sorted by `listing_count` desc. |
+| `POST /api/suggestions/:id/add` | Body `{ tier }` (default `Startup`). Supported `ats` with slug → company with `track = true`, status `ok` (polled from the next run, starting with a baseline). Supported `ats` without slug → `track = false`, status `needs_review`, note "find slug with discover". `other` → `manual_only`, `track = false`. Suggestion → `added`. 409 if a company with the same name (case-insensitive) or the same `ats` + `slug` exists. |
+| `POST /api/suggestions/:id/dismiss` | Suggestion → `dismissed` (never shown again). |
+| `GET /api/settings` | Settings, plus `lastPollAt`, `lastPushAt`, and Simplify source health. |
+| `PATCH /api/settings` | Partial update (see Settings). |
+| `GET /health` | 200 `{ status: "ok", lastPollAt }`; 503 if the DB is unreachable. Not under `/api`. |
 
 ## Web
 
-Pages (built with the frontend-design skill): **Feed** (newest first, "X new since
-last visit", filters: age/location/company/tier/source; Applied/Save/Hide; "via
-SimplifyJobs" label), **Applications** (board by status), **Companies** (tier,
-Track toggle, ATS, slug, status, health), **Suggested** (Add/Dismiss),
-**Settings**. PWA installable on phone (served over Tailscale HTTPS). Service
-worker caches the app shell only; API requests are network-only.
+Pages are built with the frontend-design skill:
+
+- **Feed**: newest first; "X new since last visit" banner (`newSinceLastVisit`);
+  rows with `isNew` are highlighted. The web app calls `POST /api/jobs/visit` once
+  per page load, right after the first feed response, and keeps that first
+  response's `newSinceLastVisit` and `isNew` set for the rest of the page session
+  (later refetches don't clear the highlights). Filters: age, location, company, tier, source, view. Row actions:
+  Applied, Save, Hide (and Unsave / Unhide). A "via SimplifyJobs" badge appears
+  whenever Simplify is one of the job's sources.
+- **Applications**: board with one column per status; status changes via drag
+  or menu; manual add.
+- **Companies**: table with tier, Track toggle, ATS, slug, status, health (last
+  successful poll, consecutive failures, last error); add / edit / delete.
+- **Suggested**: Add (with tier picker) / Dismiss.
+- **Settings**: all settings; Simplify source health; last poll / push times.
+
+PWA installable on the phone (over Tailscale HTTPS). The service worker caches
+the app shell only; API requests are network-only.
+
+## Constants
+
+| Constant | Value |
+|---|---|
+| Scheduler tick / first tick after boot / due tolerance | 5 min / 10 s / 60 s |
+| Poll store window (max effective age stored, in-memory dedupe set) | 7 days |
+| Retention for new/hidden jobs | 30 days (cleanup every 24 h) |
+| Per-source concurrency (declared by each adapter) | Greenhouse 3, Lever 3, Ashby 3, SimplifyJobs 1 |
+| `FILTER_VERSION` | integer in `core`; bump whenever matching/normalization code changes (forces unconditional refetch) |
+| Poll run budget | 5 min |
+| HTTP | 15 s timeout, 1 retry (1–3 s jitter, `Retry-After` ≤ 30 s), 50 MB cap |
+| Invalid-item threshold | > 50% of a non-empty response → fetch failure |
+| Fuzzy dedupe | title token-set Jaccard ≥ 0.85 |
+| Failures before `needs_review` | 3 consecutive |
+| Salary annualization | hour × 2080, week × 52, month × 12 |
+| Backups | nightly `pg_dump` at 03:00 America/New_York, keep 14 |
 
 ## Key Decisions
 
 | Decision | Choice | Rationale |
 |---|---|---|
 | Hosting (MVP) | Docker on home Windows PC, 24/7 | $0; prove value before any AWS setup |
-| Database | Postgres 17 in Docker + Drizzle | Relational fit, $0, portable (Neon/Supabase from Lambda later, no VPC) |
-| Access / auth | Tailscale; `AUTH_MODE=none` | Private, works on phone away from home; Cognito later on AWS |
-| Scheduling | In-process 5-min tick, code decides if due | Settings changes apply instantly; maps 1:1 to EventBridge later |
+| Database | Postgres 18 in Docker + Drizzle | Relational fit, $0, portable (Neon/Supabase from Lambda later, no VPC) |
+| Access / auth | Tailscale sidecar + `tailscale serve`; `AUTH_MODE=none` | Private HTTPS (PWA needs a secure context), works on the phone away from home, no LAN exposure; Cognito later on AWS |
+| Scheduling | In-process 5-min tick; each task decides if it's due | Settings changes apply instantly; maps 1:1 to EventBridge later |
 | Push | ntfy.sh, long random topic (env secret) | Native push, click-through URL, free |
-| Monorepo tooling | pnpm workspace; api/core/poller use Biome; web keeps ESLint + Prettier; root husky + commitlint, lint-staged routes per package | Keeps each template's conventions |
-| Shared code | `core/` package | Single source for schemas, repos, domain logic |
-| Max job age | Governs push + "new"; store 7 days | Feed 3-day filter works |
-| Filtering | Poll-time (keeps DB small) + read-time (current settings) | Tightening filters applies instantly |
-| Title rules | ATS: role AND level AND NOT exclude, whole-word | A level-only rule let through "Renewals Associate" (live Airtable board) |
-| Simplify title rule | Exclude list only (level off) | Simplify is already new-grad; titles often plain "Software Engineer" |
-| Canonical IDs | `gh:<id>` / `lv:<uuid>` / `ab:<uuid>` (no slug) | IDs are globally unique; `gh_jid` career-page URLs have no slug |
-| Day-granular dates | Treated as end of UTC day | Prevents fresh Simplify jobs looking ~24 h old |
-| HTTPS | Tailscale sidecar + `tailscale serve` | PWA needs a secure context; no LAN exposure |
-| Locations | Named locations with editable aliases | Sources format locations inconsistently |
-| Suggestions | Add (starts tracking if supported) + Dismiss | Nothing added without a click |
-| Dedupe | Canonical ATS key / URL, then company + title Jaccard ≥ 0.85 | ATS data wins; keep both sources |
+| Monorepo tooling | pnpm workspace; core/poller/api use Biome; web keeps ESLint + Prettier; root husky + commitlint; lint-staged runs each package's tool | Keeps each template's conventions |
+| Package boundaries | `core` ← `poller` ← `api`; adapters injected into runPoll | No dependency cycle; core stays runtime-agnostic |
+| Max job age | Governs pushes and "new" counts; poller stores up to 7 days | Feed's 3-day filter works |
+| Filtering | Poll-time (keeps DB small) + read-time V (current settings) | Tightening applies instantly; loosening applies on the next poll (ETag bypassed via `filters_hash`) |
+| Title rules | ATS: role AND level AND NOT exclude; Simplify: NOT exclude; token-based | A level-only rule let "Renewals Associate" through (live Airtable board) |
+| Canonical IDs | `gh:<id>` / `lv:<uuid>` / `ab:<uuid>` / `sj:<id>` | ATS IDs are globally unique; `gh_jid` career-page URLs have no slug |
+| Day-precision dates | End of UTC day, capped at first seen | Prevents fresh Simplify jobs looking ~24 h old |
+| Locations | Named locations with token aliases + built-in Remote-US rule | Sources format locations inconsistently |
+| Suggestions | Only companies with stored matching jobs; Add (tracks if supported) + Dismiss | Avoids thousands of irrelevant suggestions; nothing added without a click |
+| Dedupe | Exact via identity keys (`job_sources` rows or canonical ID), then fuzzy only between an `sj:` side and an ATS side | ATS data wins; never merges two distinct ATS postings; survives a fuzzy merge on later polls |
+| Source extensibility | Registry-derived ids, prefixes, ATS values, concurrency; `text` columns | Adding a source = one adapter file + one registry entry, no migration |
+| Per-target transactions | Merge/closures/suggestions per target in one transaction; ETag saved only on commit | A failed write can't be hidden behind a 304 forever |
+| Closed jobs | Tracked per source; hidden from feed when all sources gone | No dead links in the feed or pushes |
 | Email digest | Not built in MVP | No SES/SMTP needed yet |
+| CI / deploy | GitHub Actions: lint, typecheck, test, build, Docker build. Deploy on PC: `git pull && docker compose up -d --build` | No cloud deploy target yet |
 
 ## Edge Cases & Constraints
 
-- Simplify file changes ~every 30 min, so most polls download ~2 MB gzip; parse in-process (~12 MB JSON).
-- Simplify `date_posted` is day-granular (midnight UTC) → end-of-day rule (see Freshness).
-- Simplify listings' apply URLs often point to Greenhouse/Lever/Ashby (incl. EU/ANZ Greenhouse hosts and `gh_jid` career pages) → canonicalize so they merge with direct ATS jobs.
-- Greenhouse `updated_at` is not a posted date; use `first_published`.
-- Quiet hours wrap midnight and must handle DST (America/New_York).
-- PC sleep / Windows Update reboots cause missed ticks; harmless, boot tick catches up. `/health` and company health expose staleness. Docker Desktop must start at login; PC sleep disabled.
-- Overlapping polls prevented by in-process flag + advisory lock.
-- Polite polling: per-source concurrency, ETags, timeouts, retry limits.
-- `needs_review` seeds whose slug 404s keep being polled (cheap 404s) until fixed or set to manual_only.
-- Jobs filtered out at read time never get `notified_at`; the max-age check and 30-day retention bound this.
-- Backups land on the same PC disk; point the backup folder at a synced folder (OneDrive/Dropbox) for off-machine copies.
-- ntfy.sh topics are readable by anyone who knows the name → long random topic; pushes contain only a count and the tailnet URL.
+- Simplify changes ~every 30 min, so most polls download ~2 MB gzip and parse
+  ~12 MB of JSON in-process.
+- Simplify apply URLs often point to Greenhouse/Lever/Ashby (including EU/ANZ
+  Greenhouse hosts and `gh_jid` career pages); canonical IDs merge them with
+  direct ATS jobs exactly.
+- Loosening filters makes newly matching jobs eligible; those within max age
+  will push (they are genuinely new matches).
+- A new company's first successful poll is a baseline even if some of its jobs
+  are minutes old (per requirements).
+- Exclude wins over level: "Software Engineer I/II" is excluded by `ii`. Role
+  keywords also admit "Solutions Engineer" / "Sales Engineer"; tune the exclude
+  list if that's noisy. `new york` also matches upstate "Albany, New York".
+- `needs_review` seeds whose slug 404s keep being polled (cheap 404s) until
+  fixed or set to `manual_only`.
+- PC sleep / Windows Update reboots cause missed ticks; the boot tick catches
+  up. Docker Desktop must start at login and PC sleep must be disabled. `/health`
+  and company health expose staleness.
+- Postgres 18 images keep data under `/var/lib/postgresql/18/docker`; the
+  compose volume must mount `/var/lib/postgresql` (not `.../data`, which fails
+  at startup on 18).
+- Backups live on the PC disk; point the backup folder at a synced folder
+  (OneDrive/Dropbox) for off-machine copies.
+- ntfy.sh topics are readable by anyone who knows the name → long random topic;
+  push bodies contain only a count; the click URL is reachable only on the tailnet.
 
 ## Testing
 
-Vitest. Adapter tests from saved fixture responses (incl. 304, 404, malformed
-items, `parseUrl` incl. `gh_jid` and regional hosts). Unit tests for matching
-rules (whole-word, role+level+exclude, Remote-US vs "Remote in UK"), location
-matcher, salary annualization, freshness (incl. day-granular dates), dedupe,
-baseline, quiet hours (wrap + DST), notifier selection (tier vs track). Repository + API integration tests
-against Testcontainers Postgres and Hono `testClient`.
+Vitest everywhere.
+
+- **Adapters** (saved fixture responses): parsing to `SourceJob`, 304, 404,
+  malformed items and the 50% threshold, field mapping, Remote-US enrichment
+  (Ashby Hybrid with `isRemote = true` must not get it), Simplify date precision
+  detection, `parseUrl` (all Greenhouse hosts, `embed/job_app?token=`, `gh_jid`,
+  Lever `/apply`, `jobs.eu.lever.co` rejected, Ashby `/application?embed=true`).
+- **Core units**: tokenization and keyword rule, location rule (Remote-US vs
+  "Remote in UK"), salary annualization and currency, freshness (day precision),
+  canonical ID, identity keys and company resolution (incl. re-resolution),
+  exact dedupe across polls after a fuzzy merge, fuzzy dedupe (including never
+  merging two ATS jobs), baseline, closures, suggestions grouping, due checks
+  (tolerance), quiet hours (wrap, start = end, DST), pushable selection (tier vs
+  track), `filters_hash` ETag bypass, per-target transaction rollback (ETag not
+  saved), column-scoped writes not clobbering a concurrent Hide.
+- **Integration**: repositories and API routes against Testcontainers Postgres,
+  using Hono `testClient`.
 
 ## Build Order
 
-1. Monorepo scaffold from templates (api, web, core, poller), root tooling, compose with Postgres.
+1. Monorepo scaffold from templates (core, poller, api, web), root tooling,
+   `docker-compose.dev.yml` with Postgres.
 2. core: schemas, Drizzle schema/migrations, repositories, settings defaults.
 3. Adapter interface + Greenhouse, Lever, Ashby adapters with fixture tests.
-4. Filters, freshness, dedupe, baseline (tests); `seed` script for the
-   verified companies in `docs/SEED.md` (API-confirmed, else `needs_review`) so
+4. Matching, freshness, dedupe, baseline, closures (tests); `poller/data/companies.json`
+   from `docs/SEED.md` and the `seed` script (API-confirmed via `probe`, else
+   `needs_review`; insert-only, never overwrites existing companies), so
    `pnpm poll` has real data from here on.
 5. SimplifyJobs adapter + cross-source dedupe + suggestions.
 6. API routes: jobs, applications, companies, suggestions, settings.
 7. Web (frontend-design skill): Feed → Applications → Companies → Suggested → Settings.
-8. Notifier + quiet hours + scheduler tick.
-9. `discover` script; run on "find slug" + research lists; seed results,
-   manual_only, and reference-only companies.
-10. PC deployment (Dockerfile, compose, backups, Tailscale), CI, README
+8. Notifier, quiet hours, cleanup, scheduler.
+9. `discover` script: `pnpm discover "<Company Name>"` calls `probe` on every
+   registered ATS adapter for each slug candidate and prints which respond (with
+   job counts); it writes nothing. Candidates, de-duplicated, in order: name with
+   spaces removed in original case (`EliseAI`), lowercased (`eliseai`),
+   lowercase hyphenated (`elise-ai`), and the same three forms of the name with
+   trailing tokens `ai`, `labs`, `inc`, `technologies`, `software`, `robotics`, `hq`
+   removed; plus each of those + `hq`, + `-io`, + `inc`. Run it on the "find slug"
+   and research lists and record results in `companies.json`:
+   - "Find slug" company found → `track` per tier rule, status `ok`; not found →
+     kept with its listed ATS, no slug, `track = false`, `needs_review`.
+   - Research company found → `track = true`, status `ok`; not found →
+     `ats = other`, `manual_only`, `track = false`.
+   Then seed them plus the `manual_only` and reference-only companies.
+10. PC deployment (Dockerfile, compose, Tailscale sidecar, backups), CI, README
     (setup, deploy, add a company, add a source adapter).
 
 ## Future: AWS
 
-Lambda (nodejs24.x) entry files for API/poll/notify, EventBridge Scheduler,
-S3 + CloudFront (jobvr.dev, HTTPS), Cognito (`AUTH_MODE=cognito`), Postgres via
-Neon/Supabase free tier (no VPC) or a DynamoDB repository implementation. Cost
-guardrails: no NAT/EC2/RDS/VPC Lambdas, 7-day log retention, AWS Budget alert at $5.
+Lambda (nodejs24.x) entry files for API/poll/notify/cleanup, EventBridge
+Scheduler, S3 + CloudFront (jobvr.dev, HTTPS), Cognito (`AUTH_MODE=cognito`),
+Postgres via Neon/Supabase free tier (no VPC) or a DynamoDB repository
+implementation. Cost guardrails: no NAT/EC2/RDS/VPC Lambdas, 7-day log
+retention, timeouts/retry/concurrency limits as above, AWS Budget alert at $5.
 
 ## Open Questions
 
-- None blocking. Domain `jobvr.dev` to be registered later.
+- None. (Domain `jobvr.dev` will be registered at the AWS phase.)
 
 ## References
 
 - Templates: `~/cs/templates/hono-starter`, `~/cs/templates/react-starter`
 - SimplifyJobs: github.com/SimplifyJobs/New-Grad-Positions (branch `dev`)
 - Greenhouse Job Board API, Lever Postings API, Ashby Posting API
-- ntfy.sh, Tailscale, Drizzle ORM
+- ntfy.sh, Tailscale (serve, sidecar container), Drizzle ORM
+- Seed list: `docs/SEED.md`
