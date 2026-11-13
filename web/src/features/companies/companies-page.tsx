@@ -82,7 +82,7 @@ function useCompanyMutations() {
 }
 
 function Health({ c }: { c: Company }) {
-  if (c.ats === 'other') return <span className="text-faint">—</span>
+  if (c.ats === 'other') return <span className="text-faint">n/a</span>
   if (!c.health) return <span className="text-faint">not polled yet</span>
   const failing = c.health.consecutiveFailures > 0
   return (

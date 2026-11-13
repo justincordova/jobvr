@@ -5,7 +5,7 @@ import { z } from "zod";
  *
  * Parsed once at import time so the process fails fast on invalid config.
  * `.env` is loaded by Node itself (`--env-file-if-exists`) before any module
- * runs, so every value here — including NODE_ENV — is already in process.env.
+ * runs, so every value here (including NODE_ENV) is already in process.env.
  */
 export const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
