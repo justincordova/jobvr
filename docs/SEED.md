@@ -100,3 +100,25 @@ supported ATS, in which case they get that `ats`/`slug`, status ok, and stay
   `needs_review` (kept, never dropped). The "(old)" marker is dropped from the slug.
 - `track = true` unless the tier is S or A (then false), or the company is
   `manual_only` / has no slug (then false).
+
+## Discover results (2026-11-13)
+
+`pnpm discover` was run on every list above; `poller/data/companies.json` holds
+the outcome. Hits were spot-checked against job locations before use.
+
+- Moved ATS: Valon → Ashby `valon`, Permutive → Ashby `permutive`.
+- Find slug: Yext (Greenhouse `yext`), EliseAI (Ashby `eliseai`), Ellipsis Labs
+  (Ashby `ellipsislabs`), Gecko Robotics (Ashby `gecko-robotics`), Rilla (Ashby
+  `rilla`), Astronomer (Ashby `astronomer`). Not found: Aurora Innovation,
+  Graphite (`graphitehq` is an unrelated SEO agency); both `needs_review`.
+- Research found: Sigma Computing, Squarespace, Zocdoc, FanDuel, AvePoint,
+  Zinnia, Latitude AI (`latitude`), Hellbender (`hellbenderinc`), Stack AV,
+  Woolpert (Greenhouse); Traba, Chalk, Prelim, PointOne, HIFI, Confido (Ashby);
+  FreedomPay, SoundStack (Lever). The rest are `manual_only`. Journey Robotics
+  is `manual_only` (the `journey` board is an architecture firm).
+- Reference found (track = false): Stripe, Jane Street, Brex, Datadog, MongoDB
+  (Greenhouse); Cursor, Plaid, Ramp (Ashby). HRT's Ashby board has no jobs and
+  isn't confirmed, so HRT stays `manual_only`.
+- Still 404 everywhere (kept as `needs_review`): Govini, Harmonic (the Ashby
+  `harmonic` board is a different Palo Alto company), Thirty Madison, Redpanda,
+  Regal, Seek AI, Trayd.

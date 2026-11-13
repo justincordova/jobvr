@@ -22,7 +22,8 @@
     "fix": "biome check --write . && pnpm --filter @jobvr/web format",
     "poll": "pnpm --filter @jobvr/poller poll",
     "seed": "pnpm --filter @jobvr/poller seed",
-    "notify": "pnpm --filter @jobvr/poller notify"
+    "notify": "pnpm --filter @jobvr/poller notify",
+    "discover": "pnpm --filter @jobvr/poller discover"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.7",

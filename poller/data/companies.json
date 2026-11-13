@@ -60,7 +60,7 @@
     "city": "NYC",
     "state": "NY",
     "tier": "Startup",
-    "ats": "greenhouse",
+    "ats": "ashby",
     "slug": "valon"
   },
   {
@@ -68,7 +68,7 @@
     "city": "NYC",
     "state": "NY",
     "tier": "Startup",
-    "ats": "greenhouse",
+    "ats": "ashby",
     "slug": "permutive"
   },
   {
@@ -254,5 +254,560 @@
     "tier": "Mid",
     "ats": "ashby",
     "slug": "ashby"
+  },
+  {
+    "name": "Aurora Innovation",
+    "city": "Pittsburgh",
+    "state": "PA",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": null
+  },
+  {
+    "name": "Yext",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "yext"
+  },
+  {
+    "name": "EliseAI",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "eliseai"
+  },
+  {
+    "name": "Ellipsis Labs",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "ellipsislabs"
+  },
+  {
+    "name": "Gecko Robotics",
+    "city": "Pittsburgh",
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "gecko-robotics"
+  },
+  {
+    "name": "Rilla",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "rilla"
+  },
+  {
+    "name": "Graphite",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": null
+  },
+  {
+    "name": "Astronomer",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "ashby",
+    "slug": "astronomer"
+  },
+  {
+    "name": "Sigma Computing",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "sigmacomputing"
+  },
+  {
+    "name": "Squarespace",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "squarespace"
+  },
+  {
+    "name": "Zocdoc",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "zocdoc"
+  },
+  {
+    "name": "Oscar Health",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Traba",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "traba"
+  },
+  {
+    "name": "Chalk",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "chalk"
+  },
+  {
+    "name": "Loop",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Northslope",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Enigma",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Prelim",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "prelim"
+  },
+  {
+    "name": "PointOne",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "pointone"
+  },
+  {
+    "name": "HIFI",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "hifi"
+  },
+  {
+    "name": "Confido",
+    "city": "New York",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "confido"
+  },
+  {
+    "name": "FanDuel",
+    "city": null,
+    "state": "NJ",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "fanduel"
+  },
+  {
+    "name": "AvePoint",
+    "city": null,
+    "state": "NJ",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "avepoint"
+  },
+  {
+    "name": "Zinnia",
+    "city": null,
+    "state": "NJ",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "zinnia"
+  },
+  {
+    "name": "Incedo",
+    "city": null,
+    "state": "NJ",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Apprentice.io",
+    "city": null,
+    "state": "NJ",
+    "tier": "Startup",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "FreedomPay",
+    "city": null,
+    "state": "PA",
+    "tier": "Mid",
+    "ats": "lever",
+    "slug": "freedompay"
+  },
+  {
+    "name": "Vistar Media",
+    "city": null,
+    "state": "PA",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "SoftWriters",
+    "city": null,
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Journey Robotics",
+    "city": null,
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "IAM Robotics",
+    "city": null,
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Skild AI",
+    "city": null,
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Latitude AI",
+    "city": null,
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "latitude"
+  },
+  {
+    "name": "Hellbender",
+    "city": null,
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "hellbenderinc"
+  },
+  {
+    "name": "Stack AV",
+    "city": null,
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "stackav"
+  },
+  {
+    "name": "SoundStack",
+    "city": null,
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "lever",
+    "slug": "SoundStack"
+  },
+  {
+    "name": "Woolpert",
+    "city": null,
+    "state": "PA",
+    "tier": "Corporate",
+    "ats": "greenhouse",
+    "slug": "woolpert"
+  },
+  {
+    "name": "Certara",
+    "city": null,
+    "state": "PA",
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Prudential",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "PNC",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Audible",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Comcast",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Westinghouse",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "BAE Systems",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Ahold Delhaize USA",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Susquehanna/SIG",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Bloomberg",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "MetLife",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "ASRC Federal",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Leidos",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Lockheed Martin",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "JPMorgan Chase",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Verizon",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "ADP",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "NJ Transit",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Boeing",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Vanguard",
+    "city": null,
+    "state": null,
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null
+  },
+  {
+    "name": "Stripe",
+    "city": null,
+    "state": null,
+    "tier": "S",
+    "ats": "greenhouse",
+    "slug": "stripe",
+    "track": false
+  },
+  {
+    "name": "Cursor",
+    "city": null,
+    "state": null,
+    "tier": "S",
+    "ats": "ashby",
+    "slug": "cursor",
+    "track": false
+  },
+  {
+    "name": "Jane Street",
+    "city": null,
+    "state": null,
+    "tier": "S",
+    "ats": "greenhouse",
+    "slug": "janestreet",
+    "track": false
+  },
+  {
+    "name": "HRT",
+    "city": null,
+    "state": null,
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "track": false
+  },
+  {
+    "name": "Two Sigma",
+    "city": null,
+    "state": null,
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "track": false
+  },
+  {
+    "name": "Citadel",
+    "city": null,
+    "state": null,
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "track": false
+  },
+  {
+    "name": "Plaid",
+    "city": null,
+    "state": null,
+    "tier": "A",
+    "ats": "ashby",
+    "slug": "plaid",
+    "track": false
+  },
+  {
+    "name": "Ramp",
+    "city": null,
+    "state": null,
+    "tier": "A",
+    "ats": "ashby",
+    "slug": "ramp",
+    "track": false
+  },
+  {
+    "name": "Brex",
+    "city": null,
+    "state": null,
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "brex",
+    "track": false
+  },
+  {
+    "name": "Datadog",
+    "city": null,
+    "state": null,
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "datadog",
+    "track": false
+  },
+  {
+    "name": "MongoDB",
+    "city": null,
+    "state": null,
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "mongodb",
+    "track": false
   }
 ]
