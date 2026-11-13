@@ -1,4 +1,4 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import type { CompanyStatus, Tier } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { type CompanyRow, companies, type SourceStateRow, sourceState } from "../db/schema";
@@ -69,11 +69,15 @@ const conflict = () =>
 export const listCompanies = (db: DbOrTx): Promise<CompanyRow[]> =>
   db.select().from(companies).orderBy(asc(companies.name));
 
-export const listCompaniesWithHealth = async (db: DbOrTx): Promise<CompanyWithHealth[]> => {
+export const listCompaniesWithHealth = async (
+  db: DbOrTx,
+  id?: string,
+): Promise<CompanyWithHealth[]> => {
   const rows = await db
     .select({ company: companies, state: sourceState })
     .from(companies)
     .leftJoin(sourceState, eq(sourceState.key, sql`'company:' || ${companies.id}::text`))
+    .where(id ? eq(companies.id, id) : undefined)
     .orderBy(asc(companies.name));
   return rows.map((r) => ({ ...r.company, health: toHealth(r.state) }));
 };
@@ -178,4 +182,17 @@ export const deleteCompany = async (db: DbOrTx, id: string): Promise<void> => {
     .where(eq(companies.id, id))
     .returning({ id: companies.id });
   if (deleted.length === 0) throw new NotFoundError("Company not found");
+};
+
+/** Health of non-company targets (aggregators), keyed by source id. */
+export const getSourceHealth = async (
+  db: DbOrTx,
+  keys: readonly string[],
+): Promise<Map<string, CompanyHealth>> => {
+  if (keys.length === 0) return new Map();
+  const rows = await db
+    .select()
+    .from(sourceState)
+    .where(inArray(sourceState.key, [...keys]));
+  return new Map(rows.map((r) => [r.key, toHealth(r) as CompanyHealth]));
 };

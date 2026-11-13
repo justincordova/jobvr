@@ -1,12 +1,12 @@
 import { HTTP_MAX_BYTES, HTTP_MAX_RETRY_AFTER_MS, HTTP_TIMEOUT_MS, USER_AGENT } from "./constants";
 
 export class HttpError extends Error {
-  constructor(
-    message: string,
-    readonly status?: number,
-  ) {
+  readonly status?: number;
+
+  constructor(message: string, status?: number) {
     super(message);
     this.name = "HttpError";
+    this.status = status;
   }
 }
 
