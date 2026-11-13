@@ -88,7 +88,14 @@ supported ATS, in which case they get that `ats`/`slug`, status ok, and stay
 ## Seeding rules
 
 - Seed is insert-only (never overwrites an existing company, matched by
-  case-insensitive name).
+  normalized name).
+- Verified/"Find slug" tables: `city` = the Location column verbatim (e.g.
+  "Pittsburgh/NYC", "NYC/Remote"); `state` = the states it implies, `/`-joined
+  in the same order (NYC → NY, Philadelphia/Pittsburgh → PA; "Remote" adds
+  nothing), e.g. "PA/NY", "NY".
+- manual_only and Reference-only companies: `city`/`state` null.
+- "Find slug" companies: `discover` finds the slug → status ok; not found →
+  kept with the listed ATS, no slug, `track = false`, `needs_review`.
 - Verified/"(old)" entries: `probe` the slug; responds → status ok; fails →
   `needs_review` (kept, never dropped). The "(old)" marker is dropped from the slug.
 - `track = true` unless the tier is S or A (then false), or the company is

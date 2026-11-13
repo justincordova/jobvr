@@ -126,7 +126,7 @@ Verified 2026-11-12: all four respond, return ETags, and return 304 on a matchin
 | Greenhouse | `boards-api.greenhouse.io/v1/boards/{slug}/jobs` (no `content`) | `first_published` | Never use `updated_at` as a posted date. No salary without `content`. |
 | Lever | `api.lever.co/v0/postings/{slug}?mode=json` | `createdAt` (epoch ms) | Large uncompressed payloads (Gopuff 7.8 MB) → 304s matter. `salaryRange` exists but is rare. |
 | Ashby | `api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true` | `publishedAt` | Structured compensation. Only `isListed` jobs are kept. |
-| SimplifyJobs | `raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json` | `date_posted` (epoch s; about half are exact midnight UTC = day precision, the rest are real instants) | ~12 MB (~2 MB gzip), ~19k listings, committed ~every 30 min. Fields: `id, company_name, title, url, locations[], category, active, is_visible, date_posted, date_updated, sponsorship, degrees, source, company_url`. Categories are inconsistent ("Software", "Software Engineering"). Locations look like `NYC`, `New York, NY`, `Jersey City, NJ`, `Remote in USA`, `Remote in UK`. |
+| SimplifyJobs | `raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json` | `date_posted` (epoch s; ~30–50% are exact midnight UTC = day precision, the rest are real instants) | ~12 MB (~2 MB gzip), ~19k listings, committed ~every 30 min. Fields: `id, company_name, title, url, locations[], category, active, is_visible, date_posted, date_updated, sponsorship, degrees, source, company_url`. Categories are inconsistent ("Software", "Software Engineering"). Locations look like `NYC`, `New York, NY`, `Jersey City, NJ`, `Remote in USA`, `Remote in UK`. |
 
 ### Adapter interface (defined in `core`)
 
@@ -139,9 +139,9 @@ interface SourceAdapter {
   kind: "ats" | "aggregator";        // ats: one fetch per company slug; aggregator: one global fetch
   idPrefix: string;                   // canonical ID prefix: "gh" | "lv" | "ab" | "sj"
   concurrency: number;                // max in-flight fetches for this source
-  fetch(ctx: FetchCtx): Promise<FetchResult>;   // ctx: { slug?, etag?, signal, http }
+  fetch(ctx: FetchCtx): Promise<FetchResult>;   // ctx: { slug?, companyName?, etag?, signal, http }
   parseUrl?(url: string): { sourceJobId: string; slug?: string } | null;  // ats only
-  probe?(slug: string, ctx: ProbeCtx): Promise<boolean>;                  // ats only; used by `discover`
+  probe?(slug: string, ctx: ProbeCtx): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
 }
 
 type FetchResult =
@@ -156,7 +156,7 @@ interface SourceJob {
   title: string;
   locations: string[];               // raw strings + adapter-added "Remote - US" (see below)
   url: string;                        // job/apply URL
-  postedAt?: Date;
+  postedAt: Date;                    // required: items without one are invalid (all four sources always supply it)
   postedAtPrecision: "instant" | "day";
   salary?: { min?: number; max?: number; currency: string; interval: "hour" | "week" | "month" | "year" };
   meta?: { active?: boolean; visible?: boolean; category?: string };   // aggregators only
@@ -176,12 +176,13 @@ only aggregator today.
 | Adapter | title | locations | url | postedAt (precision) | salary |
 |---|---|---|---|---|---|
 | Greenhouse | `title` | [`location.name`] | `absolute_url` | `first_published` (instant) | none |
-| Lever | `text` | `categories.allLocations`, else [`categories.location`]; + `Remote - US` when `workplaceType = "remote"` and `country = "US"` | `hostedUrl` | `createdAt` (instant) | `salaryRange` {min, max, currency, interval: `per-hour-wage` → hour, `per-week-salary` → week, `per-month-salary` → month, `per-year-salary` → year} |
+| Lever | `text` | `categories.allLocations`, else [`categories.location`]; + `Remote - US` when `workplaceType = "remote"` and `country = "US"` | `hostedUrl` | `createdAt` (instant) | `salaryRange` {min, max, currency, interval: `per-hour-wage` → hour, `per-week-salary` → week, `per-month-salary` → month, `per-year-salary` → year; any other interval or a missing `salaryRange` → none} |
 | Ashby | `title` (only `isListed = true`) | [`location`, ...`secondaryLocations[].location`]; + `Remote - US` when `workplaceType = "Remote"` and `address.postalAddress.addressCountry` ∈ {USA, US, United States, United States of America} (`isRemote` is not used: it is true for Hybrid jobs too) | `jobUrl` | `publishedAt` (instant) | first `compensation.summaryComponents` item with `compensationType = "Salary"`; interval `1 HOUR`/`1 WEEK`/`1 MONTH`/`1 YEAR` → hour/week/month/year; other intervals → none |
 | SimplifyJobs | `title` | `locations` | `url` | `date_posted` (day if `date_posted % 86400 = 0`, else instant) | none |
 
-`companyName` comes from the company record for ATS adapters and from
-`company_name` for SimplifyJobs; `meta` = {`active`, `is_visible`, `category`}.
+For ATS adapters `companyName` = `ctx.companyName` (the company record's name;
+Lever/Ashby responses don't include one). For SimplifyJobs it is
+`company_name`, and `meta` = {`active`, `visible` ← `is_visible`, `category`}.
 
 - Adapters throw on transport errors, non-2xx/304 statuses (including 404), and
   when more than 50% of a non-empty response's items fail Zod validation (likely
@@ -225,10 +226,10 @@ All timestamps are `timestamptz`. Migrations run automatically on app start.
 | Table | Columns |
 |---|---|
 | `settings` | single row (`id = 1`): `data` JSONB (Zod `Settings`, parsed with defaults on read so new fields need no migration), `last_visit_at`, `last_poll_at`, `last_push_at`, `last_cleanup_at` |
-| `companies` | `id` uuid, `name` (unique, case-insensitive), `city`, `state` (free text, e.g. "Pittsburgh/NYC"), `tier` (S/A/Mid/Startup/Corporate), `track` bool, `ats` (text: a registered ATS adapter id or `other`), `slug` (nullable, case preserved; unique per `ats`, case-insensitive), `careers_url`, `notes`, `status` (ok/needs_review/manual_only), `created_at`, `updated_at` |
-| `source_state` | `key` text PK (`simplify` or `company:<uuid>`), `source`, `company_id` (FK, cascade delete, nullable), `etag`, `filters_hash`, `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error`, `baselined_at` |
+| `companies` | `id` uuid, `name`, `normalized_name` (unique; see Normalization helpers — so "Regal" and "Regal Inc" can't coexist), `city`, `state` (free text, e.g. city "Pittsburgh/NYC", state "PA/NY"), `tier` (S/A/Mid/Startup/Corporate), `track` bool, `ats` (text: a registered ATS adapter id or `other`), `slug` (nullable, case preserved; unique per `ats`, case-insensitive), `careers_url`, `notes`, `status` (ok/needs_review/manual_only), `created_at`, `updated_at` |
+| `source_state` | `key` text PK (`<aggregator id>` or `company:<uuid>`), `source`, `company_id` (FK, cascade delete, nullable), `slug` (the slug this state belongs to; null for aggregators), `etag`, `filters_hash`, `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error`, `baselined_at` |
 | `jobs` | `id` text PK (canonical ID), `company_id` (FK, set null), `company_name`, `title`, `locations` text[], `url`, `primary_source`, `first_seen_at`, `effective_at`, `salary_min_usd`, `salary_max_usd` (annual), `state` (new/saved/hidden/applied), `baseline` bool, `notified_at`, `closed_at`, `updated_at` |
-| `job_sources` | PK (`source`, `source_job_id`); `job_id` (FK, cascade delete; indexed); `url`, `title`, `posted_at`, `posted_at_precision` (instant/day), `removed_at`. A job can have several rows, including several from the same source (SimplifyJobs has duplicate listings). |
+| `job_sources` | PK (`source`, `source_job_id`); `job_id` (FK, cascade delete; indexed); `url`, `url_key` (normalized URL or null; indexed), `title`, `category` (aggregators; else null), `posted_at`, `posted_at_precision` (instant/day), `removed_at`. A job can have several rows, including several from the same source (SimplifyJobs has duplicate listings). |
 | `applications` | `id` uuid, `job_id` (FK, set null, unique when not null), `company_name`, `title`, `url`, `status` (applied/oa/interview/offer/rejected), `applied_at`, `notes`, `updated_at` |
 | `suggestions` | `id` text PK (normalized company name), `display_name`, `ats` (registered ATS id or `other`), `slug` (nullable, case preserved), `listing_count`, `sample_titles` text[] (≤ 3), `last_seen_at`, `state` (open/dismissed/added) |
 
@@ -258,6 +259,11 @@ fuzzy merge can attach an ATS listing to an `sj:` job, lookups go through
 
 - **Company name**: lowercase; `&` → `and`; non-alphanumerics → spaces; drop the
   tokens `the, inc, llc, ltd, corp, corporation, co, company`; collapse spaces.
+- **URL key**: lowercase scheme + host with a leading `www.` removed; path with
+  a trailing `/`, `/apply`, or `/application` removed; query and fragment
+  dropped except `gh_jid` / `token`. The key is **null** (not used for matching)
+  when the remaining path has fewer than 2 segments (e.g. `company.com/careers`),
+  so generic career-page URLs never merge different roles.
 - **Keyword text** (titles and keywords alike): lowercase; every character other
   than `a–z` and `0–9` becomes a space; split into tokens. A keyword matches when
   its token sequence appears contiguously in the title's tokens. So `sr.` matches
@@ -305,21 +311,23 @@ Unlisted salary always passes.
 A listing is stored (inserted, or merged into an existing job) only if it passes
 the location rule AND the keyword rule for its source, AND (aggregators only)
 `meta.active` and `meta.visible` are true and `meta.category` is in the "Simplify
-categories" setting, AND its effective age ≤ 7 days — computed with the matched
-job's `first_seen_at` if it matches an in-memory job, else with `now`.
+categories" setting, AND its adjusted posted date (see Freshness) ≥ now − 7 days.
 
 ### Visibility rules V (applied at read time with current settings)
 
 A stored job is visible when:
 
-1. It passes the location rule (on `jobs.locations`), and the keyword rule for
-   **at least one** of its `job_sources` rows, using that row's `title` and
-   source (so a Simplify job later merged with an ATS listing doesn't disappear
-   because the ATS rule is stricter).
+1. It passes the location rule (on `jobs.locations`), and at least one of its
+   `job_sources` rows passes the keyword rule for that row's source using the
+   row's `title` (and, for aggregator rows, has a `category` in "Simplify
+   categories") — so a Simplify job later merged with an ATS listing doesn't
+   disappear because the ATS rule is stricter.
 2. It passes the salary rule.
-3. It has at least one non-Simplify source, or "Show SimplifyJobs jobs" is on.
-4. `closed_at` is null — except in the saved/applied views, where closed jobs
-   appear with a "Closed" badge.
+3. It has at least one non-aggregator source, or "Show SimplifyJobs jobs" is on.
+4. `closed_at` is null.
+
+The `saved` and `applied` views ignore V entirely (closed jobs appear with a
+"Closed" badge), so a job you saved never disappears because a setting changed.
 
 Feed = V + UI filters. Pushes and "new since last visit" = V + the pushable rule
 (see [Notify](#notify-runnotify)).
@@ -352,28 +360,36 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
      polled so they can recover.)
    - Each **aggregator** in "Enabled sources" (today: SimplifyJobs), once.
 3. **Fetch** all targets in parallel, at most `adapter.concurrency` in flight per
-   source. The run has a 5-minute fetch budget; fetches still running are
-   aborted and count as failures. One target failing never affects others.
-   Send `If-None-Match` only if the target's stored `filters_hash` equals the
+   source. The run has a 5-minute fetch budget: fetches still running when it
+   expires are aborted and count as failures; targets still queued are skipped
+   (no health change, retried next poll). One target failing never affects others.
+   Send `If-None-Match` only if the target's `source_state` row exists, its
+   `slug` equals the company's current slug, and its `filters_hash` equals the
    current hash of (`FILTER_VERSION` code constant + locations + role/level/exclude
    keywords + Simplify categories + Apply-level-to-Simplify). Otherwise fetch
    unconditionally, so changed filters or matching code re-evaluate unchanged sources.
 4. **Process** results one target at a time: all ATS targets first, then
    aggregators (so ATS data is in place before Simplify merges into it). Each
-   target's processing (steps 5–9) runs in **one DB transaction**. If it throws,
-   the transaction rolls back, the target counts as a failure, and its `etag` /
-   `filters_hash` are not updated (so the next poll refetches in full).
-   Database writes touch only the columns named in these steps, so concurrent
-   user actions (Save, Hide, Apply) are never overwritten.
+   target's processing (steps 5–10) runs in **one DB transaction** and works on a
+   copy of the affected in-memory jobs. On commit, the copy replaces the shared
+   in-memory set; on any error the transaction rolls back, the copy is
+   discarded, and the target counts as a failure (its `etag` / `filters_hash`
+   are not updated, so the next poll refetches in full). Database writes touch
+   only the columns named in these steps, so concurrent user actions (Save,
+   Hide, Apply) are never overwritten.
 5. **Normalize and filter** each listing of an `ok` result: compute its
-   canonical ID and its **identity keys** = {(`source`, `sourceJobId`)} plus,
-   when an ATS adapter's `parseUrl` recognizes its URL, (that ATS id, parsed
-   `sourceJobId`). Resolve its company. Apply the poll-time filter; listings that
-   fail are not merged or inserted (they still count for closures in step 7).
+   canonical ID and its **identity keys**: (`source`, `sourceJobId`); plus (that
+   ATS id, parsed `sourceJobId`) when an ATS adapter's `parseUrl` recognizes its
+   URL; plus its URL key when non-null. Resolve its company. Apply the poll-time
+   filter; listings that fail are not merged or inserted (they still count for
+   closures in step 8).
 6. **Dedupe/merge** each passing listing against the in-memory set (which
    includes jobs inserted earlier in this run):
-   1. **Exact**: a job that has a `job_sources` row matching any identity key, or
-      whose `id` equals the listing's canonical ID.
+   1. **Exact**: jobs that have a `job_sources` row matching an identity key
+      (same `source` + `source_job_id`, or same non-null `url_key`), or whose
+      `id` equals the listing's canonical ID. If several jobs match, prefer the
+      one whose `id` equals the canonical ID, then one with an ATS source row,
+      then the newest `effective_at`.
    2. **Fuzzy** (only if no exact match): allowed only between an `sj:` side and
       an ATS side — an incoming Simplify listing whose canonical ID is `sj:` vs. a
       job that has an ATS source row, or an incoming ATS listing vs. a job whose
@@ -383,21 +399,25 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
       (both sides' locations match that label). If several jobs qualify, pick the
       highest Jaccard, then the newest `effective_at`. Listings whose URLs
       identify different ATS postings are never fuzzy-merged.
-   - **Match** → upsert the listing's `job_sources` row (`job_id`, `url`, `title`,
-     `posted_at`, `posted_at_precision`). If the listing is from an ATS source,
-     overwrite the job's `title`, `locations`, `url`, salary, `company_id`,
-     `company_name`, and set `primary_source` to that ATS. If the job's
-     `company_id` is null, re-resolve it. Recompute `effective_at` (see
-     Freshness). Never changed by a match: `id`, `state`, `first_seen_at`,
-     `baseline`, `notified_at`.
+   - **Match** → upsert the listing's `job_sources` row (`job_id`, `url`,
+     `url_key`, `title`, `category`, `posted_at`, `posted_at_precision`). If that
+     row previously belonged to a different job (the listing moved), it is
+     re-pointed; a job left with no rows is deleted if its state is `new` or
+     `hidden`. If the listing is from an ATS source, overwrite the job's `title`,
+     `locations`, `url`, salary, `company_id`, `company_name`, and set
+     `primary_source` to that ATS. If the job's `company_id` is null, re-resolve
+     it. Update `effective_at` (see Freshness). Never changed by a match: `id`,
+     `state`, `first_seen_at`, `baseline`, `notified_at`.
    - **No match** → insert the job (`id` = canonical ID, `first_seen_at = now`,
      `state = new`, `primary_source` = listing's source) and its `job_sources`
      row. Both inserts use `ON CONFLICT DO NOTHING`; if the job insert conflicts
      (a job older than the in-memory window), skip the listing.
-7. **Baseline**: if the target's `source_state.baselined_at` is null, jobs
-   inserted by this target in this run get `baseline = true`, and
-   `baselined_at = now` is set when the target's transaction commits. Baseline
-   jobs show in the feed but are never pushed or counted as "new".
+7. **Baseline**: the target's `source_state` row is upserted inside this
+   transaction (created on a company's first successful poll, with `slug` = the
+   slug fetched). If its `baselined_at` was null at the start of processing,
+   jobs inserted by this target in this run get `baseline = true` and
+   `baselined_at = now` is written in the same transaction. Baseline jobs show
+   in the feed but are never pushed or counted as "new".
 8. **Closures** (`ok` results only; uses the full unfiltered result). The
    target's rows are, among in-memory jobs: for an aggregator, every
    `job_sources` row with that source; for a company, rows with source = the
@@ -406,7 +426,9 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
    `meta.visible` are true; otherwise it is **removed**. Set `removed_at = now` on
    newly removed rows and `removed_at = null` on live rows. Then for each affected
    job: all rows removed → `closed_at = now` (if not already set); any row live →
-   `closed_at = null`. Jobs outside the 7-day window are not re-evaluated.
+   `closed_at = null`. Rows of targets that are not polled (untracked company,
+   disabled source) and jobs outside the 7-day window are not re-evaluated;
+   their open/closed status stays as last computed.
 9. **Suggestions** (aggregator targets with an `ok` result, when "Suggest
    companies from SimplifyJobs" is on): take the listings that passed the
    poll-time filter and resolved to no company; group them by normalized company
@@ -415,26 +437,33 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
    none); `listing_count` = group size; `sample_titles` = up to 3 titles;
    `display_name` = the most common raw `company_name`. Insert new groups as
    `open`; for existing rows update `listing_count`, `sample_titles`,
-   `last_seen_at` (and `ats`/`slug` only while `open`). Rows not in this run get
-   `listing_count = 0`. Open rows that now resolve to a company (by normalized
-   name, or `ats` + `slug`) become `added`.
-10. **Health** per target (outside the transaction, always written):
-    `last_attempt_at = now`. Success (`ok` or `not_modified`, with a committed
-    transaction) → `consecutive_failures = 0`, `last_error = null`,
-    `last_success_at = now`, and for `ok` store `etag` and `filters_hash`; a
-    `needs_review` company becomes `ok`. Failure → increment
-    `consecutive_failures`, store `last_error`; when it reaches 3, a company
-    becomes `needs_review`.
+   `last_seen_at` (and `display_name`/`ats`/`slug` only while `open`). Rows not
+   in this run get `listing_count = 0`. `open` rows that now resolve to a company
+   (by normalized name, or `ats` + `slug`) become `added`; `added` rows that no
+   longer resolve to any company (it was deleted) become `open` again.
+10. **Health** (success): in the same transaction, `last_attempt_at = now`,
+    `consecutive_failures = 0`, `last_error = null`, `last_success_at = now`, and
+    for `ok` store `etag` and `filters_hash`; a `needs_review` company becomes
+    `ok`. `not_modified` results run only this step (and step 7's row upsert).
+
+**Health (failure)**, written after the rollback in its own statement:
+`last_attempt_at = now`, increment `consecutive_failures`, store `last_error`;
+when it reaches 3, the company becomes `needs_review`. The row is created if
+missing (with `baselined_at` null). The write is skipped if the company was
+deleted or its `ats`/`slug` changed since the run loaded it (so a mid-poll edit
+isn't overwritten with stale state). The same guard applies to step 10.
 
 ### Freshness
 
 - `first_seen_at` = when the job was inserted.
 - Each `job_sources` row has an **adjusted posted date**: `posted_at` when
   precision is `instant`; the end of that UTC day (23:59:59.999) when precision
-  is `day`; none when `posted_at` is null.
-- `effective_at` = min(`first_seen_at`, all rows' adjusted posted dates).
-  Recomputed on every merge; it can only move earlier. Effective age =
-  `now − effective_at`. The feed shows and sorts by effective age.
+  is `day`.
+- On insert, `effective_at` = min(`first_seen_at`, the row's adjusted posted
+  date). On every merge, `effective_at` = min(current `effective_at`, the merged
+  row's adjusted posted date) — it never moves later (a repost can't make an old
+  job look new). Effective age = `now − effective_at`. The feed shows and sorts
+  by effective age.
 - The end-of-day rule stops a day-precision Simplify listing from looking up to
   ~24 h older than it is (and missing the 24 h push window). Old listings still
   come out old. Instant-precision dates are used as-is.
@@ -474,7 +503,7 @@ are replaced, not merged).
 
 | Setting | Default | Constraints |
 |---|---|---|
-| Locations | NJ → `nj`, `new jersey` · PA → `pa`, `pennsylvania`, `philadelphia`, `pittsburgh` · NYC → `nyc`, `new york`, `brooklyn`, `manhattan` · Remote-US (built-in rule); all enabled | Labels unique; ≥ 1 enabled |
+| Locations | NJ → `nj`, `new jersey` · PA → `pa`, `pennsylvania`, `philadelphia`, `pittsburgh` · NYC → `nyc`, `new york`, `brooklyn`, `manhattan` · Remote-US (built-in rule); all enabled | Array of `{ label, aliases: string[], enabled, builtin?: "remote_us" }`. Labels unique (case-insensitive); ≥ 1 enabled. Alias entries need ≥ 1 alias. The built-in entry has no aliases and can be toggled but not renamed or deleted. |
 | Tiers to track | Mid, Startup, Corporate, Unlisted (S, A off) | Subset of S/A/Mid/Startup/Corporate/Unlisted. Controls which companies are polled, which jobs push, and the feed's default tier filter. `Unlisted` (added to the original list so Simplify jobs from companies not in your list can push) only affects jobs with no company. |
 | Role keywords (any) | software, engineer, engineering, developer, swe, sde, programmer, full stack, fullstack, backend, frontend | ≥ 1 |
 | Level keywords (any) | new grad, entry, junior, early career, associate, graduate, software engineer i | ≥ 1 |
@@ -521,12 +550,12 @@ message?, count?, details? }`. Job IDs contain `:` and are URL-encoded in paths.
 | `PATCH /api/applications/:id` | Update status, notes, applied_at. |
 | `DELETE /api/applications/:id` | Deletes it; if linked to a job in state `applied`, that job returns to `new`. |
 | `GET /api/companies` | All companies with health joined from `source_state`. |
-| `POST /api/companies`, `PATCH /api/companies/:id` | Validated against the company invariants. Setting `status` to `ok` resets `consecutive_failures`. |
+| `POST /api/companies`, `PATCH /api/companies/:id` | Validated against the company invariants; 409 on a duplicate normalized name or `ats` + `slug`. Setting `status` to `ok` resets `consecutive_failures`. |
 | `DELETE /api/companies/:id` | Deletes it; its jobs keep `company_name` with `company_id` set null. |
 | `GET /api/suggestions` | Open suggestions with `listing_count > 0`, sorted by `listing_count` desc. |
-| `POST /api/suggestions/:id/add` | Body `{ tier }` (default `Startup`). Supported `ats` with slug → company with `track = true`, status `ok` (polled from the next run, starting with a baseline). Supported `ats` without slug → `track = false`, status `needs_review`, note "find slug with discover". `other` → `manual_only`, `track = false`. Suggestion → `added`. 409 if a company with the same name (case-insensitive) or the same `ats` + `slug` exists. |
+| `POST /api/suggestions/:id/add` | Body `{ tier }` (default `Startup`). Creates a company with `name = display_name`, `city`/`state` null, the suggestion's `ats`/`slug`. Supported `ats` with slug → company with `track = true`, status `ok` (polled from the next run, starting with a baseline). Supported `ats` without slug → `track = false`, status `needs_review`, note "find slug with discover". `other` → `manual_only`, `track = false`. Suggestion → `added`. 409 if a company with the same normalized name or the same `ats` + `slug` exists. |
 | `POST /api/suggestions/:id/dismiss` | Suggestion → `dismissed` (never shown again). |
-| `GET /api/settings` | Settings, plus `lastPollAt`, `lastPushAt`, and Simplify source health. |
+| `GET /api/settings` | Settings, plus `lastPollAt`, `lastPushAt`, aggregator source health, and `sources: { id, label, kind }[]` from the registry (the web app builds the Enabled-sources checkboxes, ATS dropdown, and source filter from it). |
 | `PATCH /api/settings` | Partial update (see Settings). |
 | `GET /health` | 200 `{ status: "ok", lastPollAt }`; 503 if the DB is unreachable. Not under `/api`. |
 
@@ -589,7 +618,8 @@ the app shell only; API requests are network-only.
 | Dedupe | Exact via identity keys (`job_sources` rows or canonical ID), then fuzzy only between an `sj:` side and an ATS side | ATS data wins; never merges two distinct ATS postings; survives a fuzzy merge on later polls |
 | Source extensibility | Registry-derived ids, prefixes, ATS values, concurrency; `text` columns | Adding a source = one adapter file + one registry entry, no migration |
 | Per-target transactions | Merge/closures/suggestions per target in one transaction; ETag saved only on commit | A failed write can't be hidden behind a 304 forever |
-| Closed jobs | Tracked per source; hidden from feed when all sources gone | No dead links in the feed or pushes |
+| Closed jobs | Tracked per source for polled targets; hidden from feed when all sources gone | Removes dead links from the feed and pushes for everything still being polled |
+| Posted date required | Adapters must supply `postedAt` (items without one are invalid) | All four sources always do; keeps the 7-day window and 30-day cleanup from resurrecting deleted jobs |
 | Email digest | Not built in MVP | No SES/SMTP needed yet |
 | CI / deploy | GitHub Actions: lint, typecheck, test, build, Docker build. Deploy on PC: `git pull && docker compose up -d --build` | No cloud deploy target yet |
 
@@ -656,11 +686,14 @@ Vitest everywhere.
 8. Notifier, quiet hours, cleanup, scheduler.
 9. `discover` script: `pnpm discover "<Company Name>"` calls `probe` on every
    registered ATS adapter for each slug candidate and prints which respond (with
-   job counts); it writes nothing. Candidates, de-duplicated, in order: name with
-   spaces removed in original case (`EliseAI`), lowercased (`eliseai`),
-   lowercase hyphenated (`elise-ai`), and the same three forms of the name with
-   trailing tokens `ai`, `labs`, `inc`, `technologies`, `software`, `robotics`, `hq`
-   removed; plus each of those + `hq`, + `-io`, + `inc`. Run it on the "find slug"
+   job counts); it writes nothing. Candidate generation: split the name into
+   words on non-alphanumerics and on lower→Upper boundaries ("EliseAI" →
+   [Elise, AI]). Base word lists: (a) all words; (b) all words minus trailing
+   words in {ai, labs, inc, technologies, software, robotics, hq} (case-insensitive),
+   if any remain and differ from (a). For each base list, three forms: joined
+   in original case (`EliseAI`), joined lowercase (`eliseai`), lowercase joined
+   with `-` (`elise-ai`). Then, for each of the two lowercase forms, append `hq`, `-hq`,
+   `-io`, `inc`. De-duplicate, preserving that order. Run it on the "find slug"
    and research lists and record results in `companies.json`:
    - "Find slug" company found → `track` per tier rule, status `ok`; not found →
      kept with its listed ATS, no slug, `track = false`, `needs_review`.
