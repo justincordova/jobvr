@@ -1,1 +1,84 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/bricolage-grotesque';
+@import '@fontsource-variable/jetbrains-mono';
+
+/* "Night desk": ink background, warm paper text, one amber signal for anything new. */
+@theme {
+  --font-sans: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', monospace;
+
+  --color-ink: #0e1115;
+  --color-panel: #141820;
+  --color-raised: #1b2029;
+  --color-line: #272e38;
+  --color-line-strong: #39424f;
+  --color-paper: #ece6d9;
+  --color-dim: #9aa1ab;
+  --color-faint: #636b76;
+  --color-signal: #f2b33d;
+  --color-signal-ink: #1b1405;
+  --color-signal-soft: #f2b33d1f;
+  --color-go: #79cf96;
+  --color-stop: #ec7565;
+  --color-info: #8fb8ea;
+
+  --animate-ping-once: ping-once 1.6s cubic-bezier(0, 0, 0.2, 1) 1;
+  --animate-rise: rise 220ms ease-out both;
+
+  @keyframes ping-once {
+    0% {
+      transform: scale(1);
+      opacity: 0.7;
+    }
+    100% {
+      transform: scale(2.6);
+      opacity: 0;
+    }
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--color-ink);
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-ink font-sans text-paper antialiased;
+    font-optical-sizing: auto;
+    background-image: radial-gradient(
+      ellipse 80% 50% at 50% -10%,
+      color-mix(in oklab, var(--color-signal) 7%, transparent),
+      transparent 70%
+    );
+    background-attachment: fixed;
+    min-height: 100dvh;
+  }
+  ::selection {
+    background: var(--color-signal);
+    color: var(--color-signal-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

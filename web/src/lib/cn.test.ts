@@ -14,3 +14,9 @@ describe('cn', () => {
     expect(cn(false, null, undefined)).toBe('')
   })
 })
+
+describe('cn with tailwind-merge', () => {
+  it('lets later utilities win', () => {
+    expect(cn('px-2 text-dim', 'px-4')).toBe('text-dim px-4')
+  })
+})

@@ -1,0 +1,531 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Plus, Trash2 } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
+import { ErrorState, PageHeader, Section } from '@/components/page'
+import { useToast } from '@/components/toast'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input, Label } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { api, queryKeys, unwrap } from '@/lib/api'
+import { cn } from '@/lib/cn'
+import { relative } from '@/lib/format'
+import { type Settings, type SettingsPayload, TIER_FILTERS } from '@/lib/types'
+import { ChipsInput } from './chips-input'
+
+type Key = keyof Settings
+
+/** Local draft of some settings fields, saved together with one PATCH. */
+function useDraft<K extends Key>(settings: Settings, keys: readonly K[]) {
+  const pick = () => Object.fromEntries(keys.map((k) => [k, settings[k]])) as Pick<Settings, K>
+  const [draft, setDraft] = useState(pick)
+  const [baseline, setBaseline] = useState(settings)
+  // Server data changed (another section saved): reset this draft only if it was clean
+  if (baseline !== settings) {
+    const wasDirty = keys.some((k) => JSON.stringify(draft[k]) !== JSON.stringify(baseline[k]))
+    setBaseline(settings)
+    if (!wasDirty) setDraft(pick())
+  }
+  const dirty = keys.some((k) => JSON.stringify(draft[k]) !== JSON.stringify(settings[k]))
+  const set = <F extends K>(field: F, value: Settings[F]) =>
+    setDraft((d) => ({ ...d, [field]: value }))
+  return { draft, set, dirty, reset: () => setDraft(pick()) }
+}
+
+function SaveBar({
+  dirty,
+  onSave,
+  onReset,
+  pending,
+  error,
+}: {
+  dirty: boolean
+  onSave: () => void
+  onReset: () => void
+  pending: boolean
+  error: string | null
+}) {
+  return (
+    <>
+      {error && <p className="mr-auto text-sm text-stop">{error}</p>}
+      {dirty && (
+        <Button variant="ghost" size="sm" onClick={onReset}>
+          Discard
+        </Button>
+      )}
+      <Button variant="primary" size="sm" onClick={onSave} disabled={!dirty || pending}>
+        {pending ? 'Saving…' : 'Save'}
+      </Button>
+    </>
+  )
+}
+
+function useSave() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [error, setError] = useState<string | null>(null)
+  const mutation = useMutation({
+    mutationFn: (json: Partial<Settings>) => unwrap(api.api.settings.$patch({ json })),
+    onMutate: () => setError(null),
+    onSuccess: (data) => {
+      qc.setQueryData(queryKeys.settings, data)
+      void qc.invalidateQueries({ queryKey: queryKeys.allJobs })
+      toast('Settings saved')
+    },
+    onError: (err) => setError(err.message),
+  })
+  return { save: mutation.mutate, pending: mutation.isPending, error }
+}
+
+function Row({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        {hint && <p className="text-xs text-dim">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function NumberField({
+  id,
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  suffix,
+}: {
+  id: string
+  label: string
+  value: number
+  onChange: (n: number) => void
+  min: number
+  max?: number
+  suffix: string
+}) {
+  return (
+    <div>
+      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-center gap-2">
+        <Input
+          id={id}
+          type="number"
+          inputMode="numeric"
+          min={min}
+          max={max}
+          value={Number.isFinite(value) ? value : ''}
+          onChange={(e) => onChange(e.target.valueAsNumber)}
+          className="w-28 font-mono"
+        />
+        <span className="text-sm text-dim">{suffix}</span>
+      </div>
+    </div>
+  )
+}
+
+function MatchingSection({ settings }: { settings: Settings }) {
+  const { draft, set, dirty, reset } = useDraft(settings, [
+    'locations',
+    'roleKeywords',
+    'levelKeywords',
+    'excludeKeywords',
+    'minSalaryUsd',
+  ] as const)
+  const { save, pending, error } = useSave()
+  const [newLabel, setNewLabel] = useState('')
+
+  const updateLoc = (i: number, patch: Partial<Settings['locations'][number]>) =>
+    set(
+      'locations',
+      draft.locations.map((l, j) => (j === i ? { ...l, ...patch } : l)),
+    )
+
+  return (
+    <Section
+      title="Matching"
+      description="ATS titles need a role AND a level keyword and no exclude keyword. SimplifyJobs titles only need to avoid excludes."
+      footer={
+        <SaveBar
+          dirty={dirty}
+          onSave={() => save(draft)}
+          onReset={reset}
+          pending={pending}
+          error={error}
+        />
+      }
+    >
+      <div>
+        <p className="mb-2 font-mono text-[0.7rem] tracking-wider text-dim uppercase">Locations</p>
+        <ul className="space-y-2">
+          {draft.locations.map((loc, i) => (
+            <li key={loc.label} className="rounded-lg border border-line bg-ink/40 p-3">
+              <div className="mb-2 flex items-center gap-3">
+                <Switch
+                  checked={loc.enabled}
+                  onCheckedChange={(enabled) => updateLoc(i, { enabled })}
+                  aria-label={`Enable ${loc.label}`}
+                />
+                <span className="font-semibold">{loc.label}</span>
+                {loc.builtin && <Badge tone="info">built-in rule</Badge>}
+                {!loc.builtin && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="ml-auto size-7"
+                    aria-label={`Remove ${loc.label}`}
+                    onClick={() =>
+                      set(
+                        'locations',
+                        draft.locations.filter((_, j) => j !== i),
+                      )
+                    }
+                  >
+                    <Trash2 />
+                  </Button>
+                )}
+              </div>
+              {loc.builtin ? (
+                <p className="text-xs text-dim">
+                  Matches “Remote”, “Remote - US”, “Remote in USA”, “United States (Remote)”; not
+                  “Remote in UK”.
+                </p>
+              ) : (
+                <ChipsInput
+                  label="Aliases"
+                  value={loc.aliases}
+                  onChange={(aliases) => updateLoc(i, { aliases })}
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+        <form
+          className="mt-2 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            const label = newLabel.trim()
+            if (
+              !label ||
+              draft.locations.some((l) => l.label.toLowerCase() === label.toLowerCase())
+            )
+              return
+            set('locations', [
+              ...draft.locations.filter((l) => !l.builtin),
+              { label, aliases: [label.toLowerCase()], enabled: true },
+              ...draft.locations.filter((l) => l.builtin),
+            ])
+            setNewLabel('')
+          }}
+        >
+          <Input
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            placeholder="New location, e.g. Boston"
+            aria-label="New location label"
+            className="max-w-xs"
+          />
+          <Button type="submit" size="md">
+            <Plus /> Add
+          </Button>
+        </form>
+      </div>
+      <ChipsInput
+        label="Role keywords (any)"
+        value={draft.roleKeywords}
+        onChange={(v) => set('roleKeywords', v)}
+      />
+      <ChipsInput
+        label="Level keywords (any)"
+        value={draft.levelKeywords}
+        onChange={(v) => set('levelKeywords', v)}
+      />
+      <ChipsInput
+        label="Exclude keywords"
+        tone="stop"
+        value={draft.excludeKeywords}
+        onChange={(v) => set('excludeKeywords', v)}
+      />
+      <NumberField
+        id="minSalary"
+        label="Min salary (when listed)"
+        value={draft.minSalaryUsd}
+        onChange={(n) => set('minSalaryUsd', n)}
+        min={0}
+        suffix="USD / year (0 = any)"
+      />
+    </Section>
+  )
+}
+
+function TiersSection({ settings }: { settings: Settings }) {
+  const { draft, set, dirty, reset } = useDraft(settings, ['tiersToTrack'] as const)
+  const { save, pending, error } = useSave()
+  const on = new Set(draft.tiersToTrack)
+  return (
+    <Section
+      title="Tiers to track"
+      description="Decides which companies are polled, which jobs push, and the feed’s default tier filter. Unlisted = SimplifyJobs roles at companies not in your list."
+      footer={
+        <SaveBar
+          dirty={dirty}
+          onSave={() => save(draft)}
+          onReset={reset}
+          pending={pending}
+          error={error}
+        />
+      }
+    >
+      <div className="flex flex-wrap gap-2">
+        {TIER_FILTERS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            aria-pressed={on.has(t)}
+            onClick={() =>
+              set(
+                'tiersToTrack',
+                on.has(t) ? draft.tiersToTrack.filter((x) => x !== t) : [...draft.tiersToTrack, t],
+              )
+            }
+            className={cn(
+              'rounded-full border px-3 py-1 text-sm transition-colors',
+              on.has(t)
+                ? 'border-signal/60 bg-signal-soft text-signal'
+                : 'border-line text-dim hover:text-paper',
+            )}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+    </Section>
+  )
+}
+
+function SimplifySection({ payload }: { payload: SettingsPayload }) {
+  const { draft, set, dirty, reset } = useDraft(payload.settings, [
+    'simplifyCategories',
+    'applyLevelToSimplify',
+    'showSimplifyJobs',
+    'suggestCompanies',
+  ] as const)
+  const { save, pending, error } = useSave()
+  const health = payload.sourceHealth.find((h) => h.source === 'simplify')
+  return (
+    <Section
+      title="SimplifyJobs"
+      description={
+        health && (
+          <>
+            Last good fetch {relative(health.lastSuccessAt)}
+            {health.consecutiveFailures > 0 && (
+              <span className="text-stop">
+                {' '}
+                · {health.consecutiveFailures} failed
+                {health.lastError ? `: ${health.lastError}` : ''}
+              </span>
+            )}
+          </>
+        )
+      }
+      footer={
+        <SaveBar
+          dirty={dirty}
+          onSave={() => save(draft)}
+          onReset={reset}
+          pending={pending}
+          error={error}
+        />
+      }
+    >
+      <ChipsInput
+        label="Categories"
+        value={draft.simplifyCategories}
+        onChange={(v) => set('simplifyCategories', v)}
+      />
+      <Row label="Apply level keywords" hint="Also require a level keyword in Simplify titles.">
+        <Switch
+          checked={draft.applyLevelToSimplify}
+          onCheckedChange={(v) => set('applyLevelToSimplify', v)}
+          aria-label="Apply level keywords to Simplify"
+        />
+      </Row>
+      <Row
+        label="Show SimplifyJobs-only roles"
+        hint="Roles also found on a company board always show."
+      >
+        <Switch
+          checked={draft.showSimplifyJobs}
+          onCheckedChange={(v) => set('showSimplifyJobs', v)}
+          aria-label="Show SimplifyJobs jobs"
+        />
+      </Row>
+      <Row
+        label="Suggest companies"
+        hint="List unlisted companies with matching roles under Suggested."
+      >
+        <Switch
+          checked={draft.suggestCompanies}
+          onCheckedChange={(v) => set('suggestCompanies', v)}
+          aria-label="Suggest companies from SimplifyJobs"
+        />
+      </Row>
+    </Section>
+  )
+}
+
+function ScheduleSection({ payload }: { payload: SettingsPayload }) {
+  const { draft, set, dirty, reset } = useDraft(payload.settings, [
+    'maxJobAgeHours',
+    'pollEveryMinutes',
+    'pushEveryMinutes',
+    'quietHours',
+    'emailDigest',
+  ] as const)
+  const { save, pending, error } = useSave()
+  return (
+    <Section
+      title="Schedule & notifications"
+      description={`Last poll ${relative(payload.lastPollAt)} · last push ${relative(payload.lastPushAt)}`}
+      footer={
+        <SaveBar
+          dirty={dirty}
+          onSave={() => save(draft)}
+          onReset={reset}
+          pending={pending}
+          error={error}
+        />
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-3">
+        <NumberField
+          id="pollEvery"
+          label="Poll every"
+          value={draft.pollEveryMinutes}
+          onChange={(n) => set('pollEveryMinutes', n)}
+          min={5}
+          max={1440}
+          suffix="min"
+        />
+        <NumberField
+          id="pushEvery"
+          label="Push every"
+          value={draft.pushEveryMinutes}
+          onChange={(n) => set('pushEveryMinutes', n)}
+          min={5}
+          max={1440}
+          suffix="min"
+        />
+        <NumberField
+          id="maxAge"
+          label="Max job age"
+          value={draft.maxJobAgeHours}
+          onChange={(n) => set('maxJobAgeHours', n)}
+          min={1}
+          max={168}
+          suffix="hours"
+        />
+      </div>
+      <div>
+        <p className="mb-1.5 font-mono text-[0.7rem] tracking-wider text-dim uppercase">
+          Quiet hours (Eastern)
+        </p>
+        <div className="flex items-center gap-2">
+          <Input
+            type="time"
+            aria-label="Quiet hours start"
+            value={draft.quietHours.start}
+            onChange={(e) => set('quietHours', { ...draft.quietHours, start: e.target.value })}
+            className="w-32 font-mono"
+          />
+          <span className="text-dim">to</span>
+          <Input
+            type="time"
+            aria-label="Quiet hours end"
+            value={draft.quietHours.end}
+            onChange={(e) => set('quietHours', { ...draft.quietHours, end: e.target.value })}
+            className="w-32 font-mono"
+          />
+          <span className="text-xs text-faint">same time = off</span>
+        </div>
+      </div>
+      <Row label="Email digest" hint="Not built yet.">
+        <Switch checked={draft.emailDigest} disabled aria-label="Email digest" />
+      </Row>
+    </Section>
+  )
+}
+
+function SourcesSection({ payload }: { payload: SettingsPayload }) {
+  const { draft, set, dirty, reset } = useDraft(payload.settings, ['enabledSources'] as const)
+  const { save, pending, error } = useSave()
+  const on = new Set(draft.enabledSources)
+  return (
+    <Section
+      title="Sources"
+      description="Turning a source off stops polling it; jobs already found stay."
+      footer={
+        <SaveBar
+          dirty={dirty}
+          onSave={() => save(draft)}
+          onReset={reset}
+          pending={pending}
+          error={error}
+        />
+      }
+    >
+      {payload.sources.map((s) => (
+        <Row
+          key={s.id}
+          label={s.label}
+          hint={s.kind === 'ats' ? 'Company job boards' : 'Aggregated list'}
+        >
+          <Switch
+            checked={on.has(s.id)}
+            aria-label={`Poll ${s.label}`}
+            onCheckedChange={(v) =>
+              set(
+                'enabledSources',
+                v
+                  ? [...draft.enabledSources, s.id]
+                  : draft.enabledSources.filter((x) => x !== s.id),
+              )
+            }
+          />
+        </Row>
+      ))}
+    </Section>
+  )
+}
+
+export function SettingsPage() {
+  const settings = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: () => unwrap(api.api.settings.$get()),
+  })
+  return (
+    <section>
+      <PageHeader title="Settings" />
+      {settings.isError ? (
+        <ErrorState error={settings.error} onRetry={() => settings.refetch()} />
+      ) : !settings.data ? (
+        <div className="h-64 animate-pulse rounded-xl bg-panel" />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+          <div className="space-y-4">
+            <MatchingSection settings={settings.data.settings} />
+          </div>
+          <div className="space-y-4">
+            <ScheduleSection payload={settings.data} />
+            <TiersSection settings={settings.data.settings} />
+            <SimplifySection payload={settings.data} />
+            <SourcesSection payload={settings.data} />
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
