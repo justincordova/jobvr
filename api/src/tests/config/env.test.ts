@@ -1,0 +1,30 @@
+import { describe, expect, it } from "vitest";
+import { EnvSchema } from "@/config/env";
+
+describe("EnvSchema", () => {
+  it("applies defaults and parses typed values", () => {
+    const env = EnvSchema.parse({ PORT: "8080", TRUST_PROXY: "true" });
+    expect(env.PORT).toBe(8080);
+    expect(env.TRUST_PROXY).toBe(true);
+    expect(env.NODE_ENV).toBe("development");
+    expect(env.ALLOWED_ORIGINS).toEqual(["http://localhost:3000", "http://localhost:5173"]);
+  });
+
+  it("splits and trims ALLOWED_ORIGINS", () => {
+    const env = EnvSchema.parse({ ALLOWED_ORIGINS: "https://a.com, https://b.com:8443" });
+    expect(env.ALLOWED_ORIGINS).toEqual(["https://a.com", "https://b.com:8443"]);
+  });
+
+  it("rejects invalid values with issues instead of throwing", () => {
+    const result = EnvSchema.safeParse({
+      PORT: "70000",
+      TRUST_PROXY: "yes",
+      ALLOWED_ORIGINS: "https://a.com/,not-a-url",
+    });
+    expect(result.success).toBe(false);
+    const paths = result.error?.issues.map((issue) => issue.path.join("."));
+    expect(paths).toEqual(
+      expect.arrayContaining(["PORT", "TRUST_PROXY", "ALLOWED_ORIGINS.0", "ALLOWED_ORIGINS.1"]),
+    );
+  });
+});

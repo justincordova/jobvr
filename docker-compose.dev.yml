@@ -1,0 +1,23 @@
+# Mac development: Postgres only, published on localhost.
+services:
+  postgres:
+    image: postgres:18
+    container_name: jobvr-dev-postgres
+    environment:
+      POSTGRES_USER: jobvr
+      POSTGRES_PASSWORD: jobvr
+      POSTGRES_DB: jobvr
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Postgres 18 keeps data under /var/lib/postgresql/18/docker; mount the parent
+      - jobvr-dev-pg:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobvr -d jobvr"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  jobvr-dev-pg:

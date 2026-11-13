@@ -1,0 +1,16 @@
+packages:
+  - core
+  - poller
+  - api
+  - web
+
+# pnpm blocks dependency build scripts by default and fails install until each
+# is acknowledged. esbuild ships prebuilt binaries, so its optional build
+# script is not needed: acknowledge it as `false` (do not build).
+allowBuilds:
+  esbuild: false
+
+# pnpm 12 also asks before installing agent skills bundled in packages.
+permissions:
+  tsdown:
+    skills: false
