@@ -58,5 +58,14 @@ export function toJobQuery(s: FeedSearch) {
   }
 }
 
+export const defaultAge = (view: View): Age => (view === 'feed' ? '3d' : 'all')
+
+export const CLEARED_FILTERS = {
+  location: undefined,
+  tier: undefined,
+  source: undefined,
+  company: undefined,
+} satisfies Partial<FeedSearch>
+
 export const activeFilterCount = (s: FeedSearch) =>
   [s.location, s.tier, s.source, s.company].filter((v) => v?.length).length

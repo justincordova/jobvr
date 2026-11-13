@@ -1,34 +1,70 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { useNavigate, useSearch } from '@tanstack/react-router'
-import { Sparkle, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
+import { Link, useNavigate, useSearch } from '@tanstack/react-router'
+import { Bookmark, EyeOff, LoaderCircle, Radar, Send, Sparkle, X } from 'lucide-react'
+import { type ComponentType, useEffect, useState } from 'react'
+import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
+import { Button } from '@/components/ui/button'
 import { api, queryKeys, unwrap } from '@/lib/api'
-import { EmptyState, ErrorState, PageHeader } from '@/components/page'
+import { cn } from '@/lib/cn'
 import { FilterBar } from './filter-bar'
 import { JobRow } from './job-row'
-import { type FeedSearch, toJobQuery } from './search'
+import {
+  activeFilterCount,
+  CLEARED_FILTERS,
+  defaultAge,
+  type FeedSearch,
+  toJobQuery,
+  type View,
+} from './search'
 import { useJobActions } from './use-job-actions'
 import { captureFirstResponse, isSessionNew, sessionNewCount } from './visit-session'
 
-const EMPTY_COPY: Record<string, { title: string; body: string }> = {
+const EMPTY_COPY: Record<
+  View,
+  { title: string; body: string; icon: ComponentType<{ className?: string }> }
+> = {
   feed: {
+    icon: Radar,
     title: 'Quiet on the wire',
-    body: 'No matching roles for these filters yet. New listings land here within one poll.',
+    body: 'No matching roles right now. New listings land here within one poll.',
   },
-  saved: { title: 'Nothing saved', body: 'Save roles from the feed to come back to them.' },
-  applied: { title: 'No applications yet', body: 'Hit Applied on a role and it moves here.' },
-  hidden: { title: 'Nothing hidden', body: 'Hidden roles stay out of the feed and pushes.' },
+  saved: {
+    icon: Bookmark,
+    title: 'Nothing saved',
+    body: 'Save roles from the feed to come back to them.',
+  },
+  applied: {
+    icon: Send,
+    title: 'No applications yet',
+    body: 'Hit Applied on a role and it moves here.',
+  },
+  hidden: {
+    icon: EyeOff,
+    title: 'Nothing hidden',
+    body: 'Hidden roles stay out of the feed and pushes.',
+  },
+}
+
+const TITLES: Record<View, string> = {
+  feed: 'New-grad feed',
+  saved: 'Saved',
+  applied: 'Applied',
+  hidden: 'Hidden',
 }
 
 function SkeletonRows() {
   return (
-    <ul aria-hidden className="mt-4">
+    <ul aria-hidden className="mt-4 border-t border-line/70">
       {Array.from({ length: 6 }, (_, i) => (
-        <li key={i} className="grid grid-cols-[3.75rem_1fr] gap-3 border-b border-line/60 py-4">
-          <div className="ml-auto h-4 w-7 animate-pulse rounded bg-raised" />
+        <li
+          key={i}
+          className="grid grid-cols-[3.25rem_1fr] gap-3 border-b border-line/60 py-4 sm:grid-cols-[3.75rem_1fr]"
+          style={{ opacity: 1 - i * 0.14 }}
+        >
+          <Skeleton className="ml-auto h-4 w-7" />
           <div className="space-y-2">
-            <div className="h-4 w-2/3 animate-pulse rounded bg-raised" />
-            <div className="h-3 w-1/3 animate-pulse rounded bg-raised/70" />
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-3 w-1/3 bg-raised/70" />
           </div>
         </li>
       ))}
@@ -47,6 +83,8 @@ export function FeedPage() {
     queryKey: queryKeys.jobs(query),
     queryFn: () => unwrap(api.api.jobs.$get({ query })),
     refetchInterval: 120_000,
+    // Keep the current list on screen while a new filter loads
+    placeholderData: keepPreviousData,
   })
   const settings = useQuery({
     queryKey: queryKeys.settings,
@@ -62,8 +100,8 @@ export function FeedPage() {
   const { setState, apply } = useJobActions()
 
   useEffect(() => {
-    if (jobs.data && captureFirstResponse(jobs.data)) recordVisit()
-  }, [jobs.data, recordVisit])
+    if (jobs.data && !jobs.isPlaceholderData && captureFirstResponse(jobs.data)) recordVisit()
+  }, [jobs.data, jobs.isPlaceholderData, recordVisit])
 
   const sources = settings.data?.sources ?? []
   const sourceLabel = (id: string) => sources.find((s) => s.id === id)?.label ?? id
@@ -78,16 +116,26 @@ export function FeedPage() {
     // Optimistic state changes remove rows that no longer belong to this view
     view === 'feed' ? j.state === 'new' || j.state === 'saved' : j.state === view,
   )
-  const empty = EMPTY_COPY[view] ?? EMPTY_COPY.feed
+  const empty = EMPTY_COPY[view]
+  const filtered = activeFilterCount(search) > 0
+  const narrowAge = (search.age ?? defaultAge(view)) !== 'all'
+  const refreshing = jobs.isFetching && !jobs.isPending
 
   return (
     <section>
       <PageHeader
-        title={view === 'feed' ? 'New-grad feed' : `${view[0]?.toUpperCase()}${view.slice(1)}`}
+        title={TITLES[view]}
         meta={
           jobs.data && (
-            <span className="font-mono text-xs text-faint">
+            <span className="inline-flex items-center gap-1.5 font-mono text-xs text-faint tabular-nums">
               {list.length} role{list.length === 1 ? '' : 's'}
+              <LoaderCircle
+                aria-hidden
+                className={cn(
+                  'size-3 animate-spin transition-opacity duration-300',
+                  refreshing ? 'opacity-100' : 'opacity-0',
+                )}
+              />
             </span>
           )
         }
@@ -107,7 +155,7 @@ export function FeedPage() {
             type="button"
             onClick={() => setBannerOpen(false)}
             aria-label="Dismiss"
-            className="rounded p-1 text-dim hover:text-paper"
+            className="rounded-md p-1 text-dim transition-colors hover:bg-signal-soft hover:text-paper"
           >
             <X className="size-4" />
           </button>
@@ -124,12 +172,50 @@ export function FeedPage() {
 
       {jobs.isPending ? (
         <SkeletonRows />
-      ) : jobs.isError ? (
-        <ErrorState error={jobs.error} onRetry={() => jobs.refetch()} />
+      ) : jobs.isError && !jobs.data ? (
+        <ErrorState error={jobs.error} onRetry={() => jobs.refetch()} retrying={jobs.isFetching} />
       ) : list.length === 0 ? (
-        <EmptyState title={empty.title} body={empty.body} />
+        <EmptyState
+          icon={empty.icon}
+          title={filtered && view === 'feed' ? 'No matches' : empty.title}
+          body={
+            filtered
+              ? 'Nothing fits these filters. Loosen them to see more.'
+              : narrowAge && view === 'feed'
+                ? 'Nothing posted in this window. Try a wider age range.'
+                : empty.body
+          }
+          action={
+            (filtered || narrowAge || view !== 'feed') && (
+              <>
+                {filtered && (
+                  <Button size="sm" onClick={() => update(CLEARED_FILTERS)}>
+                    Clear filters
+                  </Button>
+                )}
+                {narrowAge && (
+                  <Button size="sm" variant="ghost" onClick={() => update({ age: 'all' })}>
+                    Show all ages
+                  </Button>
+                )}
+                {view !== 'feed' && !filtered && (
+                  <Button size="sm" variant="ghost" asChild>
+                    <Link to="/" search={{}}>
+                      Back to the feed
+                    </Link>
+                  </Button>
+                )}
+              </>
+            )
+          }
+        />
       ) : (
-        <ul className="mt-4 border-t border-line/70">
+        <ul
+          className={cn(
+            'mt-4 border-t border-line/70 transition-opacity duration-200',
+            jobs.isPlaceholderData && 'opacity-60',
+          )}
+        >
           {list.map((job) => (
             <JobRow
               key={job.id}

@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
 import { salaryRange, shortAge } from '@/lib/format'
+import { vtName } from '@/lib/motion'
 import type { Job } from '@/lib/types'
 
 interface JobRowProps {
@@ -24,8 +25,9 @@ export function JobRow({ job, highlighted, sourceLabel, onState, onApply, busy }
 
   return (
     <li
+      style={{ viewTransitionName: vtName('job', job.id) }}
       className={cn(
-        'group relative grid grid-cols-[3.25rem_1fr] gap-x-3 border-b border-line/70 py-3.5 pr-1 transition-colors hover:bg-panel/60 sm:grid-cols-[3.75rem_1fr_auto]',
+        'group relative grid grid-cols-[3.25rem_1fr] gap-x-3 border-b border-line/70 py-3.5 pr-1 transition-colors duration-150 hover:bg-panel/60 sm:grid-cols-[3.75rem_1fr_auto]',
         highlighted && 'bg-signal-soft/40 hover:bg-signal-soft/60',
       )}
     >
@@ -56,12 +58,12 @@ export function JobRow({ job, highlighted, sourceLabel, onState, onApply, busy }
           target="_blank"
           rel="noreferrer"
           className={cn(
-            'inline-flex items-baseline gap-1.5 text-[0.98rem] leading-snug font-semibold tracking-tight text-paper decoration-signal/60 underline-offset-4 hover:underline',
+            'inline-flex items-baseline gap-1.5 rounded-sm text-[0.98rem] leading-snug font-semibold tracking-tight text-paper decoration-signal/60 underline-offset-4 visited:text-dim hover:underline',
             closed && 'text-dim line-through decoration-faint',
           )}
         >
           {job.title}
-          <ExternalLink className="size-3 shrink-0 translate-y-px text-faint opacity-0 transition-opacity group-hover:opacity-100" />
+          <ExternalLink className="size-3 shrink-0 translate-y-px text-faint opacity-0 transition-opacity group-hover:opacity-100 max-sm:hidden" />
         </a>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-dim">
           <span className="text-paper/85">{job.companyName}</span>
