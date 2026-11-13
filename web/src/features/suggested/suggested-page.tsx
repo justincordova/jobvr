@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, X } from 'lucide-react'
+import { Link, useNavigate } from '@tanstack/react-router'
+import { Plus, Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
 import { EmptyState, ErrorState, PageHeader } from '@/components/page'
 import { useToast } from '@/components/toast'
@@ -8,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { NativeSelect } from '@/components/ui/input'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { relative } from '@/lib/format'
+import { vtName, withViewTransition } from '@/lib/motion'
 import { type Suggestion, TIERS, type Tier } from '@/lib/types'
 
 function SuggestionCard({
@@ -26,7 +28,10 @@ function SuggestionCard({
   const [tier, setTier] = useState<Tier>('Startup')
   const trackable = s.ats !== 'other' && s.slug
   return (
-    <li className="flex animate-rise flex-col rounded-xl border border-line bg-panel/60 p-4">
+    <li
+      style={{ viewTransitionName: vtName('sug', s.id) }}
+      className="flex animate-rise flex-col rounded-xl border border-line bg-panel/60 p-4 transition-colors duration-150 hover:border-line-strong"
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg leading-tight font-semibold tracking-tight">{s.displayName}</h2>
@@ -70,10 +75,10 @@ function SuggestionCard({
             <option key={t}>{t}</option>
           ))}
         </NativeSelect>
-        <Button size="sm" variant="primary" onClick={() => onAdd(tier)} disabled={busy}>
+        <Button size="sm" variant="primary" onClick={() => onAdd(tier)} pending={busy}>
           <Plus /> Add
         </Button>
-        <Button size="sm" variant="ghost" onClick={onDismiss} disabled={busy} className="ml-auto">
+        <Button size="sm" variant="ghost" onClick={onDismiss} className="ml-auto">
           <X /> Dismiss
         </Button>
       </div>
@@ -84,6 +89,7 @@ function SuggestionCard({
 export function SuggestedPage() {
   const qc = useQueryClient()
   const toast = useToast()
+  const navigate = useNavigate()
   const suggestions = useQuery({
     queryKey: queryKeys.suggestions,
     queryFn: () => unwrap(api.api.suggestions.$get()),
@@ -96,51 +102,102 @@ export function SuggestedPage() {
     void qc.invalidateQueries({ queryKey: queryKeys.suggestions })
     void qc.invalidateQueries({ queryKey: queryKeys.companies })
   }
+  const setList = (fn: (list: Suggestion[]) => Suggestion[]) =>
+    withViewTransition(() =>
+      qc.setQueryData<Suggestion[]>(queryKeys.suggestions, (list) => list && fn(list)),
+    )
+
   const add = useMutation({
     mutationFn: ({ id, tier }: { id: string; tier: Tier }) =>
       unwrap(api.api.suggestions[':id'].add.$post({ param: { id }, json: { tier } })),
-    onSuccess: (c) => toast(`${c.name} added to Companies`),
-    onError: (err) => toast(err.message, 'error'),
+    onSuccess: async (c, { id }) => {
+      await setList((list) => list.filter((s) => s.id !== id))
+      toast(`${c.name} added to Companies`, {
+        action: { label: 'View', onClick: () => void navigate({ to: '/companies' }) },
+      })
+    },
+    onError: (err) => toast.error(err.message),
     onSettled: done,
   })
   const dismiss = useMutation({
     mutationFn: (id: string) => unwrap(api.api.suggestions[':id'].dismiss.$post({ param: { id } })),
-    onError: (err) => toast(err.message, 'error'),
+    onError: (err) => toast.error(err.message),
     onSettled: done,
   })
+
+  /** Hides the card now; the dismissal only sticks if Undo isn't pressed. */
+  const dismissWithUndo = async (s: Suggestion) => {
+    await qc.cancelQueries({ queryKey: queryKeys.suggestions })
+    const index = suggestions.data?.findIndex((x) => x.id === s.id) ?? -1
+    await setList((list) => list.filter((x) => x.id !== s.id))
+    toast.undoable(`Dismissed ${s.displayName}`, {
+      undo: () =>
+        void setList((list) =>
+          list.some((x) => x.id === s.id)
+            ? list
+            : [...list.slice(0, Math.max(0, index)), s, ...list.slice(Math.max(0, index))],
+        ),
+      commit: () => dismiss.mutate(s.id),
+    })
+  }
+
   const atsLabel = (id: string) =>
     settings.data?.sources.find((s) => s.id === id)?.label ?? 'Other ATS'
+  const suggestionsOff = settings.data?.settings.suggestCompanies === false
 
   return (
     <section>
       <PageHeader
         title="Suggested"
         meta={
-          <span className="text-sm text-dim">
-            Companies hiring on SimplifyJobs that aren’t in your list
-          </span>
+          suggestions.data &&
+          suggestions.data.length > 0 && (
+            <span className="font-mono text-xs text-faint tabular-nums">
+              {suggestions.data.length}
+            </span>
+          )
         }
+        description="Companies hiring new grads on SimplifyJobs that aren’t in your list yet."
       />
       {suggestions.isError ? (
-        <ErrorState error={suggestions.error} onRetry={() => suggestions.refetch()} />
-      ) : suggestions.data?.length === 0 ? (
+        <ErrorState
+          error={suggestions.error}
+          onRetry={() => suggestions.refetch()}
+          retrying={suggestions.isFetching}
+        />
+      ) : suggestions.isPending ? (
+        <ul aria-hidden className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }, (_, i) => (
+            <li key={i} className="h-56 animate-pulse rounded-xl border border-line bg-panel/60" />
+          ))}
+        </ul>
+      ) : suggestions.data.length === 0 ? (
         <EmptyState
-          title="No suggestions right now"
-          body="When SimplifyJobs lists matching roles at companies you don’t track, they show up here."
+          icon={Sparkles}
+          title={suggestionsOff ? 'Suggestions are off' : 'No suggestions right now'}
+          body={
+            suggestionsOff
+              ? 'Turn on “Suggest companies” in Settings to see companies you might be missing.'
+              : 'When SimplifyJobs lists matching roles at companies you don’t track, they show up here.'
+          }
+          action={
+            suggestionsOff && (
+              <Button size="sm" asChild>
+                <Link to="/settings">Open Settings</Link>
+              </Button>
+            )
+          }
         />
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {suggestions.data?.map((s) => (
+          {suggestions.data.map((s) => (
             <SuggestionCard
               key={s.id}
               s={s}
               atsLabel={atsLabel(s.ats)}
-              busy={
-                (add.isPending && add.variables?.id === s.id) ||
-                (dismiss.isPending && dismiss.variables === s.id)
-              }
+              busy={add.isPending && add.variables?.id === s.id}
               onAdd={(tier) => add.mutate({ id: s.id, tier })}
-              onDismiss={() => dismiss.mutate(s.id)}
+              onDismiss={() => void dismissWithUndo(s)}
             />
           ))}
         </ul>

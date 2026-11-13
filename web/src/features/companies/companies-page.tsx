@@ -1,7 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
-import { type FormEvent, useMemo, useState } from 'react'
-import { EmptyState, ErrorState, PageHeader } from '@/components/page'
+import {
+  AlertTriangle,
+  Building2,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { useToast } from '@/components/toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input'
+import { Segmented } from '@/components/ui/segmented'
 import { Switch } from '@/components/ui/switch'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { relative } from '@/lib/format'
@@ -68,17 +77,35 @@ function useCompanyMutations() {
     },
     onError: (err, _v, ctx) => {
       qc.setQueryData(queryKeys.companies, ctx?.prev)
-      toast(err.message, 'error')
+      toast.error(err.message)
     },
     onSettled: invalidate,
   })
   const remove = useMutation({
     mutationFn: (id: string) => unwrap(api.api.companies[':id'].$delete({ param: { id } })),
-    onSuccess: () => toast('Company deleted'),
-    onError: (err) => toast(err.message, 'error'),
+    onError: (err) => toast.error(err.message),
     onSettled: invalidate,
   })
-  return { patch, remove, invalidate }
+
+  /** Hides the row now; the delete only runs if Undo isn't pressed. */
+  const removeWithUndo = async (company: Company) => {
+    await qc.cancelQueries({ queryKey: queryKeys.companies })
+    const prev = qc.getQueryData<Company[]>(queryKeys.companies) ?? []
+    const index = prev.findIndex((c) => c.id === company.id)
+    qc.setQueryData<Company[]>(queryKeys.companies, (list) =>
+      list?.filter((c) => c.id !== company.id),
+    )
+    toast.undoable(`Deleted ${company.name}`, {
+      undo: () =>
+        qc.setQueryData<Company[]>(queryKeys.companies, (list) =>
+          !list || list.some((c) => c.id === company.id)
+            ? list
+            : [...list.slice(0, index), company, ...list.slice(index)],
+        ),
+      commit: () => remove.mutate(company.id),
+    })
+  }
+  return { patch, removeWithUndo, invalidate }
 }
 
 function Health({ c }: { c: Company }) {
@@ -117,9 +144,9 @@ function CompanyDialog({
       editing
         ? unwrap(api.api.companies[':id'].$patch({ param: { id: editing.id }, json }))
         : unwrap(api.api.companies.$post({ json })),
-    onSuccess: () => {
+    onSuccess: (c) => {
       invalidate()
-      toast(editing ? 'Company saved' : 'Company added')
+      toast(editing ? `${c.name} saved` : `${c.name} added`)
       onOpenChange(false)
     },
     onError: (err) => setError(err.message),
@@ -223,18 +250,50 @@ function CompanyDialog({
               <Textarea id="notes" name="notes" defaultValue={editing?.notes ?? ''} />
             </div>
           </div>
-          {error && <p className="text-sm text-stop">{error}</p>}
+          {error && <p className="animate-fade-in text-sm text-stop">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={save.isPending}>
-              {editing ? 'Save' : 'Add company'}
+            <Button type="submit" variant="primary" pending={save.isPending}>
+              {editing ? 'Save changes' : 'Add company'}
             </Button>
           </div>
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+type Quick = 'all' | 'polled' | 'review' | 'manual'
+
+function SkeletonTable() {
+  return (
+    <tbody aria-hidden>
+      {Array.from({ length: 8 }, (_, i) => (
+        <tr key={i} className="border-b border-line/60" style={{ opacity: 1 - i * 0.1 }}>
+          <td className="px-4 py-3">
+            <Skeleton className="h-4 w-32" />
+          </td>
+          <td className="px-2 py-3">
+            <Skeleton className="h-7 w-24" />
+          </td>
+          <td className="px-2 py-3">
+            <Skeleton className="h-5 w-9 rounded-full" />
+          </td>
+          <td className="hidden px-2 py-3 md:table-cell">
+            <Skeleton className="h-4 w-28" />
+          </td>
+          <td className="px-2 py-3">
+            <Skeleton className="h-4 w-16" />
+          </td>
+          <td className="hidden px-2 py-3 md:table-cell">
+            <Skeleton className="h-4 w-20" />
+          </td>
+          <td />
+        </tr>
+      ))}
+    </tbody>
   )
 }
 
@@ -247,49 +306,62 @@ export function CompaniesPage() {
     queryKey: queryKeys.settings,
     queryFn: () => unwrap(api.api.settings.$get()),
   })
-  const { patch, remove } = useCompanyMutations()
+  const { patch, removeWithUndo } = useCompanyMutations()
   const [filter, setFilter] = useState('')
+  const [quick, setQuick] = useState<Quick>('all')
   const [dialog, setDialog] = useState<{ open: boolean; editing: Company | null }>({
     open: false,
     editing: null,
   })
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  // "/" jumps to search, like most list UIs
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (e.key !== '/' || target.closest('input, textarea, select, [contenteditable]')) return
+      e.preventDefault()
+      searchRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const atsOptions = (settings.data?.sources ?? []).filter((s) => s.kind === 'ats')
   const atsLabel = (id: string) => atsOptions.find((a) => a.id === id)?.label ?? 'Other'
   const tiersToTrack = settings.data?.settings.tiersToTrack
   const tracked = useMemo(() => new Set(tiersToTrack ?? []), [tiersToTrack])
 
-  const rows = useMemo(() => {
-    const q = filter.trim().toLowerCase()
-    const all = companies.data ?? []
-    return q
-      ? all.filter((c) =>
-          [c.name, c.city, c.slug, c.ats, c.tier].some((v) => v?.toLowerCase().includes(q)),
-        )
-      : all
-  }, [companies.data, filter])
+  const isPolled = (c: Company) =>
+    c.track && !trackBlocker(c) && c.status !== 'manual_only' && tracked.has(c.tier)
+  const matchesQuick = (c: Company) =>
+    quick === 'all' ||
+    (quick === 'polled' && isPolled(c)) ||
+    (quick === 'review' && c.status === 'needs_review') ||
+    (quick === 'manual' && c.status === 'manual_only')
 
-  const counts = useMemo(() => {
-    const all = companies.data ?? []
-    return {
-      polled: all.filter(
-        (c) => c.track && !trackBlocker(c) && c.status !== 'manual_only' && tracked.has(c.tier),
-      ).length,
-      review: all.filter((c) => c.status === 'needs_review').length,
-    }
-  }, [companies.data, tracked])
+  const all = companies.data ?? []
+  const q = filter.trim().toLowerCase()
+  const rows = all.filter(
+    (c) =>
+      matchesQuick(c) &&
+      (!q || [c.name, c.city, c.slug, c.ats, c.tier].some((v) => v?.toLowerCase().includes(q))),
+  )
+  const counts = {
+    all: all.length,
+    polled: all.filter(isPolled).length,
+    review: all.filter((c) => c.status === 'needs_review').length,
+    manual: all.filter((c) => c.status === 'manual_only').length,
+  }
+  const count = (n: number) => (
+    <span className="ml-1 font-mono text-[0.7rem] text-faint tabular-nums">{n}</span>
+  )
 
   return (
     <section>
       <PageHeader
         title="Companies"
-        meta={
-          companies.data && (
-            <span className="font-mono text-xs text-faint">
-              {counts.polled} polled · {counts.review} need review
-            </span>
-          )
-        }
+        description="Your watchlist. Tracked companies in a tracked tier are polled on every run."
         actions={
           <Button variant="primary" onClick={() => setDialog({ open: true, editing: null })}>
             <Plus /> Add
@@ -297,127 +369,190 @@ export function CompaniesPage() {
         }
       />
 
-      <div className="relative mb-4 max-w-sm">
-        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />
-        <Input
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Search name, city, slug, tier"
-          aria-label="Search companies"
-          className="pl-9"
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-72">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />
+          <Input
+            ref={searchRef}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setFilter('')
+                e.currentTarget.blur()
+              }
+            }}
+            placeholder="Search name, city, slug, tier"
+            aria-label="Search companies"
+            className="pr-9 pl-9"
+          />
+          <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-line px-1.5 font-mono text-[0.65rem] text-faint sm:block">
+            /
+          </kbd>
+        </div>
+        <Segmented
+          label="Show"
+          value={quick}
+          onChange={setQuick}
+          className="scrollbar-none max-w-full overflow-x-auto"
+          options={[
+            { id: 'all', label: <>All{count(counts.all)}</> },
+            { id: 'polled', label: <>Polled{count(counts.polled)}</> },
+            { id: 'review', label: <>Needs review{count(counts.review)}</> },
+            { id: 'manual', label: <>Manual{count(counts.manual)}</> },
+          ]}
         />
       </div>
 
       {companies.isError ? (
-        <ErrorState error={companies.error} onRetry={() => companies.refetch()} />
+        <ErrorState
+          error={companies.error}
+          onRetry={() => companies.refetch()}
+          retrying={companies.isFetching}
+        />
       ) : companies.data && rows.length === 0 ? (
         <EmptyState
-          title={filter ? 'No matches' : 'No companies yet'}
-          body={filter ? 'Try a different search.' : 'Add companies here or run `pnpm seed`.'}
+          icon={Building2}
+          title={all.length === 0 ? 'No companies yet' : 'No matches'}
+          body={
+            all.length === 0
+              ? 'Add a company to start polling its job board.'
+              : q
+                ? `Nothing matches “${filter.trim()}”.`
+                : 'No companies in this group.'
+          }
+          action={
+            all.length === 0 ? (
+              <Button size="sm" onClick={() => setDialog({ open: true, editing: null })}>
+                <Plus /> Add company
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setFilter('')
+                  setQuick('all')
+                }}
+              >
+                Show all companies
+              </Button>
+            )
+          }
         />
       ) : (
         <div className="-mx-4 overflow-x-auto sm:mx-0 sm:rounded-xl sm:border sm:border-line">
-          <table className="w-full min-w-[52rem] text-sm">
+          <table className="w-full min-w-[34rem] text-sm md:min-w-[52rem]">
             <thead>
               <tr className="border-b border-line text-left font-mono text-[0.68rem] tracking-wider text-faint uppercase">
                 <th className="px-4 py-2.5 font-medium">Company</th>
                 <th className="px-2 py-2.5 font-medium">Tier</th>
                 <th className="px-2 py-2.5 font-medium">Track</th>
-                <th className="px-2 py-2.5 font-medium">ATS / slug</th>
+                <th className="hidden px-2 py-2.5 font-medium md:table-cell">ATS / slug</th>
                 <th className="px-2 py-2.5 font-medium">Status</th>
-                <th className="px-2 py-2.5 font-medium">Last good poll</th>
-                <th className="w-10 px-2 py-2.5" />
+                <th className="hidden px-2 py-2.5 font-medium md:table-cell">Last good poll</th>
+                <th className="w-10 px-2 py-2.5">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
-            <tbody>
-              {rows.map((c) => {
-                const blocker = trackBlocker(c)
-                return (
-                  <tr
-                    key={c.id}
-                    className="border-b border-line/60 last:border-0 hover:bg-panel/60"
-                  >
-                    <td className="px-4 py-2.5">
-                      <p className="font-medium">{c.name}</p>
-                      {(c.city || c.state) && (
+            {!companies.data ? (
+              <SkeletonTable />
+            ) : (
+              <tbody>
+                {rows.map((c) => {
+                  const blocker = trackBlocker(c)
+                  const edit = () => setDialog({ open: true, editing: c })
+                  return (
+                    <tr
+                      key={c.id}
+                      className="border-b border-line/60 transition-colors duration-150 last:border-0 hover:bg-panel/60"
+                    >
+                      <td className="px-4 py-2.5">
+                        <button
+                          type="button"
+                          onClick={edit}
+                          className="rounded-sm text-left font-medium decoration-signal/60 underline-offset-4 hover:underline"
+                        >
+                          {c.name}
+                        </button>
                         <p className="text-xs text-faint">
                           {[c.city, c.state].filter(Boolean).join(' · ')}
+                          <span className="md:hidden">
+                            {(c.city || c.state) && ' · '}
+                            {atsLabel(c.ats)}
+                          </span>
                         </p>
-                      )}
-                    </td>
-                    <td className="px-2 py-2.5">
-                      <NativeSelect
-                        aria-label={`Tier for ${c.name}`}
-                        value={c.tier}
-                        onChange={(e) =>
-                          patch.mutate({ id: c.id, json: { tier: e.target.value as Tier } })
-                        }
-                        className="h-8 w-[7.5rem] py-1 text-xs"
-                      >
-                        {TIERS.map((t) => (
-                          <option key={t}>{t}</option>
-                        ))}
-                      </NativeSelect>
-                    </td>
-                    <td className="px-2 py-2.5">
-                      <span
-                        title={
-                          blocker ??
-                          (tracked.has(c.tier) ? undefined : `${c.tier} isn't in Tiers to track`)
-                        }
-                      >
-                        <Switch
-                          aria-label={`Track ${c.name}`}
-                          checked={c.track}
-                          disabled={Boolean(blocker)}
-                          onCheckedChange={(track) => patch.mutate({ id: c.id, json: { track } })}
-                        />
-                      </span>
-                    </td>
-                    <td className="px-2 py-2.5">
-                      <span className="text-dim">{atsLabel(c.ats)}</span>
-                      {c.slug && (
-                        <span className="ml-1.5 font-mono text-xs text-paper/80">{c.slug}</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-2.5">
-                      <Badge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</Badge>
-                    </td>
-                    <td className="px-2 py-2.5 font-mono text-xs">
-                      <Health c={c} />
-                    </td>
-                    <td className="px-2 py-2.5">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="icon" variant="ghost" aria-label={`Actions for ${c.name}`}>
-                            <MoreHorizontal />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem onSelect={() => setDialog({ open: true, editing: c })}>
-                            <Pencil /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-stop"
-                            onSelect={() => {
-                              if (
-                                window.confirm(
-                                  `Delete ${c.name}? Its jobs stay, without a company.`,
-                                )
-                              ) {
-                                remove.mutate(c.id)
-                              }
-                            }}
-                          >
-                            <Trash2 className="!text-stop" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <NativeSelect
+                          aria-label={`Tier for ${c.name}`}
+                          value={c.tier}
+                          onChange={(e) =>
+                            patch.mutate({ id: c.id, json: { tier: e.target.value as Tier } })
+                          }
+                          className="h-8 w-[7.5rem] py-1 text-xs"
+                        >
+                          {TIERS.map((t) => (
+                            <option key={t}>{t}</option>
+                          ))}
+                        </NativeSelect>
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <span
+                          title={
+                            blocker ??
+                            (tracked.has(c.tier) ? undefined : `${c.tier} isn’t in Tiers to track`)
+                          }
+                        >
+                          <Switch
+                            aria-label={`Track ${c.name}`}
+                            checked={c.track}
+                            disabled={Boolean(blocker)}
+                            onCheckedChange={(track) => patch.mutate({ id: c.id, json: { track } })}
+                          />
+                        </span>
+                      </td>
+                      <td className="hidden px-2 py-2.5 md:table-cell">
+                        <span className="text-dim">{atsLabel(c.ats)}</span>
+                        {c.slug && (
+                          <span className="ml-1.5 font-mono text-xs text-paper/80">{c.slug}</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <Badge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</Badge>
+                      </td>
+                      <td className="hidden px-2 py-2.5 font-mono text-xs md:table-cell">
+                        <Health c={c} />
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Actions for ${c.name}`}
+                            >
+                              <MoreHorizontal />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem onSelect={edit}>
+                              <Pencil /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-stop data-[highlighted]:bg-stop/10"
+                              onSelect={() => void removeWithUndo(c)}
+                            >
+                              <Trash2 className="!text-stop" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            )}
           </table>
         </div>
       )}

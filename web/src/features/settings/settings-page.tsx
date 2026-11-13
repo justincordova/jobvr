@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useBlocker } from '@tanstack/react-router'
 import { Plus, Trash2 } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
-import { ErrorState, PageHeader, Section } from '@/components/page'
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react'
+import { ErrorState, PageHeader, Section, Skeleton } from '@/components/page'
 import { useToast } from '@/components/toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Input, Label } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { api, queryKeys, unwrap } from '@/lib/api'
@@ -15,8 +17,11 @@ import { ChipsInput } from './chips-input'
 
 type Key = keyof Settings
 
+/** Sections report unsaved drafts so the page can guard navigation. */
+const DirtyContext = createContext<(section: string, dirty: boolean) => void>(() => {})
+
 /** Local draft of some settings fields, saved together with one PATCH. */
-function useDraft<K extends Key>(settings: Settings, keys: readonly K[]) {
+function useDraft<K extends Key>(section: string, settings: Settings, keys: readonly K[]) {
   const pick = () => Object.fromEntries(keys.map((k) => [k, settings[k]])) as Pick<Settings, K>
   const [draft, setDraft] = useState(pick)
   const [baseline, setBaseline] = useState(settings)
@@ -29,17 +34,26 @@ function useDraft<K extends Key>(settings: Settings, keys: readonly K[]) {
   const dirty = keys.some((k) => JSON.stringify(draft[k]) !== JSON.stringify(settings[k]))
   const set = <F extends K>(field: F, value: Settings[F]) =>
     setDraft((d) => ({ ...d, [field]: value }))
-  return { draft, set, dirty, reset: () => setDraft(pick()) }
+  const report = useContext(DirtyContext)
+  useEffect(() => {
+    report(section, dirty)
+    return () => report(section, false)
+  }, [report, section, dirty])
+  // Empty number inputs are NaN; block saving until they're filled in
+  const valid = keys.every((k) => typeof draft[k] !== 'number' || Number.isFinite(draft[k]))
+  return { draft, set, dirty, valid, reset: () => setDraft(pick()) }
 }
 
 function SaveBar({
   dirty,
+  valid = true,
   onSave,
   onReset,
   pending,
   error,
 }: {
   dirty: boolean
+  valid?: boolean
   onSave: () => void
   onReset: () => void
   pending: boolean
@@ -47,20 +61,35 @@ function SaveBar({
 }) {
   return (
     <>
-      {error && <p className="mr-auto text-sm text-stop">{error}</p>}
-      {dirty && (
-        <Button variant="ghost" size="sm" onClick={onReset}>
-          Discard
-        </Button>
+      {(error || !valid) && (
+        <p className="mr-auto animate-fade-in text-sm text-stop">
+          {error ?? 'Fill in every number first.'}
+        </p>
       )}
-      <Button variant="primary" size="sm" onClick={onSave} disabled={!dirty || pending}>
-        {pending ? 'Saving…' : 'Save'}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onReset}
+        className={cn('transition-opacity', !dirty && 'pointer-events-none opacity-0')}
+        tabIndex={dirty ? 0 : -1}
+        aria-hidden={!dirty}
+      >
+        Discard
+      </Button>
+      <Button
+        variant="primary"
+        size="sm"
+        onClick={onSave}
+        disabled={!dirty || !valid}
+        pending={pending}
+      >
+        Save
       </Button>
     </>
   )
 }
 
-function useSave() {
+function useSave(section: string) {
   const qc = useQueryClient()
   const toast = useToast()
   const [error, setError] = useState<string | null>(null)
@@ -70,7 +99,7 @@ function useSave() {
     onSuccess: (data) => {
       qc.setQueryData(queryKeys.settings, data)
       void qc.invalidateQueries({ queryKey: queryKeys.allJobs })
-      toast('Settings saved')
+      toast(`${section} saved`)
     },
     onError: (err) => setError(err.message),
   })
@@ -80,7 +109,7 @@ function useSave() {
 function Row({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <div>
+      <div className="min-w-0">
         <p className="text-sm font-medium">{label}</p>
         {hint && <p className="text-xs text-dim">{hint}</p>}
       </div>
@@ -118,7 +147,8 @@ function NumberField({
           max={max}
           value={Number.isFinite(value) ? value : ''}
           onChange={(e) => onChange(e.target.valueAsNumber)}
-          className="w-28 font-mono"
+          aria-invalid={!Number.isFinite(value)}
+          className="w-28 font-mono aria-invalid:border-stop/60"
         />
         <span className="text-sm text-dim">{suffix}</span>
       </div>
@@ -127,15 +157,18 @@ function NumberField({
 }
 
 function MatchingSection({ settings }: { settings: Settings }) {
-  const { draft, set, dirty, reset } = useDraft(settings, [
+  const { draft, set, dirty, valid, reset } = useDraft('Matching', settings, [
     'locations',
     'roleKeywords',
     'levelKeywords',
     'excludeKeywords',
     'minSalaryUsd',
   ] as const)
-  const { save, pending, error } = useSave()
+  const { save, pending, error } = useSave('Matching')
   const [newLabel, setNewLabel] = useState('')
+  const duplicate = draft.locations.some(
+    (l) => l.label.toLowerCase() === newLabel.trim().toLowerCase(),
+  )
 
   const updateLoc = (i: number, patch: Partial<Settings['locations'][number]>) =>
     set(
@@ -146,10 +179,12 @@ function MatchingSection({ settings }: { settings: Settings }) {
   return (
     <Section
       title="Matching"
+      dirty={dirty}
       description="ATS titles need a role AND a level keyword and no exclude keyword. SimplifyJobs titles only need to avoid excludes."
       footer={
         <SaveBar
           dirty={dirty}
+          valid={valid}
           onSave={() => save(draft)}
           onReset={reset}
           pending={pending}
@@ -161,7 +196,13 @@ function MatchingSection({ settings }: { settings: Settings }) {
         <p className="mb-2 font-mono text-[0.7rem] tracking-wider text-dim uppercase">Locations</p>
         <ul className="space-y-2">
           {draft.locations.map((loc, i) => (
-            <li key={loc.label} className="rounded-lg border border-line bg-ink/40 p-3">
+            <li
+              key={loc.label}
+              className={cn(
+                'animate-rise rounded-lg border border-line bg-ink/40 p-3 transition-opacity duration-200',
+                !loc.enabled && 'opacity-60',
+              )}
+            >
               <div className="mb-2 flex items-center gap-3">
                 <Switch
                   checked={loc.enabled}
@@ -207,11 +248,7 @@ function MatchingSection({ settings }: { settings: Settings }) {
           onSubmit={(e) => {
             e.preventDefault()
             const label = newLabel.trim()
-            if (
-              !label ||
-              draft.locations.some((l) => l.label.toLowerCase() === label.toLowerCase())
-            )
-              return
+            if (!label || duplicate) return
             set('locations', [
               ...draft.locations.filter((l) => !l.builtin),
               { label, aliases: [label.toLowerCase()], enabled: true },
@@ -225,12 +262,18 @@ function MatchingSection({ settings }: { settings: Settings }) {
             onChange={(e) => setNewLabel(e.target.value)}
             placeholder="New location, e.g. Boston"
             aria-label="New location label"
-            className="max-w-xs"
+            aria-invalid={duplicate}
+            className="max-w-xs aria-invalid:border-stop/60"
           />
-          <Button type="submit" size="md">
+          <Button type="submit" size="md" disabled={!newLabel.trim() || duplicate}>
             <Plus /> Add
           </Button>
         </form>
+        {duplicate && (
+          <p className="mt-1.5 animate-fade-in text-xs text-stop">
+            {newLabel.trim()} is already in the list.
+          </p>
+        )}
       </div>
       <ChipsInput
         label="Role keywords (any)"
@@ -261,12 +304,13 @@ function MatchingSection({ settings }: { settings: Settings }) {
 }
 
 function TiersSection({ settings }: { settings: Settings }) {
-  const { draft, set, dirty, reset } = useDraft(settings, ['tiersToTrack'] as const)
-  const { save, pending, error } = useSave()
+  const { draft, set, dirty, reset } = useDraft('Tiers', settings, ['tiersToTrack'] as const)
+  const { save, pending, error } = useSave('Tiers')
   const on = new Set(draft.tiersToTrack)
   return (
     <Section
       title="Tiers to track"
+      dirty={dirty}
       description="Decides which companies are polled, which jobs push, and the feed’s default tier filter. Unlisted = SimplifyJobs roles at companies not in your list."
       footer={
         <SaveBar
@@ -291,7 +335,7 @@ function TiersSection({ settings }: { settings: Settings }) {
               )
             }
             className={cn(
-              'rounded-full border px-3 py-1 text-sm transition-colors',
+              'rounded-full border px-3 py-1 text-sm transition-[color,background-color,border-color,scale] duration-150 active:scale-95',
               on.has(t)
                 ? 'border-signal/60 bg-signal-soft text-signal'
                 : 'border-line text-dim hover:text-paper',
@@ -306,17 +350,18 @@ function TiersSection({ settings }: { settings: Settings }) {
 }
 
 function SimplifySection({ payload }: { payload: SettingsPayload }) {
-  const { draft, set, dirty, reset } = useDraft(payload.settings, [
+  const { draft, set, dirty, reset } = useDraft('SimplifyJobs', payload.settings, [
     'simplifyCategories',
     'applyLevelToSimplify',
     'showSimplifyJobs',
     'suggestCompanies',
   ] as const)
-  const { save, pending, error } = useSave()
+  const { save, pending, error } = useSave('SimplifyJobs')
   const health = payload.sourceHealth.find((h) => h.source === 'simplify')
   return (
     <Section
       title="SimplifyJobs"
+      dirty={dirty}
       description={
         health && (
           <>
@@ -378,21 +423,23 @@ function SimplifySection({ payload }: { payload: SettingsPayload }) {
 }
 
 function ScheduleSection({ payload }: { payload: SettingsPayload }) {
-  const { draft, set, dirty, reset } = useDraft(payload.settings, [
+  const { draft, set, dirty, valid, reset } = useDraft('Schedule', payload.settings, [
     'maxJobAgeHours',
     'pollEveryMinutes',
     'pushEveryMinutes',
     'quietHours',
     'emailDigest',
   ] as const)
-  const { save, pending, error } = useSave()
+  const { save, pending, error } = useSave('Schedule')
   return (
     <Section
       title="Schedule & notifications"
+      dirty={dirty}
       description={`Last poll ${relative(payload.lastPollAt)} · last push ${relative(payload.lastPushAt)}`}
       footer={
         <SaveBar
           dirty={dirty}
+          valid={valid}
           onSave={() => save(draft)}
           onReset={reset}
           pending={pending}
@@ -460,12 +507,15 @@ function ScheduleSection({ payload }: { payload: SettingsPayload }) {
 }
 
 function SourcesSection({ payload }: { payload: SettingsPayload }) {
-  const { draft, set, dirty, reset } = useDraft(payload.settings, ['enabledSources'] as const)
-  const { save, pending, error } = useSave()
+  const { draft, set, dirty, reset } = useDraft('Sources', payload.settings, [
+    'enabledSources',
+  ] as const)
+  const { save, pending, error } = useSave('Sources')
   const on = new Set(draft.enabledSources)
   return (
     <Section
       title="Sources"
+      dirty={dirty}
       description="Turning a source off stops polling it; jobs already found stay."
       footer={
         <SaveBar
@@ -501,31 +551,84 @@ function SourcesSection({ payload }: { payload: SettingsPayload }) {
   )
 }
 
+function SettingsSkeleton() {
+  return (
+    <div aria-hidden className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+      <Skeleton className="h-[34rem] rounded-xl bg-panel" />
+      <div className="space-y-4">
+        <Skeleton className="h-64 rounded-xl bg-panel" />
+        <Skeleton className="h-32 rounded-xl bg-panel" />
+      </div>
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const settings = useQuery({
     queryKey: queryKeys.settings,
     queryFn: () => unwrap(api.api.settings.$get()),
   })
+  const [dirtySections, setDirtySections] = useState<string[]>([])
+  const report = useCallback((section: string, dirty: boolean) => {
+    setDirtySections((list) =>
+      dirty === list.includes(section)
+        ? list
+        : dirty
+          ? [...list, section]
+          : list.filter((s) => s !== section),
+    )
+  }, [])
+  const blocker = useBlocker({
+    shouldBlockFn: () => dirtySections.length > 0,
+    enableBeforeUnload: () => dirtySections.length > 0,
+    withResolver: true,
+  })
+
   return (
-    <section>
-      <PageHeader title="Settings" />
-      {settings.isError ? (
-        <ErrorState error={settings.error} onRetry={() => settings.refetch()} />
-      ) : !settings.data ? (
-        <div className="h-64 animate-pulse rounded-xl bg-panel" />
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-          <div className="space-y-4">
-            <MatchingSection settings={settings.data.settings} />
+    <DirtyContext.Provider value={report}>
+      <section>
+        <PageHeader
+          title="Settings"
+          description="Changes apply from the next poll. Each section saves on its own."
+        />
+        {settings.isError ? (
+          <ErrorState
+            error={settings.error}
+            onRetry={() => settings.refetch()}
+            retrying={settings.isFetching}
+          />
+        ) : !settings.data ? (
+          <SettingsSkeleton />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+            <div className="space-y-4">
+              <MatchingSection settings={settings.data.settings} />
+            </div>
+            <div className="space-y-4">
+              <ScheduleSection payload={settings.data} />
+              <TiersSection settings={settings.data.settings} />
+              <SimplifySection payload={settings.data} />
+              <SourcesSection payload={settings.data} />
+            </div>
           </div>
-          <div className="space-y-4">
-            <ScheduleSection payload={settings.data} />
-            <TiersSection settings={settings.data.settings} />
-            <SimplifySection payload={settings.data} />
-            <SourcesSection payload={settings.data} />
+        )}
+      </section>
+
+      <Dialog open={blocker.status === 'blocked'} onOpenChange={(o) => !o && blocker.reset?.()}>
+        <DialogContent
+          title="Leave without saving?"
+          description={`Unsaved changes in ${dirtySections.join(', ')} will be lost.`}
+        >
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => blocker.reset?.()} autoFocus>
+              Keep editing
+            </Button>
+            <Button variant="danger" onClick={() => blocker.proceed?.()}>
+              Discard and leave
+            </Button>
           </div>
-        </div>
-      )}
-    </section>
+        </DialogContent>
+      </Dialog>
+    </DirtyContext.Provider>
   )
 }

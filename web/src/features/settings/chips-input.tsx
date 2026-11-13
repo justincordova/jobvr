@@ -49,12 +49,12 @@ export function ChipsInput({
       >
         {label}
       </label>
-      <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-line-strong bg-panel p-1.5 focus-within:border-signal">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-line-strong bg-panel p-1.5 transition-colors hover:border-faint focus-within:border-signal">
         {value.map((v) => (
           <span
             key={v}
             className={cn(
-              'inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-xs',
+              'inline-flex animate-pop-in items-center gap-1 rounded px-2 py-0.5 font-mono text-xs',
               tone === 'stop' ? 'bg-stop/10 text-stop' : 'bg-raised text-paper ring-1 ring-line',
             )}
           >
@@ -63,7 +63,7 @@ export function ChipsInput({
               type="button"
               onClick={() => onChange(value.filter((x) => x !== v))}
               aria-label={`Remove ${v}`}
-              className="text-faint hover:text-paper"
+              className="-mr-0.5 rounded-sm p-0.5 text-faint transition-colors hover:text-paper"
             >
               <X className="size-3" />
             </button>
