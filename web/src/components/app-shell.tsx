@@ -135,14 +135,17 @@ export function AppShell() {
   }, [pathname])
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 sm:px-6">
-      <header className="sticky top-0 z-40 -mx-4 flex h-14 items-center justify-between gap-4 border-b border-line/70 bg-ink/80 px-4 backdrop-blur-lg sm:-mx-6 sm:px-6">
+    <div className="flex min-h-dvh flex-col">
+      <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 border-b border-line/70 bg-ink/80 px-4 backdrop-blur-lg sm:px-6 lg:px-10">
         <Wordmark />
         <DesktopNav pathname={pathname} />
         <PollStatus />
       </header>
 
-      <main key={pathname} className="flex-1 animate-page pt-6 pb-28 md:pb-16">
+      <main
+        key={pathname}
+        className="flex-1 animate-page px-4 pt-6 pb-28 sm:px-6 md:pb-16 lg:px-10"
+      >
         <Outlet />
       </main>
 

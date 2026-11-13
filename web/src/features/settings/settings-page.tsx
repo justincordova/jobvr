@@ -600,7 +600,7 @@ export function SettingsPage() {
         ) : !settings.data ? (
           <SettingsSkeleton />
         ) : (
-          <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+          <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr] 2xl:grid-cols-[1.2fr_1fr]">
             <div className="space-y-4">
               <MatchingSection settings={settings.data.settings} />
             </div>

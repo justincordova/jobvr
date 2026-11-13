@@ -166,7 +166,7 @@ export function SuggestedPage() {
           retrying={suggestions.isFetching}
         />
       ) : suggestions.isPending ? (
-        <ul aria-hidden className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul aria-hidden className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {Array.from({ length: 3 }, (_, i) => (
             <li key={i} className="h-56 animate-pulse rounded-xl border border-line bg-panel/60" />
           ))}
@@ -189,7 +189,7 @@ export function SuggestedPage() {
           }
         />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {suggestions.data.map((s) => (
             <SuggestionCard
               key={s.id}
