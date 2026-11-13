@@ -140,9 +140,14 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
   const webDist = options.webDistDir ? path.resolve(options.webDistDir) : null;
   if (webDist && existsSync(path.join(webDist, "index.html"))) {
     // Hashed assets never change; the shell and service worker must revalidate
-    app.use("/assets/*", async (c, next) => {
+    app.use("*", async (c, next) => {
       await next();
-      if (c.res.ok) c.header("Cache-Control", "public, max-age=31536000, immutable");
+      const { path: p } = c.req;
+      if (!c.res.ok || p.startsWith("/api/") || p === "/health") return;
+      c.header(
+        "Cache-Control",
+        p.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache",
+      );
     });
     app.get("*", serveStatic({ root: path.relative(process.cwd(), webDist) || "." }));
     app.get("*", async (c, next) => {
