@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import { FEED_GRID } from './columns'
 import { FilterBar } from './filter-bar'
 import { JobRow } from './job-row'
 import {
@@ -216,6 +217,19 @@ export function FeedPage() {
             jobs.isPlaceholderData && 'opacity-60',
           )}
         >
+          <li
+            aria-hidden
+            className={cn(
+              FEED_GRID,
+              'hidden border-b border-line/70 py-2 pr-1 font-mono text-[0.65rem] tracking-wider text-faint uppercase lg:grid',
+            )}
+          >
+            <span className="pl-3 text-right">Posted</span>
+            <span>Role</span>
+            <span>Location</span>
+            <span>Pay · Source</span>
+            <span />
+          </li>
           {list.map((job) => (
             <JobRow
               key={job.id}
