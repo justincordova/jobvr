@@ -1,0 +1,70 @@
+# Home PC (Docker Desktop + WSL2). Nothing is published on the host: the only way
+# in is the Tailscale sidecar (HTTPS for the app, TCP 5432 for Postgres from the Mac).
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: jobvr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: jobvr
+    volumes:
+      # Postgres 18 keeps data under /var/lib/postgresql/18/docker; mount the parent
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobvr -d jobvr"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build: .
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgres://jobvr:${POSTGRES_PASSWORD}@postgres:5432/jobvr
+      SCHEDULER_ENABLED: "true"
+      AUTH_MODE: none
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  tailscale:
+    image: tailscale/tailscale:stable
+    hostname: jobvr
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY in .env}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_USERSPACE: "true"
+    volumes:
+      - tsstate:/var/lib/tailscale
+      - ./deploy/tailscale:/config:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  backup:
+    image: postgres:18
+    environment:
+      TZ: America/New_York
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      KEEP: "14"
+    entrypoint: ["/bin/bash", "/scripts/backup.sh"]
+    volumes:
+      - ./deploy/backup.sh:/scripts/backup.sh:ro
+      # Point BACKUP_DIR at a synced folder (OneDrive/Dropbox) for off-machine copies
+      - ${BACKUP_DIR:-./backups}:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  tsstate:
