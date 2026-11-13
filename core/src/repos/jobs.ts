@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, gte, inArray, isNull, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, type SQL } from "drizzle-orm";
 import type { JobState, TierFilter } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { applications, companies, type JobRow, jobSources, jobs } from "../db/schema";
@@ -76,7 +76,7 @@ export const loadJobViews = async (db: DbOrTx, where: SQL | undefined): Promise<
     .from(jobs)
     .leftJoin(companies, eq(companies.id, jobs.companyId))
     .where(where)
-    .orderBy(desc(jobs.effectiveAt));
+    .orderBy(desc(jobs.effectiveAt), asc(jobs.id));
   if (rows.length === 0) return [];
   const sourcesByJob = new Map<string, JobSourceView[]>();
   const ids = rows.map((r) => r.job.id);

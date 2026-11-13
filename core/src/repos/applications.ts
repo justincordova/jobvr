@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { ApplicationStatus } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { type ApplicationRow, applications, jobs } from "../db/schema";
@@ -20,7 +20,7 @@ export interface ApplicationPatch {
 }
 
 export const listApplications = (db: DbOrTx): Promise<ApplicationRow[]> =>
-  db.select().from(applications).orderBy(desc(applications.appliedAt));
+  db.select().from(applications).orderBy(desc(applications.appliedAt), asc(applications.id));
 
 /** Manual entry (no linked job), e.g. a role found on Workday. */
 export const createApplication = async (
