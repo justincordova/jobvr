@@ -1,12 +1,21 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
+import type { Database, Registry } from "@jobvr/core";
 import type { RequestIdVariables } from "hono/request-id";
 import type { PinoLogger } from "hono-pino";
 import { HTTP_STATUS } from "@/constants";
 import { fail } from "@/utils/response";
 
+/** Runtime dependencies injected into every request (so tests can swap them). */
+export interface AppDeps {
+  database: Database;
+  registry: Registry;
+  now: () => Date;
+}
+
 export interface AppBindings {
   Variables: RequestIdVariables & {
     logger: PinoLogger;
+    deps: AppDeps;
   };
 }
 

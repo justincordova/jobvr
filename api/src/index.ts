@@ -1,5 +1,7 @@
 import type { Server } from "node:http";
 import { serve } from "@hono/node-server";
+import { createDatabase, runMigrations } from "@jobvr/core";
+import { adapters } from "@jobvr/poller";
 import { createApp } from "@/app";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
@@ -7,7 +9,14 @@ import { logger } from "@/lib/logger";
 // Must stay below the orchestrator's kill timeout (Docker/compose default: 10s)
 const SHUTDOWN_TIMEOUT_MS = 8_000;
 
-const app = createApp();
+const database = createDatabase(env.DATABASE_URL);
+await runMigrations(database.db, env.MIGRATIONS_DIR);
+logger.info("database migrated");
+
+const app = createApp(
+  { database, registry: adapters, now: () => new Date() },
+  { webDistDir: env.WEB_DIST_DIR },
+);
 
 // Plain HTTP/1.1 server (no `createServer` override), so it is a node:http Server.
 const server = serve({ fetch: app.fetch, port: env.PORT, hostname: env.HOST }, (info) => {
@@ -42,7 +51,7 @@ const shutdown = (signal: NodeJS.Signals): void => {
   // fires once in-flight requests finish
   server.close((err) => {
     if (err) logger.error({ err }, "Error during shutdown");
-    exit(err ? 1 : 0);
+    void database.close().finally(() => exit(err ? 1 : 0));
   });
 };
 

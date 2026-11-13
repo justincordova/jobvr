@@ -199,6 +199,9 @@ importers:
       '@scalar/hono-api-reference':
         specifier: ^0.12.19
         version: 0.12.19(hono@4.13.18)
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@types/pg@8.23.1)(pg@8.23.1)
       hono:
         specifier: ^4.13.18
         version: 4.13.18
@@ -208,6 +211,9 @@ importers:
       hono-rate-limiter:
         specifier: ^0.5.4
         version: 0.5.4(hono@4.13.18)
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       pino:
         specifier: ^10.4.0
         version: 10.4.0

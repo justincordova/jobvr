@@ -14,7 +14,7 @@ export default defineConfig([
     clean: true,
     sourcemap: true,
   },
-  // Typed RPC client (+ bundled declarations) for frontends: `hono-starter/client`
+  // Typed RPC client (+ bundled declarations) for frontends: `@jobvr/api/client`
   {
     entry: { client: "src/client.ts" },
     format: "esm",

@@ -27,9 +27,11 @@
     "@jobvr/core": "workspace:*",
     "@jobvr/poller": "workspace:*",
     "@scalar/hono-api-reference": "^0.12.19",
+    "drizzle-orm": "^0.45.4",
     "hono": "^4.13.18",
     "hono-pino": "^0.10.3",
     "hono-rate-limiter": "^0.5.4",
+    "pg": "^8.23.1",
     "pino": "^10.4.0",
     "zod": "^4.6.7"
   },

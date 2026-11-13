@@ -1,17 +1,32 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { serveStatic } from "@hono/node-server/serve-static";
+import { ConflictError, getSettingsState, InvalidError, NotFoundError } from "@jobvr/core";
 import { HTTPException } from "hono/http-exception";
 import { methodNotAllowed } from "hono/method-not-allowed";
 import { requestId } from "hono/request-id";
 import { pinoLogger } from "hono-pino";
+import { ZodError } from "zod";
 import { env } from "@/config/env";
 import { HTTP_STATUS, NOT_FOUND_MESSAGE } from "@/constants";
-import { createRouter } from "@/lib/create-app";
+import { type AppDeps, createRouter } from "@/lib/create-app";
 import { logger } from "@/lib/logger";
 import { configureOpenAPI } from "@/lib/openapi";
+import { auth } from "@/middleware/auth";
 import { rateLimit } from "@/middleware/rate-limit";
 import { requestGuards, securityHeaders } from "@/middleware/security";
-import exampleRouter from "@/modules/example";
+import applicationsRouter from "@/modules/applications";
+import companiesRouter from "@/modules/companies";
+import jobsRouter from "@/modules/jobs";
+import settingsRouter from "@/modules/settings";
+import suggestionsRouter from "@/modules/suggestions";
 import { fail } from "@/utils/response";
 import pkg from "../package.json" with { type: "json" };
+
+export interface AppOptions {
+  /** Built SPA to serve (skipped when missing, e.g. in tests). */
+  webDistDir?: string;
+}
 
 /**
  * Build and configure the Hono application.
@@ -19,7 +34,7 @@ import pkg from "../package.json" with { type: "json" };
  * Returns a fresh instance on every call (own rate-limit store, own routes) so
  * tests stay isolated. `src/index.ts` passes `app.fetch` to the Node server.
  */
-export const createApp = () => {
+export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
   const app = createRouter();
 
   const docsEnabled = env.NODE_ENV !== "production";
@@ -41,9 +56,9 @@ export const createApp = () => {
         reqId: false,
         referRequestIdKey: "_unused",
         onResBindings: (c) => ({ res: { status: c.res.status } }),
-        // Health probes are logged at trace so they don't flood the logs
+        // Health probes and static assets are logged at trace so they don't flood the logs
         onResLevel: (c) => {
-          if (c.req.path === "/health") return "trace";
+          if (c.req.path === "/health" || !c.req.path.startsWith("/api")) return "trace";
           if (c.res.status >= 500) return "error";
           if (c.res.status >= 400) return "warn";
           return "info";
@@ -52,8 +67,13 @@ export const createApp = () => {
     }),
   );
   app.use(...securityHeaders());
-  app.use(rateLimit());
+  app.use("/api/*", rateLimit());
   app.use(...requestGuards());
+  app.use("/api/*", auth());
+  app.use(async (c, next) => {
+    c.set("deps", deps);
+    await next();
+  });
   // 405 + Allow header when the path exists but the method does not
   app.use(
     methodNotAllowed({
@@ -65,10 +85,19 @@ export const createApp = () => {
     }),
   );
 
-  // Global error handler
+  // Global error handler: domain errors map to their HTTP statuses
   app.onError((err, c) => {
     const log = c.var.logger ?? logger;
 
+    if (err instanceof NotFoundError) return fail(c, HTTP_STATUS.NOT_FOUND, err.message);
+    if (err instanceof ConflictError) return fail(c, HTTP_STATUS.CONFLICT, err.message);
+    if (err instanceof InvalidError) return fail(c, HTTP_STATUS.BAD_REQUEST, err.message);
+    if (err instanceof ZodError) {
+      return fail(c, HTTP_STATUS.BAD_REQUEST, "Request validation failed", {
+        error: "Validation Error",
+        details: err.issues,
+      });
+    }
     if (err instanceof HTTPException) {
       if (err.res) return err.getResponse();
       log[err.status >= 500 ? "error" : "warn"]({ err }, "HTTP exception");
@@ -90,20 +119,51 @@ export const createApp = () => {
   }
 
   // Routes are chained so AppType captures them for the RPC client
-  return app
-    .get("/", (c) =>
+  const routes = app
+    .get("/health", async (c) => {
+      try {
+        const state = await getSettingsState(deps.database.db);
+        return c.json(
+          { status: "ok" as const, lastPollAt: state.lastPollAt?.toISOString() ?? null },
+          200,
+        );
+      } catch {
+        return c.json({ status: "unavailable" as const, lastPollAt: null }, 503);
+      }
+    })
+    .route("/api/jobs", jobsRouter)
+    .route("/api/applications", applicationsRouter)
+    .route("/api/companies", companiesRouter)
+    .route("/api/suggestions", suggestionsRouter)
+    .route("/api/settings", settingsRouter);
+
+  const webDist = options.webDistDir ? path.resolve(options.webDistDir) : null;
+  if (webDist && existsSync(path.join(webDist, "index.html"))) {
+    // Hashed assets never change; the shell and service worker must revalidate
+    app.use("/assets/*", async (c, next) => {
+      await next();
+      if (c.res.ok) c.header("Cache-Control", "public, max-age=31536000, immutable");
+    });
+    app.get("*", serveStatic({ root: path.relative(process.cwd(), webDist) || "." }));
+    app.get("*", async (c, next) => {
+      if (c.req.path.startsWith("/api/") || c.req.path === "/api") return next();
+      c.header("Cache-Control", "no-cache");
+      return serveStatic({
+        root: path.relative(process.cwd(), webDist) || ".",
+        path: "index.html",
+      })(c, next);
+    });
+  } else {
+    app.get("/", (c) =>
       c.json({
         message: `${env.APP_NAME} Server`,
         version: pkg.version,
-        endpoints: {
-          health: "/health",
-          ...(docsEnabled && { docs: "/reference" }),
-          api: "/api/example",
-        },
+        endpoints: { health: "/health", ...(docsEnabled && { docs: "/reference" }), api: "/api" },
       }),
-    )
-    .get("/health", (c) => c.json({ status: "ok" as const }))
-    .route("/api/example", exampleRouter);
+    );
+  }
+
+  return routes;
 };
 
 export type AppType = ReturnType<typeof createApp>;

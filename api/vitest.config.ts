@@ -13,6 +13,9 @@ export default defineConfig({
       NODE_ENV: "test",
     },
     include: ["src/**/*.test.ts"],
+    globalSetup: ["../core/src/testing/global-setup.ts"],
+    hookTimeout: 120_000,
+    testTimeout: 30_000,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
