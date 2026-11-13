@@ -5,6 +5,7 @@ import { adapters } from "@jobvr/poller";
 import { createApp } from "@/app";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
+import { startScheduler } from "@/scheduler";
 
 // Must stay below the orchestrator's kill timeout (Docker/compose default: 10s)
 const SHUTDOWN_TIMEOUT_MS = 8_000;
@@ -17,6 +18,17 @@ const app = createApp(
   { database, registry: adapters, now: () => new Date() },
   { webDistDir: env.WEB_DIST_DIR },
 );
+
+const scheduler = env.SCHEDULER_ENABLED
+  ? startScheduler({
+      database,
+      registry: adapters,
+      ntfyUrl: env.NTFY_URL,
+      publicUrl: env.PUBLIC_URL,
+      logger,
+    })
+  : null;
+if (!scheduler) logger.info("scheduler disabled (SCHEDULER_ENABLED=false)");
 
 // Plain HTTP/1.1 server (no `createServer` override), so it is a node:http Server.
 const server = serve({ fetch: app.fetch, port: env.PORT, hostname: env.HOST }, (info) => {
@@ -39,6 +51,7 @@ const shutdown = (signal: NodeJS.Signals): void => {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info(`Received ${signal}, shutting down gracefully`);
+  scheduler?.stop();
 
   // Hard stop if in-flight requests (or anything else) outlive the grace period
   setTimeout(() => {
