@@ -2,13 +2,11 @@ import { createRoute } from "@hono/zod-openapi";
 import {
   bodyErrors,
   commonErrors,
-  conflict,
   json,
   NullResponse,
   notFound,
   validationError,
 } from "@/lib/routes";
-import { ApplicationResponse } from "@/modules/applications/schemas";
 import { JobListQuery, JobListResponse, JobParams, JobStateBody } from "./schemas";
 
 const tags = ["jobs"];
@@ -44,7 +42,7 @@ export const setState = createRoute({
   method: "patch",
   path: "/{id}",
   tags,
-  summary: "Save, hide, or reset a job",
+  summary: "Save, hide, mark applied, or reset a job",
   request: {
     params: JobParams,
     body: { ...json(JobStateBody, "New state"), required: true },
@@ -53,24 +51,7 @@ export const setState = createRoute({
     200: json(NullResponse, "State updated"),
     400: validationError,
     404: notFound,
-    409: conflict,
     ...bodyErrors,
-    ...commonErrors,
-  },
-});
-
-export const apply = createRoute({
-  operationId: "applyToJob",
-  method: "post",
-  path: "/{id}/apply",
-  tags,
-  summary: "Mark a job applied and create its application",
-  request: { params: JobParams },
-  responses: {
-    201: json(ApplicationResponse, "The created application"),
-    400: validationError,
-    404: notFound,
-    409: conflict,
     ...commonErrors,
   },
 });

@@ -118,22 +118,6 @@ export const jobSources = pgTable(
   ],
 );
 
-export const applications = pgTable(
-  "applications",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    jobId: text("job_id").references(() => jobs.id, { onDelete: "set null" }),
-    companyName: text("company_name").notNull(),
-    title: text("title").notNull(),
-    url: text("url"),
-    status: text("status").notNull().default("applied"),
-    appliedAt: ts("applied_at").notNull().defaultNow(),
-    notes: text("notes"),
-    updatedAt: ts("updated_at").notNull().defaultNow(),
-  },
-  (t) => [uniqueIndex("applications_job_id_key").on(t.jobId).where(sql`${t.jobId} is not null`)],
-);
-
 export const suggestions = pgTable("suggestions", {
   id: text("id").primaryKey(),
   displayName: text("display_name").notNull(),
@@ -149,5 +133,4 @@ export type CompanyRow = typeof companies.$inferSelect;
 export type SourceStateRow = typeof sourceState.$inferSelect;
 export type JobRow = typeof jobs.$inferSelect;
 export type JobSourceRow = typeof jobSources.$inferSelect;
-export type ApplicationRow = typeof applications.$inferSelect;
 export type SuggestionRow = typeof suggestions.$inferSelect;

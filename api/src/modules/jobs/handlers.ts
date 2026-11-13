@@ -1,8 +1,7 @@
 import type { RouteHandler } from "@hono/zod-openapi";
-import { applyToJob, listJobs, markVisit, setJobState } from "@jobvr/core";
+import { listJobs, markVisit, setJobState } from "@jobvr/core";
 import type { AppBindings } from "@/lib/create-app";
-import { toApplicationDto } from "@/modules/applications/services";
-import { created, ok } from "@/utils/response";
+import { ok } from "@/utils/response";
 import type * as routes from "./routes";
 import { toJobDto } from "./services";
 
@@ -30,10 +29,4 @@ export const setStateHandler: RouteHandler<typeof routes.setState, AppBindings> 
   const { database, now } = c.var.deps;
   await setJobState(database.db, c.req.valid("param").id, c.req.valid("json").state, now());
   return ok(c, null);
-};
-
-export const applyHandler: RouteHandler<typeof routes.apply, AppBindings> = async (c) => {
-  const { database, now } = c.var.deps;
-  const app = await applyToJob(database.db, c.req.valid("param").id, now());
-  return created(c, toApplicationDto(app), "Application created");
 };

@@ -37,14 +37,12 @@ export const TIER_FILTERS = [...TIERS, "Unlisted"] as const;
 
 export const JOB_STATES = ["new", "saved", "hidden", "applied"] as const;
 export const COMPANY_STATUSES = ["ok", "needs_review", "manual_only"] as const;
-export const APPLICATION_STATUSES = ["applied", "oa", "interview", "offer", "rejected"] as const;
 export const SUGGESTION_STATES = ["open", "dismissed", "added"] as const;
 
 export type Tier = (typeof TIERS)[number];
 export type TierFilter = (typeof TIER_FILTERS)[number];
 export type JobState = (typeof JOB_STATES)[number];
 export type CompanyStatus = (typeof COMPANY_STATUSES)[number];
-export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 export type SuggestionState = (typeof SUGGESTION_STATES)[number];
 
 /** Locks for runPoll / runNotify (pg advisory lock keys). */

@@ -30,7 +30,6 @@ const job = (extra: Partial<Job> = {}): Job => ({
 
 const renderRow = (j: Job, highlighted = false) => {
   const onState = vi.fn()
-  const onApply = vi.fn()
   render(
     <ul>
       <JobRow
@@ -38,12 +37,11 @@ const renderRow = (j: Job, highlighted = false) => {
         highlighted={highlighted}
         sourceLabel={(id) => (id === 'greenhouse' ? 'Greenhouse' : id)}
         onState={onState}
-        onApply={onApply}
         busy={false}
       />
     </ul>,
   )
-  return { onState, onApply }
+  return { onState }
 }
 
 describe('JobRow', () => {
@@ -58,24 +56,25 @@ describe('JobRow', () => {
 
   it('fires Applied, Save, and Hide', async () => {
     const user = userEvent.setup()
-    const { onState, onApply } = renderRow(job())
+    const { onState } = renderRow(job())
     await user.click(screen.getByRole('button', { name: /applied/i }))
     await user.click(screen.getByRole('button', { name: /save/i }))
     await user.click(screen.getByRole('button', { name: /hide/i }))
-    expect(onApply).toHaveBeenCalledOnce()
-    expect(onState.mock.calls).toEqual([['saved'], ['hidden']])
+    expect(onState.mock.calls).toEqual([['applied'], ['saved'], ['hidden']])
   })
 
-  it('offers Unsave / Unhide, and no actions once applied', async () => {
+  it('offers Unsave', async () => {
     const user = userEvent.setup()
     const saved = renderRow(job({ state: 'saved' }))
     await user.click(screen.getByRole('button', { name: /unsave/i }))
     expect(saved.onState).toHaveBeenCalledWith('new')
   })
 
-  it('marks closed and applied jobs', () => {
-    renderRow(job({ state: 'applied', closedAt: new Date().toISOString() }))
+  it('marks closed and applied jobs, and can unmark applied', async () => {
+    const user = userEvent.setup()
+    const { onState } = renderRow(job({ state: 'applied', closedAt: new Date().toISOString() }))
     expect(screen.getByText('Closed')).toBeInTheDocument()
-    expect(screen.queryByRole('button')).toBeNull()
+    await user.click(screen.getByRole('button', { name: /not applied/i }))
+    expect(onState).toHaveBeenCalledWith('new')
   })
 })

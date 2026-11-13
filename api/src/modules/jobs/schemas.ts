@@ -57,6 +57,4 @@ export const JobParams = z.object({
     .openapi({ param: { name: "id", in: "path" }, example: "gh:8403107002" }),
 });
 
-export const JobStateBody = z
-  .object({ state: z.enum(["saved", "hidden", "new"]) })
-  .openapi("JobStateBody");
+export const JobStateBody = z.object({ state: z.enum(JOB_STATES) }).openapi("JobStateBody");

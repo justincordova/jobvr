@@ -56,7 +56,7 @@ describe("App", () => {
   });
 
   it("returns 405 with an Allow header for unsupported methods", async () => {
-    const res = await app.request("/api/applications/00000000-0000-4000-8000-000000000000", {
+    const res = await app.request("/api/companies/00000000-0000-4000-8000-000000000000", {
       method: "PUT",
     });
     expect(res.status).toBe(405);
@@ -65,7 +65,7 @@ describe("App", () => {
   });
 
   it("returns 400 envelope for malformed JSON", async () => {
-    const res = await app.request("/api/applications", {
+    const res = await app.request("/api/companies", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{not json",
@@ -75,10 +75,14 @@ describe("App", () => {
   });
 
   it("returns 413 envelope when the body exceeds the limit", async () => {
-    const res = await app.request("/api/applications", {
+    const res = await app.request("/api/companies", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companyName: "x".repeat(BODY_LIMIT_BYTES + 1), title: "t" }),
+      body: JSON.stringify({
+        name: "x".repeat(BODY_LIMIT_BYTES + 1),
+        tier: "Startup",
+        ats: "lever",
+      }),
     });
     expect(res.status).toBe(413);
     expect(await res.json()).toMatchObject({ success: false, error: "Payload Too Large" });

@@ -15,7 +15,6 @@ import { configureOpenAPI } from "@/lib/openapi";
 import { auth } from "@/middleware/auth";
 import { rateLimit } from "@/middleware/rate-limit";
 import { requestGuards, securityHeaders } from "@/middleware/security";
-import applicationsRouter from "@/modules/applications";
 import companiesRouter from "@/modules/companies";
 import jobsRouter from "@/modules/jobs";
 import settingsRouter from "@/modules/settings";
@@ -132,7 +131,6 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
       }
     })
     .route("/api/jobs", jobsRouter)
-    .route("/api/applications", applicationsRouter)
     .route("/api/companies", companiesRouter)
     .route("/api/suggestions", suggestionsRouter)
     .route("/api/settings", settingsRouter);

@@ -35,8 +35,8 @@ const EMPTY_COPY: Record<
   },
   applied: {
     icon: Send,
-    title: 'No applications yet',
-    body: 'Hit Applied on a role and it moves here.',
+    title: 'Nothing marked applied',
+    body: 'Hit Applied on a role once you’ve applied and it moves here, out of your feed.',
   },
   hidden: {
     icon: EyeOff,
@@ -97,7 +97,7 @@ export function FeedPage() {
   const { mutate: recordVisit } = useMutation({
     mutationFn: () => unwrap(api.api.jobs.visit.$post()),
   })
-  const { setState, apply } = useJobActions()
+  const { setState } = useJobActions()
 
   useEffect(() => {
     if (jobs.data && !jobs.isPlaceholderData && captureFirstResponse(jobs.data)) recordVisit()
@@ -222,12 +222,8 @@ export function FeedPage() {
               job={job}
               highlighted={isSessionNew(job.id, job.isNew)}
               sourceLabel={sourceLabel}
-              busy={
-                (setState.isPending && setState.variables?.id === job.id) ||
-                (apply.isPending && apply.variables === job.id)
-              }
+              busy={setState.isPending && setState.variables?.id === job.id}
               onState={(state) => setState.mutate({ id: job.id, state })}
-              onApply={() => apply.mutate(job.id)}
             />
           ))}
         </ul>

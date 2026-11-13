@@ -6,7 +6,6 @@ import * as routes from "./routes";
 const jobsRouter = createRouter()
   .openapi(routes.list, handlers.listHandler)
   .openapi(routes.visit, handlers.visitHandler)
-  .openapi(routes.setState, handlers.setStateHandler)
-  .openapi(routes.apply, handlers.applyHandler);
+  .openapi(routes.setState, handlers.setStateHandler);
 
 export default jobsRouter;

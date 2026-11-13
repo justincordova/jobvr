@@ -1,4 +1,4 @@
-import { Bookmark, BookmarkCheck, Check, EyeOff, Eye, ExternalLink } from 'lucide-react'
+import { Bookmark, BookmarkCheck, Check, EyeOff, Eye, ExternalLink, Undo2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
@@ -10,12 +10,11 @@ interface JobRowProps {
   job: Job
   highlighted: boolean
   sourceLabel: (id: string) => string
-  onState: (state: 'saved' | 'hidden' | 'new') => void
-  onApply: () => void
+  onState: (state: Job['state']) => void
   busy: boolean
 }
 
-export function JobRow({ job, highlighted, sourceLabel, onState, onApply, busy }: JobRowProps) {
+export function JobRow({ job, highlighted, sourceLabel, onState, busy }: JobRowProps) {
   const salary = salaryRange(job.salaryMinUsd, job.salaryMaxUsd)
   const viaSimplify = job.sources.some((s) => s.source === 'simplify')
   const directSources = [...new Set(job.sources.map((s) => s.source))].filter(
@@ -88,11 +87,15 @@ export function JobRow({ job, highlighted, sourceLabel, onState, onApply, busy }
       </div>
 
       <div className="col-start-2 mt-3 flex items-center gap-1.5 sm:col-start-3 sm:mt-0 sm:self-center">
-        {job.state !== 'applied' && (
+        {job.state === 'applied' ? (
+          <Button size="sm" variant="ghost" onClick={() => onState('new')} disabled={busy}>
+            <Undo2 /> Not applied
+          </Button>
+        ) : (
           <>
             <Button
               size="sm"
-              onClick={onApply}
+              onClick={() => onState('applied')}
               disabled={busy}
               className="hover:border-go/50 hover:text-go"
             >

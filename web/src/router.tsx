@@ -1,6 +1,5 @@
 import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { AppShell } from '@/components/app-shell'
-import { ApplicationsPage } from '@/features/applications/applications-page'
 import { CompaniesPage } from '@/features/companies/companies-page'
 import { FeedPage } from '@/features/feed/feed-page'
 import { parseFeedSearch } from '@/features/feed/search'
@@ -14,12 +13,6 @@ const feedRoute = createRoute({
   path: '/',
   validateSearch: parseFeedSearch,
   component: FeedPage,
-})
-
-const applicationsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/applications',
-  component: ApplicationsPage,
 })
 
 const companiesRoute = createRoute({
@@ -40,13 +33,7 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 })
 
-const routeTree = rootRoute.addChildren([
-  feedRoute,
-  applicationsRoute,
-  companiesRoute,
-  suggestedRoute,
-  settingsRoute,
-])
+const routeTree = rootRoute.addChildren([feedRoute, companiesRoute, suggestedRoute, settingsRoute])
 
 export const router = createRouter({
   routeTree,

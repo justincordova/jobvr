@@ -1,7 +1,6 @@
 export * from "./constants";
 export * from "./db/client";
 export type {
-  ApplicationRow,
   CompanyRow,
   JobRow,
   JobSourceRow,
@@ -18,7 +17,6 @@ export * from "./matching";
 export * from "./normalize";
 export * from "./notify";
 export * from "./poll/run-poll";
-export * from "./repos/applications";
 export * from "./repos/companies";
 export * from "./repos/jobs";
 export * from "./repos/settings";

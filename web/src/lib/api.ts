@@ -41,7 +41,6 @@ export async function unwrap<R extends { json(): Promise<unknown>; status: numbe
 export const queryKeys = {
   jobs: (params: object) => ['jobs', params] as const,
   allJobs: ['jobs'] as const,
-  applications: ['applications'] as const,
   companies: ['companies'] as const,
   suggestions: ['suggestions'] as const,
   settings: ['settings'] as const,

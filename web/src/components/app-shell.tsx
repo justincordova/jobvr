@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { Building2, KanbanSquare, Radar, Settings2, Sparkles } from 'lucide-react'
+import { Building2, Radar, Settings2, Sparkles } from 'lucide-react'
 import { type ComponentType, useEffect } from 'react'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
@@ -9,7 +9,6 @@ import { useIndicator } from '@/lib/use-indicator'
 
 const NAV: { to: string; label: string; icon: ComponentType<{ className?: string }> }[] = [
   { to: '/', label: 'Feed', icon: Radar },
-  { to: '/applications', label: 'Applications', icon: KanbanSquare },
   { to: '/companies', label: 'Companies', icon: Building2 },
   { to: '/suggested', label: 'Suggested', icon: Sparkles },
   { to: '/settings', label: 'Settings', icon: Settings2 },
@@ -102,7 +101,7 @@ function MobileNav({ pathname }: { pathname: string }) {
     <nav
       ref={ref}
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-panel/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-line bg-panel/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg md:hidden"
     >
       <span aria-hidden className="absolute top-0 left-0 flex justify-center" style={style}>
         <span className="h-0.5 w-8 rounded-b-full bg-signal" />

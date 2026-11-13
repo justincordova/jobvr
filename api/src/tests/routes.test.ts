@@ -48,7 +48,6 @@ const insertJob = async (
 
 beforeEach(async () => {
   const { db } = ctx.database;
-  await db.delete(schema.applications);
   await db.delete(schema.jobs);
   await db.delete(schema.suggestions);
   await db.delete(schema.companies);
@@ -104,7 +103,7 @@ describe("jobs routes", () => {
     expect(res.data.jobs.find((j) => j.id === "gh:base")?.isNew).toBe(false);
   });
 
-  it("saves, hides, applies (409 twice), and deleting the application resets the job", async () => {
+  it("saves, hides, marks applied, and moves a job back", async () => {
     await insertJob("gh:1");
     const param = { id: "gh:1" };
     expect((await client.api.jobs[":id"].$patch({ param, json: { state: "saved" } })).status).toBe(
@@ -115,50 +114,23 @@ describe("jobs routes", () => {
         .status,
     ).toBe(404);
 
-    const applied = await client.api.jobs[":id"].apply.$post({ param });
-    expect(applied.status).toBe(201);
-    const app = await applied.json();
-    if (!app.success) throw new Error("expected success");
-    expect(app.data).toMatchObject({ jobId: "gh:1", companyName: "Acme", status: "applied" });
-
-    expect((await client.api.jobs[":id"].apply.$post({ param })).status).toBe(409);
-    expect((await client.api.jobs[":id"].$patch({ param, json: { state: "hidden" } })).status).toBe(
-      409,
-    );
-
+    expect(
+      (await client.api.jobs[":id"].$patch({ param, json: { state: "applied" } })).status,
+    ).toBe(200);
     const appliedView = await body<{ data: { jobs: { id: string }[] } }>(
       await client.api.jobs.$get({ query: { view: "applied" } }),
     );
     expect(appliedView.data.jobs.map((j) => j.id)).toEqual(["gh:1"]);
+    const feedWhileApplied = await body<{ data: { jobs: unknown[] } }>(
+      await client.api.jobs.$get({ query: {} }),
+    );
+    expect(feedWhileApplied.data.jobs).toEqual([]);
 
-    await client.api.applications[":id"].$delete({ param: { id: app.data.id } });
+    await client.api.jobs[":id"].$patch({ param, json: { state: "new" } });
     const feed = await body<{ data: { jobs: { id: string; state: string }[] } }>(
       await client.api.jobs.$get({ query: {} }),
     );
     expect(feed.data.jobs[0]).toMatchObject({ id: "gh:1", state: "new" });
-  });
-});
-
-describe("applications routes", () => {
-  it("creates manual entries and updates status", async () => {
-    const res = await client.api.applications.$post({
-      json: { companyName: "Workday Co", title: "SWE I", url: "https://wd.example.com/1" },
-    });
-    expect(res.status).toBe(201);
-    const created = await res.json();
-    if (!created.success) throw new Error("expected success");
-    expect(created.data).toMatchObject({ jobId: null, status: "applied" });
-
-    const updated = await client.api.applications[":id"].$patch({
-      param: { id: created.data.id },
-      json: { status: "interview", notes: "Round 1 on Friday" },
-    });
-    expect(await updated.json()).toMatchObject({
-      data: { status: "interview", notes: "Round 1 on Friday" },
-    });
-
-    const list = await client.api.applications.$get();
-    expect(await list.json()).toMatchObject({ count: 1 });
   });
 });
 

@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, gt, gte, inArray, isNull, type SQL } from "drizzle-orm";
 import type { JobState, TierFilter } from "../constants";
 import type { DbOrTx } from "../db/client";
-import { applications, companies, type JobRow, jobSources, jobs } from "../db/schema";
-import { ConflictError, NotFoundError } from "../errors";
+import { companies, type JobRow, jobSources, jobs } from "../db/schema";
+import { NotFoundError } from "../errors";
 import { isVisible, matchedLocationLabels, type SourceKind } from "../matching";
 import { startOfEasternDay } from "../schedule";
 import type { Settings } from "../settings";
@@ -220,48 +220,17 @@ export const listJobs = async (
 export const markVisit = (db: DbOrTx, now: Date): Promise<void> =>
   setSettingsTimestamp(db, "lastVisitAt", now);
 
+/** Moves a job between new / saved / hidden / applied. */
 export const setJobState = async (
   db: DbOrTx,
   id: string,
-  state: "new" | "saved" | "hidden",
+  state: JobState,
   now: Date,
 ): Promise<void> => {
-  await db.transaction(async (tx) => {
-    const [job] = await tx
-      .select({ state: jobs.state })
-      .from(jobs)
-      .where(eq(jobs.id, id))
-      .for("update");
-    if (!job) throw new NotFoundError("Job not found");
-    if (job.state === "applied")
-      throw new ConflictError("Job is already applied; delete its application first");
-    await tx.update(jobs).set({ state, updatedAt: now }).where(eq(jobs.id, id));
-  });
+  const [row] = await db
+    .update(jobs)
+    .set({ state, updatedAt: now })
+    .where(eq(jobs.id, id))
+    .returning({ id: jobs.id });
+  if (!row) throw new NotFoundError("Job not found");
 };
-
-/** Creates an application snapshot and marks the job applied, atomically. */
-export const applyToJob = async (db: DbOrTx, id: string, now: Date) =>
-  db.transaction(async (tx) => {
-    const [job] = await tx.select().from(jobs).where(eq(jobs.id, id)).for("update");
-    if (!job) throw new NotFoundError("Job not found");
-    const [existing] = await tx
-      .select({ id: applications.id })
-      .from(applications)
-      .where(eq(applications.jobId, id));
-    if (existing) throw new ConflictError("An application already exists for this job");
-    const [app] = await tx
-      .insert(applications)
-      .values({
-        jobId: id,
-        companyName: job.companyName,
-        title: job.title,
-        url: job.url,
-        status: "applied",
-        appliedAt: now,
-        updatedAt: now,
-      })
-      .returning();
-    await tx.update(jobs).set({ state: "applied", updatedAt: now }).where(eq(jobs.id, id));
-    if (!app) throw new Error("insert returned no row");
-    return app;
-  });
