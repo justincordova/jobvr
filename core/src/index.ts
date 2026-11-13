@@ -16,6 +16,7 @@ export * from "./lock";
 export * from "./logger";
 export * from "./matching";
 export * from "./normalize";
+export * from "./notify";
 export * from "./poll/run-poll";
 export * from "./repos/applications";
 export * from "./repos/companies";
