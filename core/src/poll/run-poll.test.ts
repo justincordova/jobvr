@@ -1,0 +1,480 @@
+import { eq } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { Database } from "../db/client";
+import { companies, jobSources, jobs, sourceState, suggestions } from "../db/schema";
+import { HttpError } from "../http";
+import { companyStateKey, createCompany, updateCompany } from "../repos/companies";
+import { getSettingsState, updateSettings } from "../repos/settings";
+import type { FetchCtx, FetchResult, Registry, SourceAdapter, SourceJob } from "../sources/types";
+import { createTestDatabase } from "../testing/db";
+import { runPoll } from "./run-poll";
+
+const T0 = new Date("2026-11-12T15:00:00Z");
+const HOUR = 3_600_000;
+
+/** Fake ATS ("greenhouse", prefix gh) whose boards live at boards.test/{slug}/jobs/{id}. */
+const makeEnv = () => {
+  const boards = new Map<string, SourceJob[]>();
+  const etags = new Map<string, string>();
+  const failing = new Set<string>();
+  const calls: { slug?: string; etag?: string | null }[] = [];
+  let simplify: SourceJob[] = [];
+  let onFetch: ((ctx: FetchCtx) => Promise<void>) | null = null;
+
+  const ats: SourceAdapter = {
+    id: "greenhouse",
+    label: "Greenhouse",
+    kind: "ats",
+    idPrefix: "gh",
+    concurrency: 2,
+    async fetch(ctx): Promise<FetchResult> {
+      calls.push({ slug: ctx.slug, etag: ctx.etag });
+      await onFetch?.(ctx);
+      const slug = ctx.slug ?? "";
+      if (failing.has(slug)) throw new HttpError("HTTP 500", 500);
+      const list = boards.get(slug);
+      if (!list) throw new HttpError("HTTP 404", 404);
+      const tag = etags.get(slug) ?? `"${slug}-${JSON.stringify(list).length}"`;
+      if (ctx.etag === tag) return { status: "not_modified" };
+      return {
+        status: "ok",
+        etag: tag,
+        jobs: list.map((j) => ({ ...j, companyName: ctx.companyName ?? slug })),
+        invalidCount: 0,
+      };
+    },
+    parseUrl(url) {
+      const m = /^https:\/\/boards\.test\/([^/]+)\/jobs\/(\d+)$/.exec(url);
+      return m?.[1] && m[2] ? { slug: m[1], sourceJobId: m[2] } : null;
+    },
+  };
+  const agg: SourceAdapter = {
+    id: "simplify",
+    label: "SimplifyJobs",
+    kind: "aggregator",
+    idPrefix: "sj",
+    concurrency: 1,
+    async fetch() {
+      return { status: "ok", etag: null, jobs: simplify, invalidCount: 0 };
+    },
+  };
+  const registry: Registry = [ats, agg];
+  return {
+    registry,
+    boards,
+    failing,
+    calls,
+    setSimplify: (l: SourceJob[]) => {
+      simplify = l;
+    },
+    setOnFetch: (f: typeof onFetch) => {
+      onFetch = f;
+    },
+  };
+};
+
+const ghJob = (
+  slug: string,
+  id: string,
+  title: string,
+  extra: Partial<SourceJob> = {},
+): SourceJob => ({
+  source: "greenhouse",
+  sourceJobId: id,
+  companyName: slug,
+  companySlug: slug,
+  title,
+  locations: ["New York, NY"],
+  url: `https://boards.test/${slug}/jobs/${id}`,
+  postedAt: new Date(T0.getTime() - HOUR),
+  postedAtPrecision: "instant",
+  ...extra,
+});
+
+const sjJob = (
+  id: string,
+  company: string,
+  title: string,
+  url: string,
+  extra: Partial<SourceJob> = {},
+): SourceJob => ({
+  source: "simplify",
+  sourceJobId: id,
+  companyName: company,
+  title,
+  locations: ["NYC"],
+  url,
+  postedAt: new Date("2026-11-12T00:00:00Z"),
+  postedAtPrecision: "day",
+  meta: { active: true, visible: true, category: "Software Engineering" },
+  ...extra,
+});
+
+let database: Database;
+let env: ReturnType<typeof makeEnv>;
+let clock: Date;
+
+const poll = (force = true) =>
+  runPoll({
+    database,
+    registry: env.registry,
+    http: { getJson: async () => ({ status: "not_modified" }) },
+    force,
+    now: () => clock,
+  });
+
+const allJobs = () => database.db.select().from(jobs).orderBy(jobs.id);
+const rowsOf = (jobId: string) =>
+  database.db.select().from(jobSources).where(eq(jobSources.jobId, jobId));
+const stateOf = async (key: string) =>
+  (await database.db.select().from(sourceState).where(eq(sourceState.key, key)))[0];
+
+const addAcme = (extra: { tier?: "Startup" | "S" } = {}) =>
+  createCompany(database.db, {
+    name: "Acme",
+    tier: extra.tier ?? "Startup",
+    track: true,
+    ats: "greenhouse",
+    slug: "acme",
+    status: "ok",
+  });
+
+beforeEach(async () => {
+  database = await createTestDatabase();
+  env = makeEnv();
+  clock = T0;
+});
+afterEach(() => database.close());
+
+describe("runPoll: baseline, filters, ETags", () => {
+  it("baselines a company's first poll, then stores later jobs as new", async () => {
+    const acme = await addAcme();
+    env.boards.set("acme", [
+      ghJob("acme", "1", "Software Engineer, New Grad"),
+      ghJob("acme", "2", "Senior Software Engineer"),
+      ghJob("acme", "3", "Software Engineer, New Grad", { locations: ["San Francisco, CA"] }),
+      ghJob("acme", "4", "Software Engineer I", {
+        postedAt: new Date(T0.getTime() - 8 * 24 * HOUR),
+      }),
+    ]);
+    env.setSimplify([]);
+    const first = await poll();
+    expect(first.ran).toBe(true);
+
+    let stored = await allJobs();
+    expect(stored.map((j) => j.id)).toEqual(["gh:1"]);
+    expect(stored[0]).toMatchObject({ baseline: true, companyId: acme.id, state: "new" });
+    expect((await stateOf(companyStateKey(acme.id)))?.baselinedAt).toEqual(T0);
+
+    clock = new Date(T0.getTime() + HOUR);
+    env.boards.get("acme")?.push(ghJob("acme", "5", "Junior Backend Developer"));
+    await poll();
+    stored = await allJobs();
+    expect(stored.find((j) => j.id === "gh:5")).toMatchObject({ baseline: false });
+    // effective_at = earlier of first seen and posted
+    expect(stored.find((j) => j.id === "gh:5")?.effectiveAt).toEqual(new Date(T0.getTime() - HOUR));
+  });
+
+  it("sends the ETag only while filters are unchanged", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    await poll();
+    await poll();
+    expect(env.calls[0]?.etag).toBeNull();
+    expect(env.calls[1]?.etag).toMatch(/^"acme-/);
+    await updateSettings(database.db, { excludeKeywords: ["senior"] });
+    await poll();
+    expect(env.calls[2]?.etag).toBeNull();
+  });
+
+  it("respects the due check unless forced", async () => {
+    expect((await poll(false)).ran).toBe(true);
+    clock = new Date(T0.getTime() + 5 * 60_000);
+    expect(await poll(false)).toEqual({ ran: false, reason: "not_due" });
+    clock = new Date(T0.getTime() + 14 * 60_000);
+    expect((await poll(false)).ran).toBe(true);
+    expect((await getSettingsState(database.db)).lastPollAt).toEqual(clock);
+  });
+
+  it("doesn't poll untracked, S-tier, or manual_only companies", async () => {
+    await addAcme({ tier: "S" });
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    await poll();
+    expect(env.calls).toHaveLength(0);
+  });
+});
+
+describe("runPoll: dedupe", () => {
+  it("merges a Simplify listing that points at the ATS posting (ATS wins)", async () => {
+    const acme = await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    await poll();
+    clock = new Date(T0.getTime() + HOUR);
+    env.setSimplify([
+      sjJob("s1", "ACME Inc", "SWE New Grad (2026)", "https://boards.test/acme/jobs/1"),
+    ]);
+    await poll();
+
+    const stored = await allJobs();
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({
+      id: "gh:1",
+      title: "Software Engineer, New Grad",
+      primarySource: "greenhouse",
+      companyId: acme.id,
+    });
+    expect((await rowsOf("gh:1")).map((r) => r.source).sort()).toEqual(["greenhouse", "simplify"]);
+  });
+
+  it("an earlier Simplify-only gh: job adopts the ATS data when the company is added", async () => {
+    env.setSimplify([sjJob("s1", "Acme", "Software Engineer", "https://boards.test/acme/jobs/9")]);
+    await poll();
+    let [job] = await allJobs();
+    expect(job).toMatchObject({ id: "gh:9", companyId: null, primarySource: "simplify" });
+
+    const acme = await addAcme();
+    env.boards.set("acme", [ghJob("acme", "9", "Software Engineer, New Grad")]);
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    [job] = await allJobs();
+    expect(job).toMatchObject({
+      id: "gh:9",
+      companyId: acme.id,
+      title: "Software Engineer, New Grad",
+      primarySource: "greenhouse",
+    });
+    expect(await rowsOf("gh:9")).toHaveLength(2);
+  });
+
+  it("fuzzy merges sj: listings with ATS jobs, and stays merged on later polls", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    await poll();
+    env.setSimplify([
+      sjJob("s1", "Acme", "New Grad Software Engineer", "https://acme.com/careers/swe-ng"),
+    ]);
+    for (let i = 1; i <= 2; i++) {
+      clock = new Date(T0.getTime() + i * HOUR);
+      await poll();
+      const stored = await allJobs();
+      expect(stored.map((j) => j.id)).toEqual(["gh:1"]);
+      expect(await rowsOf("gh:1")).toHaveLength(2);
+    }
+  });
+
+  it("never merges two distinct ATS postings", async () => {
+    await addAcme();
+    env.boards.set("acme", [
+      ghJob("acme", "1", "Software Engineer, New Grad"),
+      ghJob("acme", "2", "Software Engineer, New Grad"),
+    ]);
+    await poll();
+    expect((await allJobs()).map((j) => j.id)).toEqual(["gh:1", "gh:2"]);
+  });
+
+  it("merges an ATS listing into an earlier sj: job (fuzzy) and keeps the sj: id", async () => {
+    env.setSimplify([
+      sjJob("s1", "Acme", "Software Engineer, New Grad", "https://acme.com/careers/ng"),
+    ]);
+    await poll();
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer - New Grad")]);
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    const stored = await allJobs();
+    expect(stored.map((j) => j.id)).toEqual(["sj:s1"]);
+    expect(stored[0]?.primarySource).toBe("greenhouse");
+    // Later polls find it exactly through the job_sources row
+    clock = new Date(T0.getTime() + 2 * HOUR);
+    await poll();
+    expect((await allJobs()).map((j) => j.id)).toEqual(["sj:s1"]);
+  });
+
+  it("never re-inserts a reposted listing whose job is older than the window", async () => {
+    const old = new Date(T0.getTime() - 10 * 24 * HOUR);
+    await database.db.insert(jobs).values({
+      id: "sj:old",
+      companyName: "Acme",
+      title: "Software Engineer",
+      url: "https://acme.com/careers/swe/1",
+      primarySource: "simplify",
+      firstSeenAt: old,
+      effectiveAt: old,
+      notifiedAt: old,
+    });
+    await database.db.insert(jobSources).values({
+      source: "simplify",
+      sourceJobId: "old",
+      jobId: "sj:old",
+      url: "https://acme.com/careers/swe/1",
+      urlKey: "https://acme.com/careers/swe/1",
+      title: "Software Engineer",
+      postedAt: old,
+      postedAtPrecision: "day",
+    });
+    env.setSimplify([
+      sjJob("new-id", "Acme", "Software Engineer", "https://acme.com/careers/swe/1"),
+    ]);
+    await poll();
+    expect((await allJobs()).map((j) => j.id)).toEqual(["sj:old"]);
+  });
+});
+
+describe("runPoll: closures and user state", () => {
+  it("closes jobs whose every source is gone and reopens them", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    await poll();
+    env.boards.set("acme", []);
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    let [job] = await allJobs();
+    expect(job?.closedAt).toEqual(clock);
+    expect((await rowsOf("gh:1"))[0]?.removedAt).toEqual(clock);
+
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    clock = new Date(T0.getTime() + 2 * HOUR);
+    await poll();
+    [job] = await allJobs();
+    expect(job?.closedAt).toBeNull();
+    expect((await rowsOf("gh:1"))[0]?.removedAt).toBeNull();
+  });
+
+  it("keeps a merged job open while Simplify still lists it; inactive Simplify rows count as removed", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    env.setSimplify([sjJob("s1", "Acme", "SWE", "https://boards.test/acme/jobs/1")]);
+    await poll();
+    env.boards.set("acme", []);
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    expect((await allJobs())[0]?.closedAt).toBeNull();
+
+    env.setSimplify([
+      sjJob("s1", "Acme", "SWE", "https://boards.test/acme/jobs/1", {
+        meta: { active: false, visible: true, category: "Software" },
+      }),
+    ]);
+    clock = new Date(T0.getTime() + 2 * HOUR);
+    await poll();
+    expect((await allJobs())[0]?.closedAt).toEqual(clock);
+  });
+
+  it("never overwrites user state", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    await poll();
+    await database.db.update(jobs).set({ state: "hidden" }).where(eq(jobs.id, "gh:1"));
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad (NYC)")]);
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    const [job] = await allJobs();
+    expect(job).toMatchObject({ state: "hidden", title: "Software Engineer, New Grad (NYC)" });
+  });
+});
+
+describe("runPoll: health and transactions", () => {
+  it("counts failures, marks needs_review at 3, and recovers on success", async () => {
+    const acme = await addAcme();
+    env.failing.add("acme");
+    for (let i = 0; i < 3; i++) {
+      clock = new Date(T0.getTime() + i * HOUR);
+      await poll();
+    }
+    const key = companyStateKey(acme.id);
+    expect(await stateOf(key)).toMatchObject({ consecutiveFailures: 3, baselinedAt: null });
+    const [c] = await database.db.select().from(companies);
+    expect(c?.status).toBe("needs_review");
+
+    env.failing.clear();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    await poll();
+    expect(await stateOf(key)).toMatchObject({ consecutiveFailures: 0, lastError: null });
+    expect((await database.db.select().from(companies))[0]?.status).toBe("ok");
+    // The first successful poll is still the baseline
+    expect((await allJobs())[0]?.baseline).toBe(true);
+  });
+
+  it("rolls back a failed target without saving its ETag", async () => {
+    const acme = await addAcme();
+    env.boards.set("acme", [
+      ghJob("acme", "1", "Software Engineer, New Grad"),
+      // An unknown source makes processing throw after the first insert
+      { ...ghJob("acme", "2", "Software Engineer, New Grad"), source: "nope" },
+    ]);
+    const summary = await poll();
+    expect(summary.ran && summary.targets[0]?.status).toBe("failed");
+    expect(await allJobs()).toHaveLength(0);
+    const state = await stateOf(companyStateKey(acme.id));
+    expect(state).toMatchObject({ etag: null, consecutiveFailures: 1, baselinedAt: null });
+  });
+
+  it("abandons a target whose slug changed mid-poll, so the new slug gets a baseline", async () => {
+    const acme = await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    env.boards.set("acme2", [ghJob("acme2", "7", "Software Engineer, New Grad")]);
+    env.setOnFetch(async () => {
+      env.setOnFetch(null);
+      await updateCompany(database.db, acme.id, { slug: "acme2" });
+    });
+    const summary = await poll();
+    expect(summary.ran && summary.targets[0]).toMatchObject({ stats: { abandoned: true } });
+    expect(await allJobs()).toHaveLength(0);
+    expect(await stateOf(companyStateKey(acme.id))).toBeUndefined();
+
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    const stored = await allJobs();
+    expect(stored.map((j) => [j.id, j.baseline])).toEqual([["gh:7", true]]);
+  });
+});
+
+describe("runPoll: Simplify companies and suggestions", () => {
+  it("baselines the aggregator's first poll", async () => {
+    env.setSimplify([sjJob("s1", "Globex", "Software Engineer", "https://globex.com/jobs/1")]);
+    await poll();
+    expect((await allJobs())[0]).toMatchObject({ id: "sj:s1", baseline: true });
+    env.setSimplify([
+      sjJob("s1", "Globex", "Software Engineer", "https://globex.com/jobs/1"),
+      sjJob("s2", "Globex", "Backend Engineer", "https://globex.com/jobs/2"),
+    ]);
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    expect((await allJobs()).find((j) => j.id === "sj:s2")?.baseline).toBe(false);
+  });
+
+  it("suggests unlisted companies with the ATS from their URLs, and re-resolves jobs once added", async () => {
+    env.setSimplify([
+      sjJob("s1", "Initech", "Software Engineer", "https://boards.test/initech/jobs/11"),
+      sjJob("s2", "Initech, Inc.", "Backend Engineer", "https://boards.test/initech/jobs/12"),
+      sjJob("s3", "Initech", "Frontend Engineer", "https://initech.com/careers/fe"),
+      sjJob("s4", "Hooli", "Senior Engineer", "https://hooli.com/jobs/1"),
+    ]);
+    await poll();
+    let rows = await database.db.select().from(suggestions);
+    expect(rows).toEqual([
+      expect.objectContaining({
+        id: "initech",
+        displayName: "Initech",
+        ats: "greenhouse",
+        slug: "initech",
+        listingCount: 3,
+        state: "open",
+      }),
+    ]);
+
+    const initech = await createCompany(database.db, {
+      name: "Initech",
+      tier: "Mid",
+      track: false,
+      ats: "other",
+      status: "manual_only",
+    });
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    rows = await database.db.select().from(suggestions);
+    expect(rows[0]?.state).toBe("added");
+    const stored = await allJobs();
+    expect(stored.every((j) => j.id === "sj:s4" || j.companyId === initech.id)).toBe(true);
+  });
+});

@@ -13,3 +13,4 @@ backups/
 .idea/
 *.local
 dev-dist/
+.vitest/
