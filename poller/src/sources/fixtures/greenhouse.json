@@ -1,0 +1,76 @@
+{
+  "jobs": [
+    {
+      "absolute_url": "https://job-boards.greenhouse.io/airtable/jobs/8403107002",
+      "internal_job_id": 6354769002,
+      "location": {
+        "name": "Remote - US"
+      },
+      "metadata": null,
+      "id": 8403107002,
+      "updated_at": "2026-11-03T17:38:13-05:00",
+      "requisition_id": "Pipeline",
+      "title": "Account Executive, Corporate",
+      "company_name": "Airtable",
+      "first_published": "2026-03-03T11:25:37-05:00",
+      "language": "en",
+      "application_deadline": null
+    },
+    {
+      "absolute_url": "https://job-boards.greenhouse.io/airtable/jobs/8403127002",
+      "internal_job_id": 6354778002,
+      "location": {
+        "name": "Remote - US"
+      },
+      "metadata": null,
+      "id": 8403127002,
+      "updated_at": "2026-11-03T17:36:21-05:00",
+      "requisition_id": "Pipeline",
+      "title": "Account Executive, Strategic",
+      "company_name": "Airtable",
+      "first_published": "2026-02-28T09:04:24-05:00",
+      "language": "en",
+      "application_deadline": null
+    },
+    {
+      "absolute_url": "https://job-boards.greenhouse.io/airtable/jobs/8425211002",
+      "internal_job_id": 6365152002,
+      "location": {
+        "name": "Austin, TX"
+      },
+      "metadata": null,
+      "id": 8425211002,
+      "updated_at": "2026-10-30T10:08:13-04:00",
+      "requisition_id": "Pipeline",
+      "title": "Business Development Representative",
+      "company_name": "Airtable",
+      "first_published": "2026-02-17T09:43:06-05:00",
+      "language": "en",
+      "application_deadline": null
+    },
+    {
+      "absolute_url": "https://job-boards.greenhouse.io/airtable/jobs/9000000001",
+      "internal_job_id": 6354769002,
+      "location": {
+        "name": "New York, NY"
+      },
+      "metadata": null,
+      "id": 9000000001,
+      "updated_at": "2026-11-03T17:38:13-05:00",
+      "requisition_id": "Pipeline",
+      "title": "Software Engineer, New Grad",
+      "company_name": "Airtable",
+      "first_published": "2026-11-12T09:00:00-05:00",
+      "language": "en",
+      "application_deadline": null
+    },
+    {
+      "id": "bad",
+      "title": "",
+      "absolute_url": "nope"
+    }
+  ],
+  "meta": {
+    "total": 9
+  }
+}

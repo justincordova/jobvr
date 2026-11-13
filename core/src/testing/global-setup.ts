@@ -2,15 +2,10 @@ import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import pg from "pg";
 import type { TestProject } from "vitest/node";
 import { createDatabase, runMigrations } from "../db/client";
+import "./db";
 
 const MIGRATIONS = new URL("../../drizzle", import.meta.url).pathname;
-export const TEMPLATE_DB = "jobvr_template";
-
-declare module "vitest" {
-  export interface ProvidedContext {
-    pgAdminUrl: string;
-  }
-}
+const TEMPLATE_DB = "jobvr_template";
 
 /** Starts one Postgres 18 container per test run and migrates a template database. */
 export default async function setup(project: TestProject) {

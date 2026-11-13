@@ -5,6 +5,12 @@ import { createDatabase, type Database } from "../db/client";
 
 const TEMPLATE_DB = "jobvr_template";
 
+declare module "vitest" {
+  export interface ProvidedContext {
+    pgAdminUrl: string;
+  }
+}
+
 /** A fresh, migrated database cloned from the template (isolated per call). */
 export const createTestDatabase = async (): Promise<Database & { url: string }> => {
   const adminUrl = inject("pgAdminUrl");

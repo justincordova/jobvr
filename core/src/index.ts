@@ -15,4 +15,6 @@ export * from "./normalize";
 export * from "./repos/companies";
 export * from "./repos/settings";
 export * from "./settings";
+export * from "./sources/registry";
 export * from "./sources/types";
+export * from "./sources/validate";
