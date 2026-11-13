@@ -9,6 +9,10 @@ packages:
 # script is not needed: acknowledge it as `false` (do not build).
 allowBuilds:
   esbuild: false
+  # Optional native speedups pulled in by testcontainers (docker-modem / ssh2)
+  cpu-features: false
+  protobufjs: false
+  ssh2: false
 
 # pnpm 12 also asks before installing agent skills bundled in packages.
 permissions:
