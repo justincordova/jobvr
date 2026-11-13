@@ -189,7 +189,9 @@ Lever/Ashby responses don't include one). For SimplifyJobs it is
   a schema change). Individual invalid items are logged, counted, and skipped.
   An empty job list is a valid success.
 - Adapters append `Remote - US` per the mapping table above.
-- Adapters return **all** listings (no filtering); filtering happens in runPoll.
+- Adapters apply no matching filters; all filtering happens in runPoll. The one
+  exception: the Ashby adapter drops `isListed = false` items (unlisted jobs
+  are treated as absent, so closures see them as removed).
 
 ### URL parsing (`parseUrl`)
 
@@ -329,8 +331,10 @@ A stored job is visible when:
 The `saved` and `applied` views ignore V entirely (closed jobs appear with a
 "Closed" badge), so a job you saved never disappears because a setting changed.
 
-Feed = V + UI filters. Pushes and "new since last visit" = V + the pushable rule
-(see [Notify](#notify-runnotify)).
+Feed and `hidden` view = V + UI filters. Pushes = the pushable rule (see
+[Notify](#notify-runnotify)). "New since last visit" = the **New** rule in
+`GET /api/jobs` (pushable without the `notified_at` condition, plus
+`first_seen_at > last_visit_at`).
 
 ## Pipeline
 
@@ -371,7 +375,11 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
 4. **Process** results one target at a time: all ATS targets first, then
    aggregators (so ATS data is in place before Simplify merges into it). Each
    target's processing (steps 5–10) runs in **one DB transaction** and works on a
-   copy of the affected in-memory jobs. On commit, the copy replaces the shared
+   copy of the affected in-memory jobs. For a company target, the transaction
+   first locks the company row (`SELECT … FOR UPDATE`); if the company was
+   deleted or its `ats`/`slug` no longer equal the values fetched, the target
+   is abandoned with no writes and no health change (the API's company PATCH
+   waits on this lock, so it can't interleave). On commit, the copy replaces the shared
    in-memory set; on any error the transaction rolls back, the copy is
    discarded, and the target counts as a failure (its `etag` / `filters_hash`
    are not updated, so the next poll refetches in full). Database writes touch
@@ -386,8 +394,9 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
 6. **Dedupe/merge** each passing listing against the in-memory set (which
    includes jobs inserted earlier in this run):
    1. **Exact**: jobs that have a `job_sources` row matching an identity key
-      (same `source` + `source_job_id`, or same non-null `url_key`), or whose
-      `id` equals the listing's canonical ID. If several jobs match, prefer the
+      (same `source` + `source_job_id`, or same non-null `url_key` with the same
+      company: same `company_id`, or same normalized name when either has
+      none), or whose `id` equals the listing's canonical ID. If several jobs match, prefer the
       one whose `id` equals the canonical ID, then one with an ATS source row,
       then the newest `effective_at`.
    2. **Fuzzy** (only if no exact match): allowed only between an `sj:` side and
@@ -402,19 +411,24 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
    - **Match** → upsert the listing's `job_sources` row (`job_id`, `url`,
      `url_key`, `title`, `category`, `posted_at`, `posted_at_precision`). If that
      row previously belonged to a different job (the listing moved), it is
-     re-pointed; a job left with no rows is deleted if its state is `new` or
-     `hidden`. If the listing is from an ATS source, overwrite the job's `title`,
+     re-pointed; a job left with no rows is deleted with a single guarded
+     statement (`DELETE … WHERE id = $1 AND state IN ('new','hidden') AND NOT
+     EXISTS (SELECT 1 FROM job_sources WHERE job_id = $1)`), never based on the
+     in-memory state. If the listing is from an ATS source, overwrite the job's `title`,
      `locations`, `url`, salary, `company_id`, `company_name`, and set
      `primary_source` to that ATS. If the job's `company_id` is null, re-resolve
      it. Update `effective_at` (see Freshness). Never changed by a match: `id`,
      `state`, `first_seen_at`, `baseline`, `notified_at`.
-   - **No match** → insert the job (`id` = canonical ID, `first_seen_at = now`,
-     `state = new`, `primary_source` = listing's source) and its `job_sources`
-     row. Both inserts use `ON CONFLICT DO NOTHING`; if the job insert conflicts
-     (a job older than the in-memory window), skip the listing.
+   - **No match** → first look up the identity keys and canonical ID in the DB
+     with no age limit (same rules as Exact). If a job outside the in-memory
+     window matches, skip the listing (an old job is never re-inserted or
+     re-pushed, e.g. a Simplify repost of the same URL). Otherwise insert the
+     job (`id` = canonical ID, `first_seen_at = now`, `state = new`,
+     `primary_source` = listing's source) and its `job_sources` row.
 7. **Baseline**: the target's `source_state` row is upserted inside this
    transaction (created on a company's first successful poll, with `slug` = the
-   slug fetched). If its `baselined_at` was null at the start of processing,
+   slug fetched). If its `baselined_at` was null at the start of processing (a
+   row whose `slug` differs from the company's current slug counts as null),
    jobs inserted by this target in this run get `baseline = true` and
    `baselined_at = now` is written in the same transaction. Baseline jobs show
    in the feed but are never pushed or counted as "new".
@@ -541,7 +555,7 @@ message?, count?, details? }`. Job IDs contain `:` and are URL-encoded in paths.
 
 | Route | Behavior |
 |---|---|
-| `GET /api/jobs` | Query (all optional; list params are comma-separated): `view` = `feed` (default; state new/saved, not closed) \| `saved` \| `applied` \| `hidden`; `age` = `1h` \| `today` (effective_at since 00:00 America/New_York) \| `3d` \| `all` (default `3d` for `feed`, `all` otherwise); `location` (named-location labels; job matches any); `company` (company IDs and/or `unlisted`); `tier` (tiers incl. `Unlisted`; default "Tiers to track" for `feed`, all otherwise); `source` (source ids; job matches if any of its sources is listed). Returns jobs passing V and the filters, sorted by `effective_at` desc (max 500), each with its sources, company tier, and an `isNew` flag; plus `lastVisitAt` and `newSinceLastVisit`. **New** = non-baseline, `state ∈ {new, saved}`, tier in "Tiers to track", effective age ≤ "Max job age", visible (V), and `first_seen_at > last_visit_at`; when `last_visit_at` is null nothing is new. `newSinceLastVisit` counts new jobs ignoring the UI filters. |
+| `GET /api/jobs` | Query (all optional; list params are comma-separated): `view` = `feed` (default; state new/saved, not closed) \| `saved` \| `applied` \| `hidden`; `age` = `1h` \| `today` (effective_at since 00:00 America/New_York) \| `3d` \| `all` (default `3d` for `feed`, `all` otherwise); `location` (named-location labels; job matches any); `company` (company IDs and/or `unlisted`); `tier` (tiers incl. `Unlisted`; default "Tiers to track" for `feed`, all otherwise); `source` (source ids; job matches if any of its sources is listed). Returns jobs matching the view's state, passing V (views `feed` and `hidden`; `saved`/`applied` ignore V), and passing the filters, sorted by `effective_at` desc (max 500), each with its sources, company tier, and an `isNew` flag; plus `lastVisitAt` and `newSinceLastVisit`. **New** = non-baseline, `state ∈ {new, saved}`, tier in "Tiers to track", effective age ≤ "Max job age", visible (V), and `first_seen_at > last_visit_at`; when `last_visit_at` is null nothing is new. `newSinceLastVisit` counts new jobs ignoring the UI filters. |
 | `POST /api/jobs/visit` | Sets `last_visit_at = now`. |
 | `PATCH /api/jobs/:id` | Body `{ state: "saved" \| "hidden" \| "new" }`. 409 if the job is `applied`. |
 | `POST /api/jobs/:id/apply` | In one transaction: create an application (snapshot of company/title/url, status `applied`, `applied_at = now`) and set the job's state to `applied`. 409 if an application already exists for the job. |
@@ -677,7 +691,7 @@ Vitest everywhere.
 2. core: schemas, Drizzle schema/migrations, repositories, settings defaults.
 3. Adapter interface + Greenhouse, Lever, Ashby adapters with fixture tests.
 4. Matching, freshness, dedupe, baseline, closures (tests); `poller/data/companies.json`
-   from `docs/SEED.md` and the `seed` script (API-confirmed via `probe`, else
+   with the **Verified** tables of `docs/SEED.md` only, and the `seed` script (API-confirmed via `probe`, else
    `needs_review`; insert-only, never overwrites existing companies), so
    `pnpm poll` has real data from here on.
 5. SimplifyJobs adapter + cross-source dedupe + suggestions.
@@ -693,8 +707,8 @@ Vitest everywhere.
    if any remain and differ from (a). For each base list, three forms: joined
    in original case (`EliseAI`), joined lowercase (`eliseai`), lowercase joined
    with `-` (`elise-ai`). Then, for each of the two lowercase forms, append `hq`, `-hq`,
-   `-io`, `inc`. De-duplicate, preserving that order. Run it on the "find slug"
-   and research lists and record results in `companies.json`:
+   `-io`, `inc`. De-duplicate, preserving that order. Run it on the "find slug",
+   research, and reference-only lists and record results in `companies.json`:
    - "Find slug" company found → `track` per tier rule, status `ok`; not found →
      kept with its listed ATS, no slug, `track = false`, `needs_review`.
    - Research company found → `track = true`, status `ok`; not found →
