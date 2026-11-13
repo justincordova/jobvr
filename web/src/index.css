@@ -22,8 +22,19 @@
   --color-stop: #ec7565;
   --color-info: #8fb8ea;
 
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+
   --animate-ping-once: ping-once 1.6s cubic-bezier(0, 0, 0.2, 1) 1;
-  --animate-rise: rise 220ms ease-out both;
+  --animate-rise: rise 240ms var(--ease-out) both;
+  --animate-page: page 260ms var(--ease-out) both;
+  --animate-fade-in: fade-in 180ms var(--ease-out) both;
+  --animate-fade-out: fade-out 140ms var(--ease-in) both;
+  --animate-pop-in: pop-in 200ms var(--ease-out) both;
+  --animate-pop-out: pop-out 130ms var(--ease-in) both;
+  --animate-sheet-in: sheet-in 300ms var(--ease-out) both;
+  --animate-sheet-out: sheet-out 200ms var(--ease-in) both;
+  --animate-spin: spin 0.7s linear infinite;
 
   @keyframes ping-once {
     0% {
@@ -38,12 +49,67 @@
   @keyframes rise {
     from {
       opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  @keyframes page {
+    from {
+      opacity: 0;
       transform: translateY(4px);
     }
-    to {
-      opacity: 1;
-      transform: none;
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
     }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  @keyframes pop-out {
+    to {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes sheet-out {
+    to {
+      transform: translateY(100%);
+    }
+  }
+}
+
+@keyframes toast-timer {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@utility select-chevron {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 0.9rem;
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -52,6 +118,7 @@
     color-scheme: dark;
     background: var(--color-ink);
     -webkit-tap-highlight-color: transparent;
+    scrollbar-gutter: stable;
   }
   body {
     @apply bg-ink font-sans text-paper antialiased;
@@ -72,6 +139,25 @@
     outline: 2px solid var(--color-signal);
     outline-offset: 2px;
   }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Shared-element moves (board columns, list removals) use the View Transitions API */
+  ::view-transition-group(*) {
+    animation-duration: 240ms;
+    animation-timing-function: var(--ease-out);
+  }
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 160ms;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

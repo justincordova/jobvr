@@ -13,7 +13,12 @@ export function Textarea({ className, ...props }: ComponentProps<'textarea'>) {
 }
 
 export function NativeSelect({ className, ...props }: ComponentProps<'select'>) {
-  return <select className={cn(fieldClass, 'h-9 appearance-auto pr-8', className)} {...props} />
+  return (
+    <select
+      className={cn(fieldClass, 'h-9 cursor-pointer pr-8 select-chevron', className)}
+      {...props}
+    />
+  )
 }
 
 export function Label({ className, ...props }: ComponentProps<'label'>) {

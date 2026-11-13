@@ -19,7 +19,12 @@ export type DataOf<R> = Extract<JsonOf<R>, { success: true }> extends { data: in
 export async function unwrap<R extends { json(): Promise<unknown>; status: number }>(
   call: Promise<R>,
 ): Promise<DataOf<R>> {
-  const res = await call
+  let res: R
+  try {
+    res = await call
+  } catch {
+    throw new ApiError(0, 'Can’t reach jobvr. Check your connection or Tailscale.')
+  }
   let body: unknown
   try {
     body = await res.json()

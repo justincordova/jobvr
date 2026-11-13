@@ -1,49 +1,171 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { CircleAlert, CircleCheck, Info, X } from 'lucide-react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { cn } from '@/lib/cn'
 
-type Tone = 'info' | 'error'
-interface Toast {
-  id: number
-  message: string
-  tone: Tone
+type Tone = 'success' | 'info' | 'error'
+
+export interface ToastOptions {
+  tone?: Tone
+  action?: { label: string; onClick: () => void }
+  duration?: number
+  /** Runs when the toast closes without its action being used (deferred deletes). */
+  onCommit?: () => void
 }
 
-const ToastContext = createContext<(message: string, tone?: Tone) => void>(() => {})
+interface ToastItem extends ToastOptions {
+  id: number
+  message: string
+  open: boolean
+}
 
+const MAX_VISIBLE = 3
+const EXIT_MS = 200
+
+// A tiny external store, so toasts can be raised from anywhere
+let items: ToastItem[] = []
 let nextId = 1
+const listeners = new Set<() => void>()
+const pending = new Map<number, () => void>()
 
-export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([])
-  const push = useCallback((message: string, tone: Tone = 'info') => {
-    const id = nextId++
-    setToasts((t) => [...t.slice(-2), { id, message, tone }])
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500)
-  }, [])
-  const value = useMemo(() => push, [push])
-  return (
-    <ToastContext.Provider value={value}>
-      {children}
-      <div
-        aria-live="polite"
-        className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 sm:bottom-6"
-      >
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={cn(
-              'animate-rise rounded-lg border px-3.5 py-2 text-sm shadow-xl',
-              t.tone === 'error'
-                ? 'border-stop/40 bg-[#2a1715] text-stop'
-                : 'border-line-strong bg-raised text-paper',
-            )}
-          >
-            {t.message}
-          </div>
-        ))}
-      </div>
-    </ToastContext.Provider>
-  )
+const setItems = (fn: (list: ToastItem[]) => ToastItem[]) => {
+  items = fn(items)
+  for (const l of listeners) l()
+}
+
+function close(id: number, commit = true) {
+  const run = pending.get(id)
+  pending.delete(id)
+  if (commit) run?.()
+  setItems((l) => l.map((t) => (t.id === id ? { ...t, open: false } : t)))
+  setTimeout(() => setItems((l) => l.filter((t) => t.id !== id)), EXIT_MS)
+}
+
+function show(message: string, options: ToastOptions = {}) {
+  // A repeated message replaces its twin; overflow closes the oldest (deferred work still runs)
+  const open = items.filter((t) => t.open)
+  const twins = open.filter((t) => t.message === message)
+  const rest = open.filter((t) => t.message !== message)
+  for (const t of [...twins, ...rest.slice(0, Math.max(0, rest.length - MAX_VISIBLE + 1))]) {
+    close(t.id)
+  }
+  const id = nextId++
+  if (options.onCommit) pending.set(id, options.onCommit)
+  setItems((l) => [...l, { ...options, id, message, open: true }])
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export const useToast = () => useContext(ToastContext)
+export const toast = Object.assign(show, {
+  error: (message: string) => show(message, { tone: 'error' }),
+  /** Shows "message · Undo". `commit` runs only if Undo isn't pressed in time. */
+  undoable: (message: string, handlers: { undo: () => void; commit?: () => void }) =>
+    show(message, { action: { label: 'Undo', onClick: handlers.undo }, onCommit: handlers.commit }),
+})
+
+// Leaving the page shouldn't drop a deferred delete on the floor
+window.addEventListener('pagehide', () => {
+  for (const run of pending.values()) run()
+  pending.clear()
+})
+
+const subscribe = (l: () => void) => {
+  listeners.add(l)
+  return () => listeners.delete(l)
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export const useToast = () => toast
+
+export function Toaster() {
+  const list = useSyncExternalStore(subscribe, () => items)
+  return (
+    <ol
+      aria-live="polite"
+      aria-label="Notifications"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-[60] mx-auto flex w-full max-w-sm flex-col px-3 md:bottom-5"
+    >
+      {list.map((t) => (
+        <Toast key={t.id} toast={t} />
+      ))}
+    </ol>
+  )
+}
+
+const ICONS = {
+  success: <CircleCheck className="size-4 shrink-0 text-go" />,
+  info: <Info className="size-4 shrink-0 text-info" />,
+  error: <CircleAlert className="size-4 shrink-0 text-stop" />,
+}
+
+function Toast({ toast: t }: { toast: ToastItem }) {
+  const { id, message, tone = 'success', action, open } = t
+  const duration = t.duration ?? (action || tone === 'error' ? 6000 : 3500)
+  const [paused, setPaused] = useState(false)
+  const remaining = useRef(duration)
+
+  useEffect(() => {
+    if (paused || !open) return
+    const start = Date.now()
+    const timer = setTimeout(() => close(id), remaining.current)
+    return () => {
+      clearTimeout(timer)
+      remaining.current -= Date.now() - start
+    }
+  }, [paused, open, id])
+
+  return (
+    <li
+      role={tone === 'error' ? 'alert' : 'status'}
+      className={cn(
+        'grid transition-[grid-template-rows,opacity] duration-200 ease-out',
+        open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] overflow-hidden opacity-0',
+      )}
+    >
+      <div className="min-h-0 pt-2">
+        <div
+          onPointerEnter={() => setPaused(true)}
+          onPointerLeave={() => setPaused(false)}
+          onFocus={() => setPaused(true)}
+          onBlur={() => setPaused(false)}
+          className={cn(
+            'pointer-events-auto relative flex animate-rise items-center gap-2.5 overflow-hidden rounded-xl border bg-raised/95 py-1.5 pr-1.5 pl-3 text-sm shadow-[0_10px_30px_-8px_rgb(0_0_0/0.6)] backdrop-blur-md transition-transform duration-200',
+            tone === 'error' ? 'border-stop/35' : 'border-line-strong',
+            !open && 'translate-y-1 scale-[0.97]',
+          )}
+        >
+          {ICONS[tone]}
+          <p className="min-w-0 flex-1 py-1.5 leading-snug">{message}</p>
+          {action && (
+            <button
+              type="button"
+              onClick={() => {
+                action.onClick()
+                close(id, false)
+              }}
+              className="rounded-md px-2 py-1 font-medium text-signal transition-colors hover:bg-signal-soft"
+            >
+              {action.label}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => close(id)}
+            aria-label="Dismiss notification"
+            className="rounded-md p-1.5 text-faint transition-colors hover:bg-line hover:text-paper"
+          >
+            <X className="size-3.5" />
+          </button>
+          {action && (
+            <span
+              aria-hidden
+              className="absolute inset-x-0 bottom-0 h-px origin-left bg-signal/50"
+              style={{
+                animation: `toast-timer ${duration}ms linear forwards`,
+                animationPlayState: paused || !open ? 'paused' : 'running',
+              }}
+            />
+          )}
+        </div>
+      </div>
+    </li>
+  )
+}

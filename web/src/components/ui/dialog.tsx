@@ -7,6 +7,7 @@ export const Dialog = DialogPrimitive.Root
 export const DialogTrigger = DialogPrimitive.Trigger
 export const DialogClose = DialogPrimitive.Close
 
+/** Bottom sheet on phones, centered card from `sm` up. */
 export function DialogContent({
   className,
   title,
@@ -16,16 +17,21 @@ export function DialogContent({
 }: ComponentProps<typeof DialogPrimitive.Content> & { title: string; description?: ReactNode }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] data-[state=open]:animate-[rise_160ms_ease-out]" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto rounded-t-xl border border-line-strong bg-panel p-5 shadow-2xl sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl data-[state=open]:animate-rise',
+          'fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto overscroll-contain rounded-t-2xl border border-b-0 border-line-strong bg-panel p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl focus:outline-none data-[state=closed]:animate-sheet-out data-[state=open]:animate-sheet-in',
+          'sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:border-b sm:pb-5 sm:data-[state=closed]:animate-pop-out sm:data-[state=open]:animate-pop-in',
           className,
         )}
         {...props}
       >
+        <div
+          aria-hidden
+          className="mx-auto -mt-2 mb-3 h-1 w-9 rounded-full bg-line-strong sm:hidden"
+        />
         <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <DialogPrimitive.Title className="text-lg font-semibold tracking-tight">
               {title}
             </DialogPrimitive.Title>
@@ -38,7 +44,7 @@ export function DialogContent({
             )}
           </div>
           <DialogPrimitive.Close
-            className="-m-1 rounded p-1 text-dim hover:bg-raised hover:text-paper"
+            className="-m-1 rounded-md p-1.5 text-dim transition-colors hover:bg-raised hover:text-paper"
             aria-label="Close"
           >
             <X className="size-4" />
