@@ -58,6 +58,7 @@ export const filtersHash = (s: Settings): string =>
         exclude: s.excludeKeywords,
         categories: s.simplifyCategories,
         applyLevel: s.applyLevelToSimplify,
+        requireLevel: s.requireLevelOnBoards,
       }),
     )
     .digest("hex");

@@ -163,6 +163,7 @@ function MatchingSection({ settings }: { settings: Settings }) {
     'levelKeywords',
     'excludeKeywords',
     'minSalaryUsd',
+    'requireLevelOnBoards',
   ] as const)
   const { save, pending, error } = useSave('Matching')
   const [newLabel, setNewLabel] = useState('')
@@ -180,7 +181,7 @@ function MatchingSection({ settings }: { settings: Settings }) {
     <Section
       title="Matching"
       dirty={dirty}
-      description="ATS titles need a role AND a level keyword and no exclude keyword. SimplifyJobs titles only need to avoid excludes."
+      description="Company-board titles need a role keyword and nothing senior (exclude keywords, or levels like II or 3). SimplifyJobs is new-grad only, so its titles just need to avoid excludes."
       footer={
         <SaveBar
           dirty={dirty}
@@ -291,6 +292,16 @@ function MatchingSection({ settings }: { settings: Settings }) {
         value={draft.excludeKeywords}
         onChange={(v) => set('excludeKeywords', v)}
       />
+      <Row
+        label="Require a level keyword on company boards"
+        hint="Off: plain titles like “Software Engineer” count too. On: only titles that say new grad, junior, I, and so on."
+      >
+        <Switch
+          checked={draft.requireLevelOnBoards}
+          onCheckedChange={(v) => set('requireLevelOnBoards', v)}
+          aria-label="Require a level keyword on company boards"
+        />
+      </Row>
       <NumberField
         id="minSalary"
         label="Min salary (when listed)"
@@ -387,7 +398,7 @@ function SimplifySection({ payload }: { payload: SettingsPayload }) {
       }
     >
       <ChipsInput
-        label="Categories"
+        label="Trusted categories (other categories need a role keyword)"
         value={draft.simplifyCategories}
         onChange={(v) => set('simplifyCategories', v)}
       />

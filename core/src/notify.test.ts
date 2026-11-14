@@ -187,7 +187,7 @@ describe("runNotify", () => {
 
 describe("runCleanup", () => {
   it("deletes old new/hidden jobs once a day, keeping saved and applied", async () => {
-    const old = new Date(NOW.getTime() - 31 * 24 * HOUR);
+    const old = new Date(NOW.getTime() - 46 * 24 * HOUR);
     await addJob("old-new", { effectiveAt: old });
     await addJob("old-hidden", { effectiveAt: old, state: "hidden" });
     await addJob("old-saved", { effectiveAt: old, state: "saved" });

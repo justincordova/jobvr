@@ -58,7 +58,7 @@ export function toJobQuery(s: FeedSearch) {
   }
 }
 
-export const defaultAge = (view: View): Age => (view === 'feed' ? '3d' : 'all')
+export const DEFAULT_AGE: Age = 'all'
 
 export const CLEARED_FILTERS = {
   location: undefined,

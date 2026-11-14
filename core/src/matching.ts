@@ -8,30 +8,101 @@ export type SourceKind = "ats" | "aggregator";
 
 type KeywordSettings = Pick<
   Settings,
-  "roleKeywords" | "levelKeywords" | "excludeKeywords" | "applyLevelToSimplify"
+  | "roleKeywords"
+  | "levelKeywords"
+  | "excludeKeywords"
+  | "applyLevelToSimplify"
+  | "requireLevelOnBoards"
+  | "simplifyCategories"
 >;
 
+// Numbered levels: "Engineer I" / "1" signal entry level; "II", "3", "IV" signal experience
+const ENTRY_LEVEL_TOKENS = new Set(["i", "1"]);
+const EXPERIENCED_LEVEL_TOKENS = new Set(["ii", "iii", "iv", "v", "2", "3", "4", "5"]);
+
+/** Engineering titles from other disciplines; they need a role keyword, not just "engineer". */
+const NON_SOFTWARE = [
+  "electrical",
+  "mechanical",
+  "civil",
+  "chemical",
+  "structural",
+  "hardware",
+  "manufacturing",
+  "process",
+  "quality",
+  "sales",
+  "legal",
+  "compliance",
+  "field",
+  "support",
+  "solutions",
+  "customer",
+  "network",
+];
+const GENERIC_ENGINEERING = ["engineer", "engineering"];
+
+/** True when the title says it's entry level (a level keyword, or "I" / "1"). */
+export const isEntryLevelTitle = (title: string, settings: Pick<Settings, "levelKeywords">) => {
+  const tokens = tokenize(title);
+  return (
+    matchesAnyKeyword(tokens, settings.levelKeywords) ||
+    tokens.some((t) => ENTRY_LEVEL_TOKENS.has(t))
+  );
+};
+
 /**
- * ATS: role AND level AND NOT exclude. Aggregator: NOT exclude (AND level when
- * "Apply level keywords to Simplify" is on); role is covered by the category check.
+ * 1. Exclude keywords always reject ("Senior", "Intern").
+ * 2. Numbered experienced levels ("II", "3") reject unless the title is also
+ *    entry level ("Engineer 1/2", "Engineer 2 New Grad").
+ * 3. Company boards: a role keyword, or an entry-level generic engineering
+ *    title ("New Grad Engineer"). A level keyword is optional unless
+ *    "requireLevelOnBoards" is on, so plain "Software Engineer" roles count.
+ * 4. SimplifyJobs (already new-grad only): trusted categories pass; other
+ *    categories need a role keyword ("AI Engineer" under AI/ML/Data).
  */
 export const passesKeywordRule = (
   title: string,
   kind: SourceKind,
   settings: KeywordSettings,
+  category?: string | null,
 ): boolean => {
   const tokens = tokenize(title);
   if (matchesAnyKeyword(tokens, settings.excludeKeywords)) return false;
-  const level = matchesAnyKeyword(tokens, settings.levelKeywords);
-  if (kind === "aggregator") return settings.applyLevelToSimplify ? level : true;
-  return level && matchesAnyKeyword(tokens, settings.roleKeywords);
+  const entry = isEntryLevelTitle(title, settings);
+  if (!entry && tokens.some((t) => EXPERIENCED_LEVEL_TOKENS.has(t))) return false;
+  const role = matchesAnyKeyword(tokens, settings.roleKeywords);
+
+  if (kind === "aggregator") {
+    if (settings.applyLevelToSimplify && !entry) return false;
+    return categoryAllowed(category, settings) || role;
+  }
+  if (settings.requireLevelOnBoards && !entry) return false;
+  if (role) return true;
+  return (
+    entry &&
+    matchesAnyKeyword(tokens, GENERIC_ENGINEERING) &&
+    !matchesAnyKeyword(tokens, NON_SOFTWARE)
+  );
 };
 
-const US_SEQUENCES = [["us"], ["usa"], ["u", "s"], ["u", "s", "a"], ["united", "states"]];
+const US_SEQUENCES = [
+  ["us"],
+  ["usa"],
+  ["u", "s"],
+  ["u", "s", "a"],
+  ["united", "states"],
+  ["united", "states", "of", "america"],
+];
 
-/** "Remote", "Remote - US", "Remote in USA", "United States (Remote)"; not "Remote in UK". */
+/**
+ * "Remote", "Remote - US", "Remote in USA", "United States (Remote)", and a bare
+ * "United States" (no city usually means anywhere in the US); not "Remote in UK".
+ */
 export const isRemoteUs = (location: string): boolean => {
   const tokens = tokenize(location);
+  if (US_SEQUENCES.some((seq) => seq.length === tokens.length && containsSequence(tokens, seq)))
+    return true;
   if (!tokens.includes("remote")) return false;
   if (tokens.length === 1) return true;
   return US_SEQUENCES.some((seq) => containsSequence(tokens, seq));
@@ -103,11 +174,9 @@ export const passesPollFilter = (
   now: Date,
 ): boolean => {
   if (!passesLocationRule(listing.locations, settings)) return false;
-  if (!passesKeywordRule(listing.title, kind, settings)) return false;
-  if (kind === "aggregator") {
-    if (listing.meta?.active !== true || listing.meta?.visible !== true) return false;
-    if (!categoryAllowed(listing.meta?.category, settings)) return false;
-  }
+  if (!passesKeywordRule(listing.title, kind, settings, listing.meta?.category)) return false;
+  if (kind === "aggregator" && (listing.meta?.active !== true || listing.meta?.visible !== true))
+    return false;
   const posted = adjustedPostedAt(listing.postedAt, listing.postedAtPrecision);
   return posted.getTime() >= now.getTime() - STORE_WINDOW_MS;
 };
@@ -131,8 +200,7 @@ export const isVisible = (
   const keywordOk = job.sources.some((s) => {
     const kind = kindOf(s.source);
     if (!kind) return false;
-    if (kind === "aggregator" && !categoryAllowed(s.category, settings)) return false;
-    return passesKeywordRule(s.title, kind, settings);
+    return passesKeywordRule(s.title, kind, settings, s.category);
   });
   if (!keywordOk) return false;
   if (!passesSalaryRule(job.salaryMinUsd, job.salaryMaxUsd, settings)) return false;

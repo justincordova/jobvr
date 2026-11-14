@@ -8,7 +8,7 @@ import {
   activeFilterCount,
   type Age,
   CLEARED_FILTERS,
-  defaultAge,
+  DEFAULT_AGE,
   type FeedSearch,
   type View,
 } from './search'
@@ -87,7 +87,7 @@ export function FilterBar({ search, onChange, locations, sources, companies }: F
   const active = activeFilterCount(search)
   const [open, setOpen] = useState(active > 0)
   const view = search.view ?? 'feed'
-  const age = search.age ?? defaultAge(view)
+  const age = search.age ?? DEFAULT_AGE
 
   return (
     <div>
@@ -102,7 +102,7 @@ export function FilterBar({ search, onChange, locations, sources, companies }: F
           label="Age"
           value={age}
           options={AGE_OPTIONS}
-          onChange={(a) => onChange({ age: a === defaultAge(view) ? undefined : a })}
+          onChange={(a) => onChange({ age: a === DEFAULT_AGE ? undefined : a })}
         />
         <button
           type="button"

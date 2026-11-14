@@ -154,7 +154,7 @@ describe("runPoll: baseline, filters, ETags", () => {
       ghJob("acme", "2", "Senior Software Engineer"),
       ghJob("acme", "3", "Software Engineer, New Grad", { locations: ["San Francisco, CA"] }),
       ghJob("acme", "4", "Software Engineer I", {
-        postedAt: new Date(T0.getTime() - 8 * 24 * HOUR),
+        postedAt: new Date(T0.getTime() - 31 * 24 * HOUR),
       }),
     ]);
     env.setSimplify([]);
@@ -291,7 +291,7 @@ describe("runPoll: dedupe", () => {
   });
 
   it("never re-inserts a reposted listing whose job is older than the window", async () => {
-    const old = new Date(T0.getTime() - 10 * 24 * HOUR);
+    const old = new Date(T0.getTime() - 35 * 24 * HOUR);
     await database.db.insert(jobs).values({
       id: "sj:old",
       companyName: "Acme",

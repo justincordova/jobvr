@@ -73,8 +73,13 @@ describe("jobs routes", () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     if (!data.success) throw new Error("expected success");
-    expect(data.data.jobs.map((j) => j.id)).toEqual(["gh:2", "sj:6", "gh:1"]);
+    // Default age is "all"; 3d drops the 100 h old job
+    expect(data.data.jobs.map((j) => j.id)).toEqual(["gh:2", "sj:6", "gh:1", "gh:5"]);
     expect(data.data.jobs[0]).toMatchObject({ tier: "Unlisted", isNew: false, state: "new" });
+    const recent = await body<{ data: { jobs: { id: string }[] } }>(
+      await client.api.jobs.$get({ query: { age: "3d" } }),
+    );
+    expect(recent.data.jobs.map((j) => j.id)).toEqual(["gh:2", "sj:6", "gh:1"]);
 
     const gh = await client.api.jobs.$get({ query: { source: "greenhouse", age: "1h" } });
     const ghData = await gh.json();

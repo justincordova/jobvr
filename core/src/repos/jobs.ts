@@ -165,7 +165,7 @@ export const listJobs = async (
   const { settings: s, lastVisitAt } = await getSettingsState(db);
   const kindOf = kindLookup(registry);
   const view = query.view ?? "feed";
-  const age = query.age ?? (view === "feed" ? "3d" : "all");
+  const age = query.age ?? "all";
   const tiers = query.tier ?? (view === "feed" ? s.tiersToTrack : undefined);
   const applyV = view === "feed" || view === "hidden";
 

@@ -12,25 +12,63 @@ import {
 import { DEFAULT_SETTINGS as S, type Settings } from "./settings";
 
 describe("keyword rule", () => {
-  it("ATS: role AND level AND NOT exclude", () => {
-    expect(passesKeywordRule("Software Engineer, New Grad", "ats", S)).toBe(true);
-    expect(passesKeywordRule("Junior Backend Developer", "ats", S)).toBe(true);
-    expect(passesKeywordRule("Software Engineer I", "ats", S)).toBe(true);
-    // Level-only titles don't pass (the "Renewals Associate" case)
-    expect(passesKeywordRule("Renewals Associate", "ats", S)).toBe(false);
-    expect(passesKeywordRule("Software Engineer", "ats", S)).toBe(false);
-    // Exclude wins over level
-    expect(passesKeywordRule("Software Engineer I/II", "ats", S)).toBe(false);
-    expect(passesKeywordRule("Sr. Software Engineer, New Grad", "ats", S)).toBe(false);
-    expect(passesKeywordRule("Software Engineering Intern", "ats", S)).toBe(false);
+  const ats = (t: string, settings: Settings = S) => passesKeywordRule(t, "ats", settings);
+
+  it("company boards: role keyword, no seniority; level is optional by default", () => {
+    for (const t of [
+      "Software Engineer, New Grad",
+      "Junior Backend Developer",
+      "Software Engineer I",
+      "Software Engineer",
+      "Software Engineer, Full Stack",
+      "Forward Deployed Engineer",
+      "Security & Infrastructure Engineer",
+      "Machine Learning Engineer, Transaction Risk",
+      "Software Engineer 1/2",
+      "Engineer 2, New Grad",
+      "New Grad Engineer",
+    ]) {
+      expect(ats(t), t).toBe(true);
+    }
+    for (const t of [
+      "Renewals Associate",
+      "Senior Software Engineer",
+      "Sr. Software Engineer, New Grad",
+      "Software Engineering Intern",
+      "Software Engineer II",
+      "Software Engineer 3",
+      "Staff Software Engineer (AI Agents)",
+      "Field Engineer, Healthcare",
+      "Analytics Engineer",
+      "Associate Legal Engineer",
+      "Junior Electrical Engineer",
+      "Head of Engineering",
+    ]) {
+      expect(ats(t), t).toBe(false);
+    }
   });
 
-  it("aggregator: exclude only, level when enabled", () => {
-    expect(passesKeywordRule("Software Engineer", "aggregator", S)).toBe(true);
-    expect(passesKeywordRule("Senior Software Engineer", "aggregator", S)).toBe(false);
+  it("company boards can require a level keyword", () => {
+    const strict = { ...S, requireLevelOnBoards: true };
+    expect(ats("Software Engineer", strict)).toBe(false);
+    expect(ats("Software Engineer I", strict)).toBe(true);
+    expect(ats("Software Engineer, Early Career", strict)).toBe(true);
+  });
+
+  it("SimplifyJobs: trusted categories pass, others need a role keyword", () => {
+    const sj = (t: string, category: string, settings: Settings = S) =>
+      passesKeywordRule(t, "aggregator", settings, category);
+    expect(sj("Engineer 2 New Grad - Multiple Teams", "Software")).toBe(true);
+    expect(sj("Product Builder, Early Career", "Software")).toBe(true);
+    expect(sj("AI Engineer", "AI/ML/Data")).toBe(true);
+    expect(sj("Associate Data Engineer", "AI/ML/Data")).toBe(true);
+    expect(sj("Data Analyst - Transplant Nephrology", "AI/ML/Data")).toBe(false);
+    expect(sj("Junior Electrical Engineer", "Hardware")).toBe(false);
+    expect(passesKeywordRule("Associate - Technology Transactions", "ats", S)).toBe(false);
+    expect(sj("Senior Software Engineer", "Software")).toBe(false);
     const strict = { ...S, applyLevelToSimplify: true };
-    expect(passesKeywordRule("Software Engineer", "aggregator", strict)).toBe(false);
-    expect(passesKeywordRule("Software Engineer, Early Career", "aggregator", strict)).toBe(true);
+    expect(sj("Software Engineer", "Software", strict)).toBe(false);
+    expect(sj("Software Engineer, Early Career", "Software", strict)).toBe(true);
   });
 });
 
@@ -42,6 +80,9 @@ describe("location rule", () => {
       "Remote in USA",
       "United States (Remote)",
       "Remote, U.S.",
+      "United States",
+      "USA",
+      "US-Remote",
     ]) {
       expect(isRemoteUs(l), l).toBe(true);
     }
@@ -51,7 +92,7 @@ describe("location rule", () => {
       "Remote (EMEA)",
       "Remote - Latin America",
       "New York, NY (Remote)",
-      "United States",
+      "Austin, TX, United States",
     ]) {
       expect(isRemoteUs(l), l).toBe(false);
     }
@@ -64,6 +105,8 @@ describe("location rule", () => {
       "Remote-US",
     ]);
     expect(matchedLocationLabels(["Pittsburgh, PA"], S)).toEqual(["PA"]);
+    expect(matchedLocationLabels(["SF", "NY"], S)).toEqual(["NYC"]);
+    expect(matchedLocationLabels(["Hoboken"], S)).toEqual(["NJ"]);
     expect(matchedLocationLabels(["San Francisco, CA", "Remote in UK"], S)).toEqual([]);
     const noRemote: Settings = {
       ...S,
@@ -125,7 +168,7 @@ describe("poll filter and visibility", () => {
     meta: { active: true, visible: true, category: "software engineering" },
   };
 
-  it("checks aggregator meta, category, and the 7-day window", () => {
+  it("checks aggregator meta, category, and the 30-day window", () => {
     expect(passesPollFilter(listing, "aggregator", S, now)).toBe(true);
     expect(
       passesPollFilter(
@@ -135,6 +178,7 @@ describe("poll filter and visibility", () => {
         now,
       ),
     ).toBe(false);
+    // Untrusted category: needs a role keyword in the title
     expect(
       passesPollFilter(
         { ...listing, meta: { ...listing.meta, category: "Data Science" } },
@@ -142,26 +186,34 @@ describe("poll filter and visibility", () => {
         S,
         now,
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       passesPollFilter(
-        { ...listing, postedAt: new Date("2026-11-04T00:00:00Z") },
+        { ...listing, title: "Data Analyst", meta: { ...listing.meta, category: "Data Science" } },
         "aggregator",
         S,
         now,
       ),
     ).toBe(false);
-    // Day-precision 7 days ago still counts (end of that day is within the window)
     expect(
       passesPollFilter(
-        { ...listing, postedAt: new Date("2026-11-05T00:00:00Z") },
+        { ...listing, postedAt: new Date("2026-10-12T00:00:00Z") },
+        "aggregator",
+        S,
+        now,
+      ),
+    ).toBe(false);
+    // Day-precision 30 days ago still counts (end of that day is within the window)
+    expect(
+      passesPollFilter(
+        { ...listing, postedAt: new Date("2026-10-13T00:00:00Z") },
         "aggregator",
         S,
         now,
       ),
     ).toBe(true);
-    // The ATS rule is stricter
-    expect(passesPollFilter(listing, "ats", S, now)).toBe(false);
+    expect(passesPollFilter(listing, "ats", S, now)).toBe(true);
+    expect(passesPollFilter(listing, "ats", { ...S, requireLevelOnBoards: true }, now)).toBe(false);
   });
 
   it("applies V: any source row passing keeps a merged job visible", () => {
@@ -177,12 +229,18 @@ describe("poll filter and visibility", () => {
       sources: [gh, sj],
     };
     expect(isVisible(job, S, kindOf)).toBe(true);
-    expect(isVisible({ ...job, sources: [gh] }, S, kindOf)).toBe(false);
+    const strict = { ...S, requireLevelOnBoards: true };
+    expect(isVisible(job, strict, kindOf)).toBe(true);
+    expect(isVisible({ ...job, sources: [gh] }, strict, kindOf)).toBe(false);
     expect(isVisible({ ...job, closedAt: now }, S, kindOf)).toBe(false);
     const simplifyOnly = { ...job, sources: [sj] };
     expect(isVisible(simplifyOnly, S, kindOf)).toBe(true);
     expect(isVisible(simplifyOnly, { ...S, showSimplifyJobs: false }, kindOf)).toBe(false);
-    expect(isVisible(simplifyOnly, { ...S, simplifyCategories: ["Data"] }, kindOf)).toBe(false);
+    const builder = { ...sj, title: "Product Builder, Early Career" };
+    expect(isVisible({ ...job, sources: [builder] }, S, kindOf)).toBe(true);
+    expect(
+      isVisible({ ...job, sources: [builder] }, { ...S, simplifyCategories: ["Data"] }, kindOf),
+    ).toBe(false);
     expect(isVisible({ ...job, salaryMaxUsd: 50000 }, { ...S, minSalaryUsd: 60000 }, kindOf)).toBe(
       false,
     );

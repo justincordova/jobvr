@@ -289,9 +289,22 @@ fuzzy merge can attach an ATS listing to an `sj:` job, lookups go through
 
 A title passes the keyword rule for a source when:
 
-- **ATS sources**: ≥ 1 role keyword AND ≥ 1 level keyword AND 0 exclude keywords.
-- **Aggregator (SimplifyJobs)**: 0 exclude keywords, AND ≥ 1 level keyword only
-  if "Apply level keywords to Simplify" is on. (Role is covered by the category check.)
+- **All sources**: 0 exclude keywords, AND no numbered experienced level
+  (`ii`, `iii`, `iv`, `v`, `2`-`5`) unless the title is also entry level.
+  "Entry level" means ≥ 1 level keyword, or a level token `i` / `1`. So
+  "Software Engineer 3" is out, "Software Engineer 1/2" and "Engineer 2 New
+  Grad" are in.
+- **ATS sources**: ≥ 1 role keyword, OR an entry-level title containing
+  `engineer` / `engineering` with no non-software discipline word (electrical,
+  mechanical, civil, sales, legal, compliance, field, support, ...), so "New Grad
+  Engineer" passes and "Associate Legal Engineer" doesn't. A level keyword is
+  only required when "Require a level keyword on company boards" is on; by
+  default plain "Software Engineer" counts, since boards rarely say "new grad".
+- **Aggregator (SimplifyJobs)**: the list is new-grad only, so the category
+  decides: "Trusted categories" pass on title alone; any other category needs
+  ≥ 1 role keyword ("AI Engineer" under AI/ML/Data passes, "Data Analyst"
+  doesn't). ≥ 1 level keyword is also required if "Apply level keywords to
+  Simplify" is on.
 
 ### Location rule
 
@@ -300,10 +313,11 @@ A job passes when any of its location strings matches any enabled named location
 - **Alias locations** (NJ, PA, NYC, user-added): the location's tokens contain
   any alias as a contiguous token sequence (same tokenization as keywords).
 - **Remote-US** (built-in rule, can be enabled/disabled but has no aliases): the
-  string contains the token `remote` AND either contains a US token sequence
-  (`us`, `usa`, `u s`, `u s a`, `united states`) or is exactly "remote" after
-  tokenization. "Remote", "Remote - US", "Remote in USA", "United States
-  (Remote)" match; "Remote in UK", "Remote - Europe", "Remote (EMEA)", "Remote -
+  string is exactly a US token sequence (`us`, `usa`, `u s`, `u s a`, `united
+  states`, `united states of america`), meaning anywhere in the US, OR it
+  contains the token `remote` AND either contains a US sequence or is exactly
+  "remote" after tokenization. "Remote", "Remote - US", "Remote in USA",
+  "United States (Remote)", "United States" match; "Remote in UK", "Remote - Europe", "Remote (EMEA)", "Remote -
   Latin America", "New York, NY (Remote)" don't (the last one matches NYC instead).
 
 ### Salary rule
@@ -317,8 +331,9 @@ Unlisted salary always passes.
 
 A listing is stored (inserted, or merged into an existing job) only if it passes
 the location rule AND the keyword rule for its source, AND (aggregators only)
-`meta.active` and `meta.visible` are true and `meta.category` is in the "Simplify
-categories" setting, AND its adjusted posted date (see Freshness) ≥ now − 7 days.
+`meta.active` and `meta.visible` are true, AND its adjusted posted date (see
+Freshness) ≥ now − 30 days. Older-but-open roles are kept so nothing still
+applicable is missed; pushes and "new" still only count jobs within max age.
 
 ### Visibility rules V (applied at read time with current settings)
 
@@ -361,7 +376,7 @@ A task is due when its last-run timestamp is null or `now − last ≥ interval 
 Order: take the poll lock → due check → set `last_poll_at = now` → steps below.
 
 1. **Load** into memory: settings, companies, all `source_state` rows, and all
-   jobs (with all their `job_sources` rows) where `effective_at ≥ now − 7 days`.
+   jobs (with all their `job_sources` rows) where `effective_at ≥ now − 30 days`.
 2. **Targets**:
    - Each **company** with `track = true` AND tier in "Tiers to track" AND
      `status ≠ manual_only` AND `ats` is a registered ATS adapter AND `slug` is set
@@ -446,7 +461,7 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
    newly removed rows and `removed_at = null` on live rows. Then for each affected
    job: all rows removed → `closed_at = now` (if not already set); any row live →
    `closed_at = null`. Rows of targets that are not polled (untracked company,
-   disabled source) and jobs outside the 7-day window are not re-evaluated;
+   disabled source) and jobs outside the 30-day window are not re-evaluated;
    their open/closed status stays as last computed.
 9. **Suggestions** (aggregator targets with an `ok` result, when "Suggest
    companies from SimplifyJobs" is on): take the listings that passed the
@@ -512,8 +527,9 @@ means no quiet hours.
 
 ### Cleanup (`runCleanup`)
 
-Delete jobs with `effective_at < now − 30 days` and `state ∈ {new, hidden}`
-(`job_sources` cascade). Saved and applied jobs are kept indefinitely.
+Delete jobs with `effective_at < now − 45 days` and `state ∈ {new, hidden}`
+(`job_sources` cascade). Retention must exceed the store window, or a deleted
+job that is still listed would be re-inserted on the next poll. Saved and applied jobs are kept indefinitely.
 
 ## Settings (DB, all editable in the UI)
 
@@ -522,13 +538,14 @@ are replaced, not merged).
 
 | Setting                             | Default                                                                                                                                                                       | Constraints                                                                                                                                                                                                                                                                  |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Locations                           | NJ → `nj`, `new jersey` · PA → `pa`, `pennsylvania`, `philadelphia`, `pittsburgh` · NYC → `nyc`, `new york`, `brooklyn`, `manhattan` · Remote-US (built-in rule); all enabled | Array of `{ label, aliases: string[], enabled, builtin?: "remote_us" }`. Labels unique (case-insensitive); ≥ 1 enabled. Alias entries need ≥ 1 alias. The built-in entry has no aliases and can be toggled but not renamed or deleted.                                       |
+| Locations                           | NJ → `nj`, `new jersey`, `jersey city`, `hoboken`, `newark`, `princeton` · PA → `pa`, `pennsylvania`, `philadelphia`, `philly`, `pittsburgh` · NYC → `nyc`, `ny`, `new york`, `brooklyn`, `manhattan`, `queens`, `bronx` · Remote-US (built-in rule) |
 | Tiers to track                      | Mid, Startup, Corporate, Unlisted (S, A off)                                                                                                                                  | Subset of S/A/Mid/Startup/Corporate/Unlisted. Controls which companies are polled, which jobs push, and the feed's default tier filter. `Unlisted` (added to the original list so Simplify jobs from companies not in your list can push) only affects jobs with no company. |
-| Role keywords (any)                 | software, engineer, engineering, developer, swe, sde, programmer, full stack, fullstack, backend, frontend                                                                    | ≥ 1                                                                                                                                                                                                                                                                          |
-| Level keywords (any)                | new grad, entry, junior, early career, associate, graduate, software engineer i                                                                                               | ≥ 1                                                                                                                                                                                                                                                                          |
-| Exclude keywords                    | senior, sr., staff, principal, lead, manager, director, iii, ii, intern, internship                                                                                           | —                                                                                                                                                                                                                                                                            |
+| Role keywords (any)                 | software, developer, swe, sde, programmer, full stack, fullstack, backend, back end, frontend, front end, web engineer, mobile engineer, ios, android, product engineer, platform engineer, infrastructure engineer, forward deployed, devops, site reliability, sre, machine learning engineer, ml engineer, ai engineer, applied ai, data engineer, research engineer, cloud engineer, automation engineer, founding engineer, member of technical staff |
+| Level keywords (any)                | new grad, new graduate, graduate, grad, entry, junior, jr, early career, early talent, emerging talent, university, college, campus, associate, rotational, apprentice, apprenticeship, residency, development program, 2026, 2027 |
+| Exclude keywords                    | senior, sr, staff, principal, lead, manager, director, head, vp, vice president, architect, distinguished, intern, internship, co op, postdoc, postdoctoral |
+| Require a level keyword on company boards | Off                                                                                                                                                  |
 | Apply level keywords to Simplify    | Off                                                                                                                                                                           | —                                                                                                                                                                                                                                                                            |
-| Simplify categories                 | Software, Software Engineering                                                                                                                                                | Matched case-insensitively against `category`                                                                                                                                                                                                                                |
+| Simplify trusted categories         | Software, Software Engineering (other categories need a role keyword) | Matched case-insensitively against `category`                                                                                                                                                                                                                                |
 | Max job age (hours)                 | 24                                                                                                                                                                            | 1–168                                                                                                                                                                                                                                                                        |
 | Poll every (minutes)                | 15                                                                                                                                                                            | 5–1440                                                                                                                                                                                                                                                                       |
 | Push summary every (minutes)        | 60                                                                                                                                                                            | 5–1440                                                                                                                                                                                                                                                                       |
@@ -560,9 +577,9 @@ message?, count?, details? }`. Job IDs contain `:` and are URL-encoded in paths.
 
 | Route                                             | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/jobs`                                   | Query (all optional; list params are comma-separated): `view` = `feed` (default; state new/saved, not closed) \| `saved` \| `applied` \| `hidden`; `age` = `1h` \| `today` (effective_at since 00:00 America/New_York) \| `3d` \| `all` (default `3d` for `feed`, `all` otherwise); `location` (named-location labels; job matches any); `company` (company IDs and/or `unlisted`); `tier` (tiers incl. `Unlisted`; default "Tiers to track" for `feed`, all otherwise); `source` (source ids; job matches if any of its sources is listed). Returns jobs matching the view's state, passing V (views `feed` and `hidden`; `saved`/`applied` ignore V), and passing the filters, sorted by `effective_at` desc (max 500), each with its sources, company tier, and an `isNew` flag; plus `lastVisitAt` and `newSinceLastVisit`. **New** = non-baseline, `state ∈ {new, saved}`, tier in "Tiers to track", effective age ≤ "Max job age", visible (V), and `first_seen_at > last_visit_at`; when `last_visit_at` is null nothing is new. `newSinceLastVisit` counts new jobs ignoring the UI filters. |
+| `GET /api/jobs`                                   | Query (all optional; list params are comma-separated): `view` = `feed` (default; state new/saved, not closed) \| `saved` \| `applied` \| `hidden`; `age` = `1h` \| `today` (effective_at since 00:00 America/New_York) \| `3d` \| `all` (default `all`); `location` (named-location labels; job matches any); `company` (company IDs and/or `unlisted`); `tier` (tiers incl. `Unlisted`; default "Tiers to track" for `feed`, all otherwise); `source` (source ids; job matches if any of its sources is listed). Returns jobs matching the view's state, passing V (views `feed` and `hidden`; `saved`/`applied` ignore V), and passing the filters, sorted by `effective_at` desc (max 500), each with its sources, company tier, and an `isNew` flag; plus `lastVisitAt` and `newSinceLastVisit`. **New** = non-baseline, `state ∈ {new, saved}`, tier in "Tiers to track", effective age ≤ "Max job age", visible (V), and `first_seen_at > last_visit_at`; when `last_visit_at` is null nothing is new. `newSinceLastVisit` counts new jobs ignoring the UI filters. |
 | `POST /api/jobs/visit`                            | Sets `last_visit_at = now`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `PATCH /api/jobs/:id`                             | Body `{ state: "new" \| "saved" \| "hidden" \| "applied" }`. Any state can move to any other (Undo relies on this).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `PATCH /api/jobs/:id`                             | Body `{ state: "new" \| "saved" \| "hidden" \| "applied" }`. Any state can move to any other (Undo relies on this).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `GET /api/companies`                              | All companies with health joined from `source_state`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `POST /api/companies`, `PATCH /api/companies/:id` | Validated against the company invariants; 409 on a duplicate normalized name or `ats` + `slug`. Setting `status` to `ok` resets `consecutive_failures`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `DELETE /api/companies/:id`                       | Deletes it; its jobs keep `company_name` with `company_id` set null.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -597,8 +614,8 @@ the app shell only; API requests are network-only.
 | Constant                                                           | Value                                                                                               |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
 | Scheduler tick / first tick after boot / due tolerance             | 5 min / 10 s / 60 s                                                                                 |
-| Poll store window (max effective age stored, in-memory dedupe set) | 7 days                                                                                              |
-| Retention for new/hidden jobs                                      | 30 days (cleanup every 24 h)                                                                        |
+| Poll store window (max effective age stored, in-memory dedupe set) | 30 days                                                                                             |
+| Retention for new/hidden jobs                                      | 45 days (cleanup every 24 h)                                                                        |
 | Per-source concurrency (declared by each adapter)                  | Greenhouse 3, Lever 3, Ashby 3, SimplifyJobs 1                                                      |
 | `FILTER_VERSION`                                                   | integer in `core`; bump whenever matching/normalization code changes (forces unconditional refetch) |
 | Poll run budget                                                    | 5 min                                                                                               |
@@ -620,9 +637,9 @@ the app shell only; API requests are network-only.
 | Push                    | ntfy.sh, long random topic (env secret)                                                                                               | Native push, click-through URL, free                                                                                 |
 | Monorepo tooling        | pnpm workspace; core/poller/api use Biome; web keeps ESLint + Prettier; root husky + commitlint; lint-staged runs each package's tool | Keeps each template's conventions                                                                                    |
 | Package boundaries      | `core` ← `poller` ← `api`; adapters injected into runPoll                                                                             | No dependency cycle; core stays runtime-agnostic                                                                     |
-| Max job age             | Governs pushes and "new" counts; poller stores up to 7 days                                                                           | Feed's 3-day filter works                                                                                            |
+| Max job age             | Governs pushes and "new" counts; poller stores up to 30 days                                                                          | Older-but-open roles stay findable; feed defaults to all ages, newest first                                          |
 | Filtering               | Poll-time (keeps DB small) + read-time V (current settings)                                                                           | Tightening applies instantly; loosening applies on the next poll (ETag bypassed via `filters_hash`)                  |
-| Title rules             | ATS: role AND level AND NOT exclude; Simplify: NOT exclude; token-based                                                               | A level-only rule let "Renewals Associate" through (live Airtable board)                                             |
+| Title rules             | Role AND NOT senior (level optional on boards); Simplify: trusted category or role; token-based                                       | Boards rarely say "new grad" (a live audit found 0 board matches with level required); role keywords are specific so "engineer" alone can't let in Sales/Civil/Legal roles |
 | Canonical IDs           | `gh:<id>` / `lv:<uuid>` / `ab:<uuid>` / `sj:<id>`                                                                                     | ATS IDs are globally unique; `gh_jid` career-page URLs have no slug                                                  |
 | Day-precision dates     | End of UTC day, capped at first seen                                                                                                  | Prevents fresh Simplify jobs looking ~24 h old                                                                       |
 | Locations               | Named locations with token aliases + built-in Remote-US rule                                                                          | Sources format locations inconsistently                                                                              |
@@ -646,9 +663,10 @@ the app shell only; API requests are network-only.
   will push (they are genuinely new matches).
 - A new company's first successful poll is a baseline even if some of its jobs
   are minutes old (per requirements).
-- Exclude wins over level: "Software Engineer I/II" is excluded by `ii`. Role
-  keywords also admit "Solutions Engineer" / "Sales Engineer"; tune the exclude
-  list if that's noisy. `new york` also matches upstate "Albany, New York".
+- Unleveled board titles ("Software Engineer") include some roles that want a
+  few years of experience; turn on "Require a level keyword on company boards"
+  if that's noisy. `ny` / `new york` also match upstate ("Buffalo, NY").
+  `pnpm match-report` shows what passes and why the rest is rejected.
 - `needs_review` seeds whose slug 404s keep being polled (cheap 404s) until
   fixed or set to `manual_only`.
 - PC sleep / Windows Update reboots cause missed ticks; the boot tick catches

@@ -12,7 +12,7 @@ import { JobRow } from './job-row'
 import {
   activeFilterCount,
   CLEARED_FILTERS,
-  defaultAge,
+  DEFAULT_AGE,
   type FeedSearch,
   toJobQuery,
   type View,
@@ -119,7 +119,7 @@ export function FeedPage() {
   )
   const empty = EMPTY_COPY[view]
   const filtered = activeFilterCount(search) > 0
-  const narrowAge = (search.age ?? defaultAge(view)) !== 'all'
+  const narrowAge = (search.age ?? DEFAULT_AGE) !== 'all'
   const refreshing = jobs.isFetching && !jobs.isPending
 
   return (

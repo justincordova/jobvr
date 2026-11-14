@@ -1,5 +1,5 @@
 /** Bump whenever matching or normalization code changes; forces unconditional refetches. */
-export const FILTER_VERSION = 1;
+export const FILTER_VERSION = 2;
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -10,9 +10,9 @@ export const SCHEDULER_FIRST_TICK_MS = 10_000;
 export const DUE_TOLERANCE_MS = 60_000;
 
 /** Max effective age stored by the poller; also the in-memory dedupe window. */
-export const STORE_WINDOW_MS = 7 * DAY;
-/** new/hidden jobs older than this are deleted by cleanup. */
-export const RETENTION_MS = 30 * DAY;
+export const STORE_WINDOW_MS = 30 * DAY;
+/** new/hidden jobs older than this are deleted by cleanup; must exceed the store window. */
+export const RETENTION_MS = 45 * DAY;
 export const CLEANUP_INTERVAL_MS = DAY;
 
 export const POLL_BUDGET_MS = 5 * MINUTE;

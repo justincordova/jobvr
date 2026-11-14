@@ -137,7 +137,7 @@ export const runNotify = async (options: RunNotifyOptions): Promise<NotifySummar
   return locked.acquired ? locked.value : { sent: false, reason: "locked" };
 };
 
-/** Daily retention: drops new/hidden jobs older than 30 days (sources cascade). */
+/** Daily retention: drops new/hidden jobs older than 45 days (sources cascade). */
 export const runCleanup = async (options: {
   database: Database;
   force?: boolean;
