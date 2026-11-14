@@ -15,7 +15,8 @@
     "poll": "tsx --env-file-if-exists=../.env scripts/poll.ts",
     "seed": "tsx --env-file-if-exists=../.env scripts/seed.ts",
     "notify": "tsx --env-file-if-exists=../.env scripts/notify.ts",
-    "discover": "tsx --env-file-if-exists=../.env scripts/discover.ts"
+    "discover": "tsx --env-file-if-exists=../.env scripts/discover.ts",
+    "match-report": "tsx --env-file-if-exists=../.env scripts/match-report.ts"
   },
   "dependencies": {
     "@jobvr/core": "workspace:*",

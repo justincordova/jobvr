@@ -23,7 +23,8 @@
     "poll": "pnpm --filter @jobvr/poller poll",
     "seed": "pnpm --filter @jobvr/poller seed",
     "notify": "pnpm --filter @jobvr/poller notify",
-    "discover": "pnpm --filter @jobvr/poller discover"
+    "discover": "pnpm --filter @jobvr/poller discover",
+    "match-report": "pnpm --filter @jobvr/poller match-report"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.7",
