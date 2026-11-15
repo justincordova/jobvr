@@ -28,6 +28,7 @@ export const JobSchema = z
     baseline: z.boolean(),
     closedAt: isoNullable,
     isNew: z.boolean(),
+    entryLevel: z.boolean(),
     sources: z.array(JobSourceSchema),
   })
   .openapi("Job");

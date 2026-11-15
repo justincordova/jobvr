@@ -3,7 +3,7 @@ import type { JobState, TierFilter } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { companies, type JobRow, jobSources, jobs } from "../db/schema";
 import { NotFoundError } from "../errors";
-import { isVisible, matchedLocationLabels, type SourceKind } from "../matching";
+import { isEntryLevelTitle, isVisible, matchedLocationLabels, type SourceKind } from "../matching";
 import { startOfEasternDay } from "../schedule";
 import type { Settings } from "../settings";
 import { getAdapter } from "../sources/registry";
@@ -53,7 +53,8 @@ export interface JobRecord {
   sources: JobSourceView[];
 }
 
-export type JobWithFlags = JobRecord & { isNew: boolean };
+/** `entryLevel`: the title says so, or SimplifyJobs (a new-grad-only list) lists it. */
+export type JobWithFlags = JobRecord & { isNew: boolean; entryLevel: boolean };
 
 export interface JobList {
   jobs: JobWithFlags[];
@@ -211,7 +212,13 @@ export const listJobs = async (
   }
 
   return {
-    jobs: filtered.slice(0, MAX_JOBS).map((j) => ({ ...j, isNew: isNew(j) })),
+    jobs: filtered.slice(0, MAX_JOBS).map((j) => ({
+      ...j,
+      isNew: isNew(j),
+      entryLevel:
+        isEntryLevelTitle(j.title, s) ||
+        j.sources.some((src) => kindOf(src.source) === "aggregator"),
+    })),
     lastVisitAt,
     newSinceLastVisit,
   };

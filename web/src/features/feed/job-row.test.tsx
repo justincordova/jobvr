@@ -21,6 +21,7 @@ const job = (extra: Partial<Job> = {}): Job => ({
   baseline: false,
   closedAt: null,
   isNew: false,
+  entryLevel: true,
   sources: [
     { source: 'greenhouse', url: '', title: '', category: null, removedAt: null },
     { source: 'simplify', url: '', title: '', category: 'Software', removedAt: null },
@@ -52,6 +53,7 @@ describe('JobRow', () => {
     expect(screen.getByText('$120k–$150k')).toBeInTheDocument()
     expect(screen.getByText('Greenhouse')).toBeInTheDocument()
     expect(screen.getByText('via SimplifyJobs')).toBeInTheDocument()
+    expect(screen.getByText('Entry level')).toBeInTheDocument()
   })
 
   it('fires Applied, Save, and Hide', async () => {

@@ -83,6 +83,14 @@ export function JobRow({ job, highlighted, sourceLabel, onState, busy }: JobRowP
         </span>
 
         <div className="flex flex-wrap items-center gap-1.5">
+          {job.entryLevel && (
+            <Badge
+              tone="go"
+              title="The title says it’s entry level, or SimplifyJobs (new grad only) lists it"
+            >
+              Entry level
+            </Badge>
+          )}
           {salary && <span className="mr-0.5 font-mono text-xs text-go">{salary}</span>}
           {directSources.map((s) => (
             <Badge key={s}>{sourceLabel(s)}</Badge>
