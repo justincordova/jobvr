@@ -3,7 +3,7 @@
 "Verified" = a live or recent posting was found on that board. Confirm each via
 the API before seeding; if it fails, mark `needs_review` (don't drop it).
 (old) = from a 1–3 year old posting; the ATS may have changed.
-S/A tiers start with `track = false`.
+Every tier starts tracked (S and A included).
 
 ## Greenhouse — verified
 
@@ -82,8 +82,8 @@ Martin, JPMorgan Chase, Verizon, ADP, NJ Transit, Boeing, Vanguard
 - Tier A: Plaid, Ramp, Brex, Datadog, MongoDB
 
 Seeded with `ats = other`, `manual_only` unless `discover` finds them on a
-supported ATS, in which case they get that `ats`/`slug`, status ok, and stay
-`track = false` (S/A rule).
+supported ATS, in which case they get that `ats`/`slug`, status ok, and are
+tracked.
 
 ## Seeding rules
 
@@ -98,8 +98,7 @@ supported ATS, in which case they get that `ats`/`slug`, status ok, and stay
   kept with the listed ATS, no slug, `track = false`, `needs_review`.
 - Verified/"(old)" entries: `probe` the slug; responds → status ok; fails →
   `needs_review` (kept, never dropped). The "(old)" marker is dropped from the slug.
-- `track = true` unless the tier is S or A (then false), or the company is
-  `manual_only` / has no slug (then false).
+- `track = true` unless the company is `manual_only` / has no slug (then false).
 
 ## Discover results (2026-11-13)
 

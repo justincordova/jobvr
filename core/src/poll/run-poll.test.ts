@@ -196,7 +196,10 @@ describe("runPoll: baseline, filters, ETags", () => {
     expect((await getSettingsState(database.db)).lastPollAt).toEqual(clock);
   });
 
-  it("doesn't poll untracked, S-tier, or manual_only companies", async () => {
+  it("doesn't poll companies whose tier isn't tracked", async () => {
+    await updateSettings(database.db, {
+      tiersToTrack: ["Mid", "Startup", "Corporate", "Unlisted"],
+    });
     await addAcme({ tier: "S" });
     env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
     await poll();

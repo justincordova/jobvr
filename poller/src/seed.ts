@@ -29,8 +29,6 @@ export type SeedOutcome =
   | { name: string; result: "skipped" }
   | { name: string; result: "inserted"; status: string; track: boolean; jobCount?: number };
 
-const UNTRACKED_TIERS = new Set(["S", "A"]);
-
 /**
  * Insert-only seed: existing companies (by normalized name) are never touched.
  * Supported slugs are confirmed with `probe`; failures are kept as needs_review.
@@ -82,7 +80,7 @@ export const seedCompanies = async (
         status = "needs_review";
       }
     }
-    const track = Boolean(entry.slug) && !UNTRACKED_TIERS.has(entry.tier) && entry.track !== false;
+    const track = Boolean(entry.slug) && entry.track !== false;
     await createCompany(db, { ...base, ats: adapter.id, slug: entry.slug, track, status });
     outcomes.push({ name: entry.name, result: "inserted", status, track, jobCount });
   }

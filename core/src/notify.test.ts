@@ -97,13 +97,14 @@ describe("selectPushable", () => {
     await addJob("closed", { closedAt: ago(0.1) });
     await addJob("far", { locations: ["Austin, TX"] });
 
-    const ids = (await selectPushable(database, registry, DEFAULT_SETTINGS, NOW)).map((j) => j.id);
+    const withoutS = {
+      ...DEFAULT_SETTINGS,
+      tiersToTrack: DEFAULT_SETTINGS.tiersToTrack.filter((t) => t !== "S"),
+    };
+    const ids = (await selectPushable(database, registry, withoutS, NOW)).map((j) => j.id);
     expect(ids.sort()).toEqual(["corp", "ok", "saved"]);
 
-    const withS = {
-      ...DEFAULT_SETTINGS,
-      tiersToTrack: [...DEFAULT_SETTINGS.tiersToTrack, "S" as const],
-    };
+    const withS = DEFAULT_SETTINGS;
     expect((await selectPushable(database, registry, withS, NOW)).map((j) => j.id)).toContain(
       "s-tier",
     );

@@ -83,7 +83,7 @@ export const DEFAULT_SETTINGS: Settings = {
     },
     { label: REMOTE_US_LABEL, aliases: [], enabled: true, builtin: "remote_us" },
   ],
-  tiersToTrack: ["Mid", "Startup", "Corporate", "Unlisted"],
+  tiersToTrack: ["S", "A", "Mid", "Startup", "Corporate", "Unlisted"],
   roleKeywords: [
     "software",
     "developer",

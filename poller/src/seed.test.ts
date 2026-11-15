@@ -11,7 +11,7 @@ beforeAll(async () => {
 afterAll(() => database.close());
 
 describe("seedCompanies", () => {
-  it("probes slugs, applies the tier rule, and is insert-only", async () => {
+  it("probes slugs, tracks every tier with a slug, and is insert-only", async () => {
     const { http } = fakeHttp({
       "https://api.lever.co/v0/postings/BlueMatrix?mode=json": {
         status: "ok",
@@ -41,7 +41,7 @@ describe("seedCompanies", () => {
     const first = await seedCompanies(database.db, adapters, http, entries);
     expect(first).toEqual([
       { name: "BlueMatrix", result: "inserted", status: "ok", track: true, jobCount: 2 },
-      { name: "Duolingo", result: "inserted", status: "ok", track: false, jobCount: 0 },
+      { name: "Duolingo", result: "inserted", status: "ok", track: true, jobCount: 0 },
       { name: "Valon", result: "inserted", status: "needs_review", track: true },
       { name: "Aurora Innovation", result: "inserted", status: "needs_review", track: false },
       { name: "Bloomberg", result: "inserted", status: "manual_only", track: false },
