@@ -3,6 +3,7 @@ import { adjustedPostedAt } from "./freshness";
 import { containsSequence, matchesAnyKeyword, tokenize } from "./normalize";
 import type { Settings } from "./settings";
 import type { Salary } from "./sources/types";
+import { stateCode, stateName } from "./us-states";
 
 export type SourceKind = "ats" | "aggregator";
 
@@ -40,7 +41,7 @@ const NON_SOFTWARE = [
   "customer",
   "network",
 ];
-const GENERIC_ENGINEERING = ["engineer", "engineering"];
+const GENERIC_ENGINEERING = ["engineer", "engineering", "developer", "programmer"];
 
 /** True when the title says it's entry level (a level keyword, or "I" / "1"). */
 export const isEntryLevelTitle = (title: string, settings: Pick<Settings, "levelKeywords">) => {
@@ -55,11 +56,13 @@ export const isEntryLevelTitle = (title: string, settings: Pick<Settings, "level
  * 1. Exclude keywords always reject ("Senior", "Intern").
  * 2. Numbered experienced levels ("II", "3") reject unless the title is also
  *    entry level ("Engineer 1/2", "Engineer 2 New Grad").
- * 3. Company boards: a role keyword, or an entry-level generic engineering
- *    title ("New Grad Engineer"). A level keyword is optional unless
- *    "requireLevelOnBoards" is on, so plain "Software Engineer" roles count.
- * 4. SimplifyJobs (already new-grad only): trusted categories pass; other
- *    categories need a role keyword ("AI Engineer" under AI/ML/Data).
+ * 3. A role keyword passes ("Software Engineer", "AI Engineer"). A level
+ *    keyword is optional unless "requireLevelOnBoards" (company boards) or
+ *    "applyLevelToSimplify" (SimplifyJobs) is on.
+ * 4. Without a role keyword, a generic engineering title with no other
+ *    discipline ("Engineer 2 New Grad", not "Electrical Engineer") passes when
+ *    it's entry level on a board, or in a trusted SimplifyJobs category.
+ *    "AI Acceleration Specialist" never passes.
  */
 export const passesKeywordRule = (
   title: string,
@@ -73,17 +76,17 @@ export const passesKeywordRule = (
   if (!entry && tokens.some((t) => EXPERIENCED_LEVEL_TOKENS.has(t))) return false;
   const role = matchesAnyKeyword(tokens, settings.roleKeywords);
 
+  if (role) {
+    if (kind === "aggregator") return !settings.applyLevelToSimplify || entry;
+    return !settings.requireLevelOnBoards || entry;
+  }
+  const genericEngineering =
+    matchesAnyKeyword(tokens, GENERIC_ENGINEERING) && !matchesAnyKeyword(tokens, NON_SOFTWARE);
   if (kind === "aggregator") {
     if (settings.applyLevelToSimplify && !entry) return false;
-    return categoryAllowed(category, settings) || role;
+    return genericEngineering && categoryAllowed(category, settings);
   }
-  if (settings.requireLevelOnBoards && !entry) return false;
-  if (role) return true;
-  return (
-    entry &&
-    matchesAnyKeyword(tokens, GENERIC_ENGINEERING) &&
-    !matchesAnyKeyword(tokens, NON_SOFTWARE)
-  );
+  return entry && genericEngineering;
 };
 
 const US_SEQUENCES = [
@@ -108,19 +111,82 @@ export const isRemoteUs = (location: string): boolean => {
   return US_SEQUENCES.some((seq) => containsSequence(tokens, seq));
 };
 
+const COUNTRY_NAMES = new Set(US_SEQUENCES.map((seq) => seq.join(" ")));
+
+/** One place inside a location string; city/state are set for "City, ST" shapes. */
+interface Place {
+  raw: string;
+  tokens: string[];
+  city?: string[];
+  state?: string;
+}
+
+/**
+ * "New York, NY (HQ)" → city "new york", state "ny". A bare state ("NY",
+ * "New Jersey") becomes a city-less place named after the state, so "SF; NY"
+ * still reads as New York. Anything else ("NYC Office", "San Francisco, Seattle,
+ * New York") is left unstructured and matched by tokens.
+ */
+const parsePlace = (raw: string): Place => {
+  const tokens = tokenize(raw);
+  let segments = raw
+    .replace(/\([^)]*\)/g, " ")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const last = segments.at(-1);
+  if (segments.length > 1 && last && COUNTRY_NAMES.has(tokenize(last).join(" "))) {
+    segments = segments.slice(0, -1);
+  }
+  const [first, second] = segments;
+  if (segments.length === 1 && first) {
+    const code = stateCode(first);
+    const name = code && stateName(code);
+    if (name) return { raw, tokens, city: tokenize(name) };
+  }
+  if (segments.length === 2 && first && second) {
+    const code = stateCode(second);
+    if (code) return { raw, tokens, city: tokenize(first), state: code };
+  }
+  return { raw, tokens };
+};
+
+const splitPlaces = (location: string): Place[] =>
+  location
+    .split(/[;|]/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map(parsePlace);
+
+/**
+ * A "City, ST" place must be in one of the location's home states (states named
+ * by its aliases), so "Brooklyn Park, MN" isn't NYC. A two-letter state alias
+ * ("nj") matches the whole state; other aliases must match the city, so
+ * "Buffalo, NY" isn't NYC either.
+ */
+const placeMatches = (place: Place, aliases: readonly string[]): boolean => {
+  if (place.state) {
+    const home = new Set(aliases.map(stateCode).filter((c): c is string => c !== null));
+    if (home.size > 0 && !home.has(place.state)) return false;
+    if (aliases.some((a) => a.trim().toLowerCase() === place.state)) return true;
+    return matchesAnyKeyword(place.city ?? [], aliases);
+  }
+  return matchesAnyKeyword(place.city ?? place.tokens, aliases);
+};
+
 /** Labels of the enabled named locations matched by any of the location strings. */
 export const matchedLocationLabels = (
   locations: readonly string[],
   settings: Pick<Settings, "locations">,
 ): string[] => {
-  const tokenized = locations.map((l) => ({ raw: l, tokens: tokenize(l) }));
+  const places = locations.flatMap(splitPlaces);
   const labels: string[] = [];
   for (const loc of settings.locations) {
     if (!loc.enabled) continue;
     const hit =
       loc.builtin === "remote_us"
-        ? tokenized.some((t) => isRemoteUs(t.raw))
-        : tokenized.some((t) => matchesAnyKeyword(t.tokens, loc.aliases));
+        ? places.some((p) => isRemoteUs(p.raw))
+        : places.some((p) => placeMatches(p, loc.aliases));
     if (hit) labels.push(loc.label);
   }
   return labels;

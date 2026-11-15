@@ -132,13 +132,13 @@ describe("runNotify", () => {
     expect((await getSettingsState(database.db)).lastPushAt).toEqual(NOW);
 
     await addJob("c", { firstSeenAt: NOW, effectiveAt: NOW });
-    const later = new Date(NOW.getTime() + 30 * 60_000);
+    const later = new Date(NOW.getTime() + 15 * 60_000);
     expect(await runNotify({ database, registry, notifier, now: () => later })).toEqual({
       sent: false,
       reason: "not_due",
     });
-    const hourLater = new Date(NOW.getTime() + 59 * 60_000);
-    const third = await runNotify({ database, registry, notifier, now: () => hourLater });
+    const nextInterval = new Date(NOW.getTime() + 30 * 60_000);
+    const third = await runNotify({ database, registry, notifier, now: () => nextInterval });
     expect(third.sent).toBe(true);
     expect(sent[1]?.body).toBe("1 new job");
   });

@@ -27,6 +27,7 @@ describe("keyword rule", () => {
       "Software Engineer 1/2",
       "Engineer 2, New Grad",
       "New Grad Engineer",
+      "Machine Learning Compiler Engineer",
     ]) {
       expect(ats(t), t).toBe(true);
     }
@@ -43,6 +44,9 @@ describe("keyword rule", () => {
       "Associate Legal Engineer",
       "Junior Electrical Engineer",
       "Head of Engineering",
+      "Research Engineer / Scientist, Reinforcement Learning",
+      "Technical Curriculum Developer, Technical Enablement",
+      "Developer Advocate",
     ]) {
       expect(ats(t), t).toBe(false);
     }
@@ -59,7 +63,11 @@ describe("keyword rule", () => {
     const sj = (t: string, category: string, settings: Settings = S) =>
       passesKeywordRule(t, "aggregator", settings, category);
     expect(sj("Engineer 2 New Grad - Multiple Teams", "Software")).toBe(true);
-    expect(sj("Product Builder, Early Career", "Software")).toBe(true);
+    expect(sj("Entry Level Engineer - Multiple Teams", "Software")).toBe(true);
+    expect(sj("Application Development Analyst New Grad", "Software")).toBe(true);
+    // Trusted category still needs an engineering-sounding title
+    expect(sj("AI Acceleration Specialist", "Software")).toBe(false);
+    expect(sj("Associate Application Consultant", "Software")).toBe(false);
     expect(sj("AI Engineer", "AI/ML/Data")).toBe(true);
     expect(sj("Associate Data Engineer", "AI/ML/Data")).toBe(true);
     expect(sj("Data Analyst - Transplant Nephrology", "AI/ML/Data")).toBe(false);
@@ -106,6 +114,15 @@ describe("location rule", () => {
     ]);
     expect(matchedLocationLabels(["Pittsburgh, PA"], S)).toEqual(["PA"]);
     expect(matchedLocationLabels(["SF", "NY"], S)).toEqual(["NYC"]);
+    expect(matchedLocationLabels(["New York, New York, United States"], S)).toEqual(["NYC"]);
+    expect(matchedLocationLabels(["San Francisco, Seattle, New York"], S)).toEqual(["NYC"]);
+    expect(matchedLocationLabels(["Seattle, WA; New York City, NY (HQ)"], S)).toEqual(["NYC"]);
+    // NJ and PA are statewide; NYC is the city only
+    expect(matchedLocationLabels(["Mt Laurel Township, NJ"], S)).toEqual(["NJ"]);
+    expect(matchedLocationLabels(["Philadelphia, Pennsylvania"], S)).toEqual(["PA"]);
+    for (const elsewhere of ["Brooklyn Park, MN", "Manhattan, KS", "Buffalo, NY", "Newark, DE"]) {
+      expect(matchedLocationLabels([elsewhere], S), elsewhere).toEqual([]);
+    }
     expect(matchedLocationLabels(["Hoboken"], S)).toEqual(["NJ"]);
     expect(matchedLocationLabels(["San Francisco, CA", "Remote in UK"], S)).toEqual([]);
     const noRemote: Settings = {
@@ -236,7 +253,7 @@ describe("poll filter and visibility", () => {
     const simplifyOnly = { ...job, sources: [sj] };
     expect(isVisible(simplifyOnly, S, kindOf)).toBe(true);
     expect(isVisible(simplifyOnly, { ...S, showSimplifyJobs: false }, kindOf)).toBe(false);
-    const builder = { ...sj, title: "Product Builder, Early Career" };
+    const builder = { ...sj, title: "Entry Level Engineer" };
     expect(isVisible({ ...job, sources: [builder] }, S, kindOf)).toBe(true);
     expect(
       isVisible({ ...job, sources: [builder] }, { ...S, simplifyCategories: ["Data"] }, kindOf),
