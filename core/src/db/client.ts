@@ -15,7 +15,16 @@ export interface Database {
 }
 
 export const createDatabase = (url: string, options: { max?: number } = {}): Database => {
-  const pool = new pg.Pool({ connectionString: url, max: options.max ?? 10 });
+  const pool = new pg.Pool({
+    connectionString: url,
+    max: options.max ?? 10,
+    // Without these, a Postgres restart leaves dead sockets that hang queries
+    // forever and exhaust the pool; with them the app recovers on its own
+    keepAlive: true,
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 30_000,
+    query_timeout: 60_000,
+  });
   // An idle client error (e.g. Postgres restarted) must not crash the process
   pool.on("error", () => {});
   const db = drizzle(pool, { schema });
