@@ -115,9 +115,16 @@ the outcome. Hits were spot-checked against job locations before use.
   Woolpert (Greenhouse); Traba, Chalk, Prelim, PointOne, HIFI, Confido (Ashby);
   FreedomPay, SoundStack (Lever). The rest are `manual_only`. Journey Robotics
   is `manual_only` (the `journey` board is an architecture firm).
-- Reference found (track = false): Stripe, Jane Street, Brex, Datadog, MongoDB
-  (Greenhouse); Cursor, Plaid, Ramp (Ashby). HRT's Ashby board has no jobs and
+- S/A tiers found (tracked since Nov 2026): Stripe, Jane Street, Brex, Datadog,
+  MongoDB (Greenhouse); Cursor, Plaid, Ramp (Ashby). HRT's Ashby board has no jobs and
   isn't confirmed, so HRT stays `manual_only`.
-- Still 404 everywhere (kept as `needs_review`): Govini, Harmonic (the Ashby
-  `harmonic` board is a different Palo Alto company), Thirty Madison, Redpanda,
-  Regal, Seek AI, Trayd.
+- The last seven 404s, resolved Nov 2026 from each company's careers page:
+  - Govini rebranded to **Air** (June 2026): Greenhouse `air`.
+  - Harmonic (harmonic.ai, NYC): Ashby `harmonic-ai` (the Ashby `harmonic`
+    board is a different Palo Alto company).
+  - Thirty Madison was acquired by **Remedy**: Greenhouse `remedy`.
+  - Redpanda: Ashby `redpanda-data`.
+  - Regal: Lever `regal.ai` (the slug contains a dot; `regalvoice` is gone).
+  - Trayd (buildtrayd.com) hires through Gem, which isn't supported:
+    `manual_only` with its careers URL.
+  - Seek AI was acquired by IBM (2025): removed.

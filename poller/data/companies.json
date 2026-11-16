@@ -16,12 +16,13 @@
     "slug": "duolingo"
   },
   {
-    "name": "Govini",
+    "name": "Air",
     "city": "Pittsburgh",
     "state": "PA",
     "tier": "Startup",
     "ats": "greenhouse",
-    "slug": "govini"
+    "slug": "air",
+    "notes": "Formerly Govini (rebranded June 2026)"
   },
   {
     "name": "Airtable",
@@ -36,8 +37,9 @@
     "city": "NYC",
     "state": "NY",
     "tier": "Startup",
-    "ats": "greenhouse",
-    "slug": "harmonic"
+    "ats": "ashby",
+    "slug": "harmonic-ai",
+    "notes": "harmonic.ai; the Ashby \"harmonic\" board is a different company"
   },
   {
     "name": "NYT",
@@ -80,20 +82,21 @@
     "slug": "braze"
   },
   {
-    "name": "Thirty Madison",
-    "city": "NYC",
-    "state": "NY",
+    "name": "Remedy",
+    "city": "NJ/Remote",
+    "state": "NJ",
     "tier": "Startup",
     "ats": "greenhouse",
-    "slug": "thirtymadison"
+    "slug": "remedy",
+    "notes": "Acquired Thirty Madison"
   },
   {
     "name": "Redpanda",
     "city": "NYC/Remote",
     "state": "NY",
     "tier": "Startup",
-    "ats": "greenhouse",
-    "slug": "redpandadata"
+    "ats": "ashby",
+    "slug": "redpanda-data"
   },
   {
     "name": "Gopuff",
@@ -141,7 +144,7 @@
     "state": "NY",
     "tier": "Startup",
     "ats": "lever",
-    "slug": "regalvoice"
+    "slug": "regal.ai"
   },
   {
     "name": "Duranta",
@@ -158,14 +161,6 @@
     "tier": "Startup",
     "ats": "lever",
     "slug": "RadicalAI"
-  },
-  {
-    "name": "Seek AI",
-    "city": "NYC",
-    "state": "NY",
-    "tier": "Startup",
-    "ats": "lever",
-    "slug": "seekai"
   },
   {
     "name": "Palantir",
@@ -236,8 +231,9 @@
     "city": "NYC",
     "state": "NY",
     "tier": "Startup",
-    "ats": "ashby",
-    "slug": "trayd"
+    "ats": "other",
+    "careersUrl": "https://www.buildtrayd.com/careers",
+    "notes": "Hires through Gem (unsupported ATS)"
   },
   {
     "name": "LiveKit",
