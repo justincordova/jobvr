@@ -12,6 +12,8 @@ export interface FeedSearch {
   tier?: TierFilter[]
   source?: string[]
   company?: string[]
+  /** Only jobs flagged entry level. */
+  level?: 'entry'
 }
 
 const strings = (v: unknown): string[] | undefined => {
@@ -34,6 +36,7 @@ export function parseFeedSearch(raw: Record<string, unknown>): FeedSearch {
     tier: tiers?.length ? tiers : undefined,
     source: strings(raw.source),
     company: strings(raw.company),
+    level: raw.level === 'entry' ? 'entry' : undefined,
   }
 }
 
@@ -47,6 +50,7 @@ export function toJobQuery(s: FeedSearch) {
     tier: csv(s.tier),
     source: csv(s.source),
     company: csv(s.company),
+    level: s.level,
   }
   return Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined)) as {
     view?: View
@@ -55,6 +59,7 @@ export function toJobQuery(s: FeedSearch) {
     tier?: string
     source?: string
     company?: string
+    level?: 'entry'
   }
 }
 
@@ -65,7 +70,8 @@ export const CLEARED_FILTERS = {
   tier: undefined,
   source: undefined,
   company: undefined,
+  level: undefined,
 } satisfies Partial<FeedSearch>
 
 export const activeFilterCount = (s: FeedSearch) =>
-  [s.location, s.tier, s.source, s.company].filter((v) => v?.length).length
+  [s.location, s.tier, s.source, s.company, s.level].filter((v) => v?.length).length

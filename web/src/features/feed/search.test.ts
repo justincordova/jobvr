@@ -12,6 +12,7 @@ describe('feed search params', () => {
       tier: ['Mid'],
       source: undefined,
       company: undefined,
+      level: undefined,
     })
   })
 

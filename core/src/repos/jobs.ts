@@ -23,6 +23,8 @@ export interface JobQuery {
   company?: string[];
   tier?: TierFilter[];
   source?: string[];
+  /** "entry": only entry-level jobs (see `entryLevel`). */
+  level?: "entry";
 }
 
 export interface JobSourceView {
@@ -175,6 +177,8 @@ export const listJobs = async (
   if (cutoff) conds.push(gte(jobs.effectiveAt, cutoff));
   if (applyV) conds.push(isNull(jobs.closedAt));
 
+  const entryLevel = (j: JobRecord) =>
+    isEntryLevelTitle(j.title, s) || j.sources.some((src) => kindOf(src.source) === "aggregator");
   const isNew = (j: JobRecord) =>
     lastVisitAt !== null && j.firstSeenAt > lastVisitAt && isFreshMatch(j, s, kindOf, now);
 
@@ -193,6 +197,7 @@ export const listJobs = async (
     if (query.source?.length && !j.sources.some((src) => query.source?.includes(src.source))) {
       return false;
     }
+    if (query.level === "entry" && !entryLevel(j)) return false;
     return true;
   });
 
@@ -215,9 +220,7 @@ export const listJobs = async (
     jobs: filtered.slice(0, MAX_JOBS).map((j) => ({
       ...j,
       isNew: isNew(j),
-      entryLevel:
-        isEntryLevelTitle(j.title, s) ||
-        j.sources.some((src) => kindOf(src.source) === "aggregator"),
+      entryLevel: entryLevel(j),
     })),
     lastVisitAt,
     newSinceLastVisit,

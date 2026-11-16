@@ -40,6 +40,8 @@ export const JobListQuery = z.object({
   company: csv(z.string()).openapi({ example: "unlisted" }),
   tier: csv(z.enum(TIER_FILTERS)).openapi({ example: "Startup,Mid" }),
   source: csv(z.string()).openapi({ example: "greenhouse,simplify" }),
+  /** `entry`: only jobs flagged entry level. */
+  level: z.enum(["entry"]).optional(),
 });
 
 export const JobListResponse = envelope(

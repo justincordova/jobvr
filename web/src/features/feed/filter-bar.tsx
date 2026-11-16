@@ -2,6 +2,7 @@ import { ChevronDown, SlidersHorizontal, X } from 'lucide-react'
 import { useState } from 'react'
 import { NativeSelect } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
+import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/cn'
 import { TIER_FILTERS, type Company } from '@/lib/types'
 import {
@@ -151,6 +152,20 @@ export function FilterBar({ search, onChange, locations, sources, companies }: F
       >
         <div className="min-h-0 overflow-hidden">
           <div className="mt-3 grid gap-4 rounded-xl border border-line bg-panel/70 p-4 sm:grid-cols-2">
+            <label className="flex cursor-pointer items-center justify-between gap-4 sm:col-span-2">
+              <span>
+                <span className="block text-sm font-medium">Entry level only</span>
+                <span className="block text-xs text-dim">
+                  Titles that say new grad, junior, I, and so on, plus everything from SimplifyJobs.
+                  Hides plain “Software Engineer” board roles.
+                </span>
+              </span>
+              <Switch
+                checked={search.level === 'entry'}
+                onCheckedChange={(on) => onChange({ level: on ? 'entry' : undefined })}
+                aria-label="Entry level only"
+              />
+            </label>
             <ChipGroup
               label="Location"
               options={locations.map((l) => ({ id: l, label: l }))}

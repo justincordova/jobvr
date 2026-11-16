@@ -86,6 +86,26 @@ describe("jobs routes", () => {
     if (!ghData.success) throw new Error("expected success");
     expect(ghData.data.jobs.map((j) => j.id)).toEqual(["gh:2"]);
 
+    // A plain board title isn't entry level; SimplifyJobs rows always are
+    await insertJob(
+      "gh:7",
+      { effectiveAt: at(3) },
+      {
+        source: "greenhouse",
+        title: "Software Engineer, Payments",
+        category: null,
+      },
+    );
+    const entry = await body<{ data: { jobs: { id: string; entryLevel: boolean }[] } }>(
+      await client.api.jobs.$get({ query: { level: "entry" } }),
+    );
+    expect(entry.data.jobs.map((j) => j.id)).toEqual(["gh:2", "sj:6", "gh:1", "gh:5"]);
+    expect(entry.data.jobs.every((j) => j.entryLevel)).toBe(true);
+    const everything = await body<{ data: { jobs: { id: string; entryLevel: boolean }[] } }>(
+      await client.api.jobs.$get({ query: {} }),
+    );
+    expect(everything.data.jobs.find((j) => j.id === "gh:7")?.entryLevel).toBe(false);
+
     const hidden = await body<{ data: { jobs: { id: string }[] } }>(
       await client.api.jobs.$get({ query: { view: "hidden" } }),
     );
