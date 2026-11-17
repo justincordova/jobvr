@@ -14,3 +14,6 @@ backups/
 *.local
 dev-dist/
 .vitest/
+
+# Read-only reference repos (local only)
+refs/
