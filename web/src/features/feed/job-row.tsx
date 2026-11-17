@@ -7,6 +7,8 @@ import { vtName } from '@/lib/motion'
 import type { Job } from '@/lib/types'
 import { FEED_GRID } from './columns'
 
+const REMOTE_US = 'Remote - US'
+
 interface JobRowProps {
   job: Job
   highlighted: boolean
@@ -15,13 +17,23 @@ interface JobRowProps {
   busy: boolean
 }
 
+/** Matching places first ("King of Prussia, PA" before "Farmington Hills, MI"), then a count. */
+function placeSummary(job: Job, shown: number) {
+  const rest = job.locations.filter((l) => !job.matchedLocations.includes(l))
+  // "Remote - US" is added by the adapters for matching; redundant next to "Remote (US)"
+  const ordered = [...job.matchedLocations, ...rest].filter(
+    (l, _, all) => l !== REMOTE_US || !all.some((o) => o !== l && /remote/i.test(o)),
+  )
+  const extra = ordered.length - shown
+  return `${ordered.slice(0, shown).join(' · ')}${extra > 0 ? ` +${extra}` : ''}`
+}
+
 export function JobRow({ job, highlighted, sourceLabel, onState, busy }: JobRowProps) {
   const salary = salaryRange(job.salaryMinUsd, job.salaryMaxUsd)
-  const viaSimplify = job.sources.some((s) => s.source === 'simplify')
-  const directSources = [...new Set(job.sources.map((s) => s.source))].filter(
-    (s) => s !== 'simplify',
-  )
+  const sources = [...new Set(job.sources.map((s) => sourceLabel(s.source)))].join(' · ')
+  const years = Math.max(0, ...job.sources.map((s) => s.requiredYears ?? 0))
   const closed = job.closedAt !== null
+  const allPlaces = job.locations.join(' · ')
 
   return (
     <li
@@ -68,21 +80,26 @@ export function JobRow({ job, highlighted, sourceLabel, onState, busy }: JobRowP
             <span className="lg:truncate">{job.title}</span>
             <ExternalLink className="size-3 shrink-0 translate-y-px text-faint opacity-0 transition-opacity group-hover:opacity-100 max-sm:hidden" />
           </a>
-          <div className="mt-0.5 flex items-center gap-2">
-            <span className="truncate text-paper/85">{job.companyName}</span>
-            <Badge tone={job.tier === 'Unlisted' ? 'neutral' : 'info'}>{job.tier}</Badge>
+          <div className="mt-0.5 flex min-w-0 items-center gap-2">
+            <span className="shrink-0 truncate text-paper/85 max-lg:max-w-[60%]">
+              {job.companyName}
+            </span>
+            {job.tier !== 'Unlisted' && <Badge tone="info">{job.tier}</Badge>}
+            {/* Small screens: the location shares the company line */}
+            <span className="min-w-0 truncate lg:hidden" title={allPlaces}>
+              <span aria-hidden className="mr-2 text-faint">
+                ·
+              </span>
+              {placeSummary(job, 1)}
+            </span>
           </div>
         </div>
 
-        <span
-          className="truncate lg:line-clamp-2 lg:whitespace-normal"
-          title={job.locations.join(' · ')}
-        >
-          {job.locations.slice(0, 3).join(' · ')}
-          {job.locations.length > 3 && ` +${job.locations.length - 3}`}
+        <span className="hidden lg:line-clamp-2" title={allPlaces}>
+          {placeSummary(job, 2)}
         </span>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {job.entryLevel && (
             <Badge
               tone="go"
@@ -91,11 +108,13 @@ export function JobRow({ job, highlighted, sourceLabel, onState, busy }: JobRowP
               Entry level
             </Badge>
           )}
-          {salary && <span className="mr-0.5 font-mono text-xs text-go">{salary}</span>}
-          {directSources.map((s) => (
-            <Badge key={s}>{sourceLabel(s)}</Badge>
-          ))}
-          {viaSimplify && <Badge tone="neutral">via SimplifyJobs</Badge>}
+          {years > 0 && (
+            <Badge title={`The description asks for ${years}+ years of experience`}>
+              {years}+ yrs
+            </Badge>
+          )}
+          {salary && <span className="font-mono text-xs text-go">{salary}</span>}
+          <span className="font-mono text-[0.68rem] text-faint">{sources}</span>
           {job.state === 'saved' && <Badge tone="signal">Saved</Badge>}
           {job.state === 'applied' && <Badge tone="go">Applied</Badge>}
           {closed && <Badge tone="stop">Closed</Badge>}
@@ -118,13 +137,15 @@ export function JobRow({ job, highlighted, sourceLabel, onState, busy }: JobRowP
               <Check /> Applied
             </Button>
             {job.state === 'saved' ? (
-              <Button size="sm" onClick={() => onState('new')} disabled={busy} aria-label="Unsave">
-                <BookmarkCheck className="text-signal" /> Unsave
+              <Button size="sm" onClick={() => onState('new')} disabled={busy}>
+                <BookmarkCheck className="text-signal" />
+                <span className="max-sm:sr-only">Unsave</span>
               </Button>
             ) : (
               job.state !== 'hidden' && (
                 <Button size="sm" onClick={() => onState('saved')} disabled={busy}>
-                  <Bookmark /> Save
+                  <Bookmark />
+                  <span className="max-sm:sr-only">Save</span>
                 </Button>
               )
             )}
@@ -133,14 +154,9 @@ export function JobRow({ job, highlighted, sourceLabel, onState, busy }: JobRowP
                 <Eye /> Unhide
               </Button>
             ) : (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onState('hidden')}
-                disabled={busy}
-                aria-label="Hide"
-              >
-                <EyeOff /> <span className="hidden sm:inline">Hide</span>
+              <Button size="sm" variant="ghost" onClick={() => onState('hidden')} disabled={busy}>
+                <EyeOff />
+                <span className="max-sm:sr-only">Hide</span>
               </Button>
             )}
           </>

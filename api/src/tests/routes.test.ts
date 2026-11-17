@@ -89,7 +89,7 @@ describe("jobs routes", () => {
     // A plain board title isn't entry level; SimplifyJobs rows always are
     await insertJob(
       "gh:7",
-      { effectiveAt: at(3) },
+      { effectiveAt: at(3), locations: ["Austin, TX", "New York, NY"] },
       {
         source: "greenhouse",
         title: "Software Engineer, Payments",
@@ -101,10 +101,13 @@ describe("jobs routes", () => {
     );
     expect(entry.data.jobs.map((j) => j.id)).toEqual(["gh:2", "sj:6", "gh:1", "gh:5"]);
     expect(entry.data.jobs.every((j) => j.entryLevel)).toBe(true);
-    const everything = await body<{ data: { jobs: { id: string; entryLevel: boolean }[] } }>(
-      await client.api.jobs.$get({ query: {} }),
-    );
-    expect(everything.data.jobs.find((j) => j.id === "gh:7")?.entryLevel).toBe(false);
+    const everything = await body<{
+      data: { jobs: { id: string; entryLevel: boolean; matchedLocations: string[] }[] };
+    }>(await client.api.jobs.$get({ query: {} }));
+    const plain = everything.data.jobs.find((j) => j.id === "gh:7");
+    expect(plain?.entryLevel).toBe(false);
+    // Only the location that matched a named location, so the feed can show it first
+    expect(plain?.matchedLocations).toEqual(["New York, NY"]);
 
     const hidden = await body<{ data: { jobs: { id: string }[] } }>(
       await client.api.jobs.$get({ query: { view: "hidden" } }),

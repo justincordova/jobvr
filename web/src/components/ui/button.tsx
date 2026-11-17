@@ -17,9 +17,10 @@ const buttonVariants = cva(
         link: 'text-signal underline-offset-4 hover:underline active:scale-100',
       },
       size: {
-        sm: 'h-8 px-2.5 text-xs',
-        md: 'h-9 px-3.5',
-        icon: 'size-8',
+        // Touch screens get 44px targets; mouse users keep the dense sizes
+        sm: 'h-8 px-2.5 text-xs pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:px-3',
+        md: 'h-9 px-3.5 pointer-coarse:h-11',
+        icon: 'size-8 pointer-coarse:size-11',
       },
     },
     defaultVariants: { variant: 'secondary', size: 'md' },

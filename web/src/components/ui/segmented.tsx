@@ -52,7 +52,7 @@ export function Segmented<T extends string>({
           tabIndex={value === o.id ? 0 : -1}
           onClick={() => onChange(o.id)}
           className={cn(
-            'relative rounded-md px-2.5 py-1 text-sm whitespace-nowrap transition-colors duration-200',
+            'relative rounded-md px-2.5 py-1 text-sm whitespace-nowrap transition-colors duration-200 pointer-coarse:py-2.5',
             value === o.id ? 'text-paper' : 'text-dim hover:text-paper',
           )}
         >

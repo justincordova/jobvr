@@ -14,7 +14,8 @@
   --color-line-strong: #39424f;
   --color-paper: #ece6d9;
   --color-dim: #9aa1ab;
-  --color-faint: #636b76;
+  /* 4.8:1 on ink, 4.6:1 on panel (WCAG AA for small text) */
+  --color-faint: #7a828d;
   --color-signal: #f2b33d;
   --color-signal-ink: #1b1405;
   --color-signal-soft: #f2b33d1f;

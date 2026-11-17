@@ -3,7 +3,13 @@ import type { JobState, TierFilter } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { companies, type JobRow, jobSources, jobs } from "../db/schema";
 import { NotFoundError } from "../errors";
-import { isEntryLevelTitle, isVisible, matchedLocationLabels, type SourceKind } from "../matching";
+import {
+  isEntryLevelTitle,
+  isVisible,
+  matchedLocationLabels,
+  passesLocationRule,
+  type SourceKind,
+} from "../matching";
 import { startOfEasternDay } from "../schedule";
 import type { Settings } from "../settings";
 import { getAdapter } from "../sources/registry";
@@ -56,8 +62,16 @@ export interface JobRecord {
   sources: JobSourceView[];
 }
 
-/** `entryLevel`: the title says so, or SimplifyJobs (a new-grad-only list) lists it. */
-export type JobWithFlags = JobRecord & { isNew: boolean; entryLevel: boolean };
+/**
+ * `entryLevel`: the title says so, or SimplifyJobs (a new-grad-only list) lists it.
+ * `matchedLocations`: the location strings that match an enabled location, so
+ * the feed can show "King of Prussia, PA" before "Farmington Hills, MI".
+ */
+export type JobWithFlags = JobRecord & {
+  isNew: boolean;
+  entryLevel: boolean;
+  matchedLocations: string[];
+};
 
 export interface JobList {
   jobs: JobWithFlags[];
@@ -223,6 +237,7 @@ export const listJobs = async (
       ...j,
       isNew: isNew(j),
       entryLevel: entryLevel(j),
+      matchedLocations: j.locations.filter((l) => passesLocationRule([l], s)),
     })),
     lastVisitAt,
     newSinceLastVisit,

@@ -48,7 +48,7 @@ function ChipGroup({
             aria-pressed={set.has(o.id)}
             onClick={() => toggle(o.id)}
             className={cn(
-              'rounded-full border px-2.5 py-0.5 text-[0.8rem] transition-[color,background-color,border-color,scale] duration-150 active:scale-95',
+              'rounded-full border px-2.5 py-0.5 text-[0.8rem] transition-[color,background-color,border-color,scale] duration-150 active:scale-95 pointer-coarse:px-3.5 pointer-coarse:py-2.5',
               set.has(o.id)
                 ? 'border-signal/60 bg-signal-soft text-signal'
                 : 'border-line text-dim hover:border-line-strong hover:text-paper',
@@ -111,7 +111,7 @@ export function FilterBar({ search, onChange, locations, sources, companies }: F
           aria-controls="feed-filters"
           onClick={() => setOpen((o) => !o)}
           className={cn(
-            'inline-flex h-[2.15rem] items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors duration-200',
+            'inline-flex h-[2.15rem] items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors duration-200 pointer-coarse:h-11',
             open || active
               ? 'border-line-strong bg-raised text-paper'
               : 'border-line text-dim hover:text-paper',
@@ -135,7 +135,7 @@ export function FilterBar({ search, onChange, locations, sources, companies }: F
           <button
             type="button"
             onClick={() => onChange(CLEARED_FILTERS)}
-            className="inline-flex animate-fade-in items-center gap-1 rounded-md px-1.5 py-1 text-sm text-faint transition-colors hover:text-paper"
+            className="inline-flex animate-fade-in items-center gap-1 rounded-md px-1.5 py-1 text-sm text-faint transition-colors hover:text-paper pointer-coarse:h-11 pointer-coarse:px-3"
           >
             <X className="size-3.5" /> Clear
           </button>

@@ -156,7 +156,7 @@ export function FeedPage() {
             type="button"
             onClick={() => setBannerOpen(false)}
             aria-label="Dismiss"
-            className="rounded-md p-1 text-dim transition-colors hover:bg-signal-soft hover:text-paper"
+            className="-my-1 rounded-md p-1 text-dim transition-colors hover:bg-signal-soft hover:text-paper pointer-coarse:-my-2.5 pointer-coarse:p-3"
           >
             <X className="size-4" />
           </button>

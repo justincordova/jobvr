@@ -31,6 +31,8 @@ export const JobSchema = z
     closedAt: isoNullable,
     isNew: z.boolean(),
     entryLevel: z.boolean(),
+    /** The location strings that match an enabled location (shown first). */
+    matchedLocations: z.array(z.string()),
     sources: z.array(JobSourceSchema),
   })
   .openapi("Job");

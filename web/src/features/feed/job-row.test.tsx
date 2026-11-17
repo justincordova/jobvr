@@ -22,6 +22,7 @@ const job = (extra: Partial<Job> = {}): Job => ({
   closedAt: null,
   isNew: false,
   entryLevel: true,
+  matchedLocations: ['New York, NY'],
   sources: [
     { source: 'greenhouse', url: '', title: '', category: null, removedAt: null, requiredYears: 0 },
     {
@@ -53,14 +54,37 @@ const renderRow = (j: Job, highlighted = false) => {
 }
 
 describe('JobRow', () => {
-  it('shows age, salary, sources, and the Simplify badge', () => {
+  it('shows age, salary, tier, sources, and the entry-level badge', () => {
     renderRow(job(), true)
     expect(screen.getByText('2h')).toBeInTheDocument()
     expect(screen.getByText('NEW')).toBeInTheDocument()
     expect(screen.getByText('$120k–$150k')).toBeInTheDocument()
-    expect(screen.getByText('Greenhouse')).toBeInTheDocument()
-    expect(screen.getByText('via SimplifyJobs')).toBeInTheDocument()
+    expect(screen.getByText('Startup')).toBeInTheDocument()
+    expect(screen.getByText('Greenhouse · simplify')).toBeInTheDocument()
     expect(screen.getByText('Entry level')).toBeInTheDocument()
+    expect(screen.queryByText(/yrs/)).not.toBeInTheDocument()
+  })
+
+  it('leads with the matching location and skips the Unlisted tier', () => {
+    renderRow(
+      job({
+        tier: 'Unlisted',
+        locations: ['Farmington Hills, MI', 'King of Prussia, PA', 'Houston, TX'],
+        matchedLocations: ['King of Prussia, PA'],
+      }),
+    )
+    expect(screen.queryByText('Unlisted')).not.toBeInTheDocument()
+    // Phone line shows one place, the desktop column two
+    expect(screen.getByText('King of Prussia, PA +2')).toBeInTheDocument()
+    expect(screen.getByText('King of Prussia, PA · Farmington Hills, MI +1')).toBeInTheDocument()
+  })
+
+  it('shows the experience a description asks for', () => {
+    const base = job()
+    const [gh, sj] = base.sources
+    if (!gh || !sj) throw new Error('fixture')
+    renderRow({ ...base, sources: [{ ...gh, requiredYears: 2 }, sj] })
+    expect(screen.getByText('2+ yrs')).toBeInTheDocument()
   })
 
   it('fires Applied, Save, and Hide', async () => {
