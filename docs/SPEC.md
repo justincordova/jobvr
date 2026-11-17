@@ -142,7 +142,10 @@ interface SourceAdapter {
   concurrency: number; // max in-flight fetches for this source
   fetch(ctx: FetchCtx): Promise<FetchResult>; // ctx: { slug?, companyName?, etag?, signal, http }
   parseUrl?(url: string): { sourceJobId: string; slug?: string } | null; // ats only
-  probe?(slug: string, ctx: ProbeCtx): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
+  probe?(
+    slug: string,
+    ctx: ProbeCtx,
+  ): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
   // Sources whose list has no description (Greenhouse): one job's description and pay; null when gone
   fetchDetail?(
     slug: string,
@@ -456,8 +459,10 @@ window, 180 days)` (everything the poll filter can still store).
      time per target, within the same budget. Listings whose source row already
      has a non-null `required_years` are skipped and keep their stored pay
      (copied onto the listing as USD/year). A failed or aborted detail request
-     leaves the listing unchecked (retried next poll); a null detail (job gone)
-     is skipped.
+     leaves the listing unchecked, and the target's new ETag is then not saved,
+     so the next poll gets the full list instead of a 304 and retries it; a null
+     detail (job gone) is skipped. An empty description counts as unread
+     (`required_years` null), not as "no requirement".
 4. **Process** results one target at a time: all ATS targets first, then
    aggregators (so ATS data is in place before Simplify merges into it). Each
    target's processing (steps 5–10) runs in **one DB transaction** and works on a
@@ -555,12 +560,13 @@ missing (with `baselined_at` null). The write is skipped if the company was
 deleted or its `ats`/`slug` changed since the run loaded it (so a mid-poll edit
 isn't overwritten with stale state). The same guard applies to step 10.
 
-**Source outage**: when every board of one ATS fails in a poll (at least 3,
-all with network errors, timeouts, 5xx or 429; any 404 rules it out), the ATS
-is down, not the boards: no board's health is written (no streak, no move to
-`needs_review`) and one warning names the source. A circuit breaker in step 3
+**Source outage**: when no board of one ATS answers in a poll and at least 3
+failed with network errors, timeouts, 5xx or 429, the ATS is down, not the
+boards: those boards' health isn't written (no streak, no move to
+`needs_review`) and one warning names the source. A board that got a 404
+still counts it (that's about its slug). A circuit breaker in step 3
 stops requesting a source once its first 3 boards have all failed that way
-with none succeeding; the rest count toward the outage. (Lever was unreachable
+with none succeeding; the boards it never requested are left alone too. (Lever was unreachable
 for hours on 2026-11-17 and every Lever board had been marked needs review.)
 
 ### Freshness

@@ -181,7 +181,7 @@ const existsInDb = async (p: PreparedListing, ctx: ProcessContext): Promise<bool
 
 /** 0 when the description names no requirement; null when there's no description. */
 const yearsOf = (p: PreparedListing): number | null =>
-  p.listing.description === undefined ? null : (requiredYears(p.listing.description) ?? 0);
+  !p.listing.description?.trim() ? null : (requiredYears(p.listing.description) ?? 0);
 
 const sourceRowFor = (p: PreparedListing, jobId: string, removedAt: Date | null): JobSourceRow => ({
   source: p.listing.source,

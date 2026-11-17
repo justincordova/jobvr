@@ -29,6 +29,7 @@ const makeEnv = () => {
   const calls: { slug?: string; etag?: string | null }[] = [];
   const details = new Map<string, JobDetail>();
   const detailCalls: string[] = [];
+  const detailFailing = new Set<string>();
   let simplify: SourceJob[] = [];
   let onFetch: ((ctx: FetchCtx) => Promise<void>) | null = null;
 
@@ -56,7 +57,8 @@ const makeEnv = () => {
     },
     async fetchDetail(_slug, id) {
       detailCalls.push(id);
-      return details.get(id) ?? { description: "" };
+      if (detailFailing.has(id)) throw new HttpError("HTTP 503", 503);
+      return details.get(id) ?? { description: "Build things with us." };
     },
     parseUrl(url) {
       const m = /^https:\/\/boards\.test\/([^/]+)\/jobs\/(\d+)$/.exec(url);
@@ -81,6 +83,7 @@ const makeEnv = () => {
     calls,
     details,
     detailCalls,
+    detailFailing,
     setSimplify: (l: SourceJob[]) => {
       simplify = l;
     },
@@ -266,6 +269,35 @@ describe("runPoll: job details and the experience rule", () => {
     await updateSettings(database.db, { experienceCutoffYears: 0 });
     const all = await listJobs(database.db, env.registry, {}, clock);
     expect(all.jobs.map((j) => j.id)).toContain("gh:1");
+  });
+
+  it("retries a failed detail on the next poll instead of trusting the board's ETag", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer")]);
+    env.details.set("1", { description: "5+ years of experience required" });
+    env.detailFailing.add("1");
+    await poll();
+    expect((await rowsOf("gh:1"))[0]?.requiredYears).toBeNull();
+
+    // The board is unchanged, but without a saved ETag it isn't a 304
+    env.detailFailing.clear();
+    env.detailCalls.length = 0;
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    expect(env.detailCalls).toEqual(["1"]);
+    expect((await rowsOf("gh:1"))[0]?.requiredYears).toBe(5);
+    // Checked now: the ETag is kept and the next poll is a 304
+    env.calls.length = 0;
+    await poll(true);
+    expect(env.calls[0]?.etag).toBeTruthy();
+  });
+
+  it("treats an empty description as unread, not as no experience required", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer")]);
+    env.details.set("1", { description: "  " });
+    await poll();
+    expect((await rowsOf("gh:1"))[0]?.requiredYears).toBeNull();
   });
 
   it("stores older jobs after the store window is widened (bypassing the ETag)", async () => {
@@ -536,16 +568,26 @@ describe("runPoll: health and transactions", () => {
     ).toEqual([]);
     const warnings = lines.filter((l) => l.startsWith("WARN") && !l.includes("poll finished"));
     expect(warnings).toEqual([
-      'WARN  poll · Greenhouse looks down: all 5 boards failed (HTTP 500); their health is left alone and the next poll retries  source=greenhouse boards=5 error="HTTP 500"',
+      'WARN  poll · Greenhouse looks down: no board answered, 5 failed (HTTP 500); their health is left alone and the next poll retries  source=greenhouse boards=5 error="HTTP 500"',
       expect.stringContaining("Greenhouse looks down"),
       expect.stringContaining("Greenhouse looks down"),
     ]);
 
-    // A 404 is about that board, so it isn't an outage: every board's failure counts
+    // A 404 first (before the timeouts): it counts against that board only; the
+    // others, including the ones the breaker never requested, are left alone
     env.failing.delete("c");
     env.calls.length = 0;
     await poll();
-    expect(env.calls.length).toBe(5);
+    const states = await database.db
+      .select()
+      .from(sourceState)
+      .where(eq(sourceState.source, "greenhouse"));
+    expect(states.map((s) => s.slug)).toEqual(["c"]);
+
+    // Once one board answers it's not an outage: every failure counts
+    env.boards.set("a", []);
+    env.failing.delete("a");
+    await poll();
     expect(
       (await database.db.select().from(sourceState).where(eq(sourceState.source, "greenhouse")))
         .length,

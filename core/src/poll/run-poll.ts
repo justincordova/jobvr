@@ -58,8 +58,10 @@ const transient = (f: Fetched) =>
   (typeof f.fields.status !== "number" || f.fields.status >= 500 || f.fields.status === 429);
 
 /**
- * ATS sources whose every board failed transiently this poll (an outage, not
- * a slug problem), with the first error as a sample.
+ * ATS sources that look down this poll: no board answered and at least
+ * SOURCE_OUTAGE_MIN_TARGETS failed transiently (or weren't tried after the
+ * circuit breaker tripped). A 404 doesn't rule an outage out; it still counts
+ * against its own board. Returns the transient count and a sample error.
  */
 const sourcesDown = (
   targets: readonly Target[],
@@ -74,9 +76,11 @@ const sourcesDown = (
   }
   const down = new Map<string, { count: number; error: string }>();
   for (const [source, list] of bySource) {
-    if (list.length < SOURCE_OUTAGE_MIN_TARGETS || !list.every(transient)) continue;
-    const first = list[0];
-    down.set(source, { count: list.length, error: first && "error" in first ? first.error : "" });
+    if (list.some((f) => "result" in f)) continue;
+    const failed = list.filter(transient);
+    if (failed.length < SOURCE_OUTAGE_MIN_TARGETS) continue;
+    const first = failed[0];
+    down.set(source, { count: failed.length, error: first && "error" in first ? first.error : "" });
   }
   return down;
 };
@@ -227,8 +231,16 @@ type Fetched =
   | { error: string; fields: Record<string, unknown>; ms: number }
   | { skipped: true };
 
-/** Adds detail (description, pay) to an ok result's listings; returns how many it fetched. */
-type Enrich = (target: Target, result: FetchResult, signal: AbortSignal) => Promise<number>;
+/**
+ * Adds detail (description, pay) to an ok result's listings. `fetched`: how
+ * many detail requests it made; `incomplete`: some matching listing is still
+ * unchecked (a request failed or the budget ran out).
+ */
+type Enrich = (
+  target: Target,
+  result: FetchResult,
+  signal: AbortSignal,
+) => Promise<{ fetched: number; incomplete: boolean }>;
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -280,8 +292,11 @@ const fetchAll = async (
                 signal: budget.signal,
                 http,
               });
-              const details = await enrich(t, result, budget.signal);
-              out.set(t.key, { result, ms: performance.now() - started, details });
+              const { fetched, incomplete } = await enrich(t, result, budget.signal);
+              // Without the ETag the next poll gets the full list (not a 304) and retries the detail
+              const kept =
+                result.status === "ok" && incomplete ? { ...result, etag: null } : result;
+              out.set(t.key, { result: kept, ms: performance.now() - started, details: fetched });
               anyOk = true;
             } catch (err) {
               const aborted = budget.signal.aborted;
@@ -359,10 +374,12 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
     const enrich: Enrich = async (t, result, signal) => {
       const { adapter } = t;
       const slug = t.kind === "company" ? t.company.slug : null;
-      if (result.status !== "ok" || !adapter.fetchDetail || !slug) return 0;
+      if (result.status !== "ok" || !adapter.fetchDetail || !slug) {
+        return { fetched: 0, incomplete: false };
+      }
       let fetchedCount = 0;
+      let incomplete = false;
       for (const listing of result.jobs) {
-        if (signal.aborted) break;
         if (listing.description !== undefined) continue;
         if (!passesPollFilter(listing, adapter.kind, settings, startedAt)) continue;
         const known = checked.get(`${listing.source}:${listing.sourceJobId}`);
@@ -379,6 +396,10 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
           }
           continue;
         }
+        if (signal.aborted) {
+          incomplete = true;
+          break;
+        }
         try {
           const detail = await adapter.fetchDetail(slug, listing.sourceJobId, { http, signal });
           fetchedCount++;
@@ -387,13 +408,14 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
           if (detail.salary && !listing.salary) listing.salary = detail.salary;
         } catch (err) {
           // Left unchecked: retried on the next poll
+          incomplete = true;
           log.warn(
             { job: listing.sourceJobId, ...errorFields(err) },
             `${targetLabel(t)} · detail for "${listing.title}" failed; retrying next poll`,
           );
         }
       }
-      return fetchedCount;
+      return { fetched: fetchedCount, incomplete };
     };
 
     log.debug(
@@ -417,14 +439,14 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
     for (const [source, { count, error }] of down) {
       log.warn(
         { source, boards: count, error },
-        `${getAdapter(registry, source)?.label ?? source} looks down: all ${count} boards failed (${error}); their health is left alone and the next poll retries`,
+        `${getAdapter(registry, source)?.label ?? source} looks down: no board answered, ${count} failed (${error}); their health is left alone and the next poll retries`,
       );
     }
     const outcomes: TargetOutcome[] = [];
     for (const target of ordered) {
       const label = targetLabel(target);
       const f0 = fetched.get(target.key);
-      if (target.kind === "company" && down.has(target.adapter.id) && f0 && "error" in f0) {
+      if (target.kind === "company" && down.has(target.adapter.id) && f0 && transient(f0)) {
         log.debug({ target: target.key }, `${label} failed (source down): ${f0.error}`);
         outcomes.push({
           key: target.key,
