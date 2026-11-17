@@ -479,7 +479,10 @@ window, 180 days)` (everything the poll filter can still store).
    discarded, and the target counts as a failure (its `etag` / `filters_hash`
    are not updated, so the next poll refetches in full). Database writes touch
    only the columns named in these steps, so concurrent user actions (Save,
-   Hide, Apply) are never overwritten.
+   Hide, Apply) are never overwritten. A merge writes a job or source row only when
+   one of those columns actually changed (most polls change nothing), so
+   unchanged rows aren't rewritten (no table bloat, no row locks held against
+   Save/Hide).
 5. **Normalize and filter** each listing of an `ok` result: compute its
    canonical ID and its **identity keys**: (`source`, `sourceJobId`); plus (that
    ATS id, parsed `sourceJobId`) when an ATS adapter's `parseUrl` recognizes its

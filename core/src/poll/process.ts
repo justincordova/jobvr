@@ -215,6 +215,23 @@ const upsertSourceRow = (tx: Tx, row: JobSourceRow) =>
       },
     });
 
+const sameValue = (a: unknown, b: unknown): boolean => {
+  if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((x, i) => sameValue(x, b[i]));
+  }
+  return a === b;
+};
+
+/** The fields of `next` that differ from `current`. */
+const changes = <T extends object>(current: T, next: Partial<T>): Partial<T> => {
+  const out: Partial<T> = {};
+  for (const key of Object.keys(next) as (keyof T)[]) {
+    if (!sameValue(current[key], next[key])) out[key] = next[key];
+  }
+  return out;
+};
+
 const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => {
   const { tx, ws, now } = ctx;
   const jobId = match.job.id;
@@ -224,13 +241,14 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
   let removedAt: Date | null = null;
   let knownYears: number | null = null;
   let outsideJobId: string | undefined;
+  let stored: JobSourceRow | undefined;
   const inWindowId = ws.jobIdForSource(source, sourceJobId);
   if (inWindowId) {
-    const existing = ws
+    stored = ws
       .get(inWindowId)
       ?.sources.find((s) => s.source === source && s.sourceJobId === sourceJobId);
-    removedAt = existing?.removedAt ?? null;
-    knownYears = existing?.requiredYears ?? null;
+    removedAt = stored?.removedAt ?? null;
+    knownYears = stored?.requiredYears ?? null;
   } else {
     const [existing] = await tx
       .select({
@@ -250,7 +268,8 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
   const row = sourceRowFor(p, jobId, removedAt);
   // A listing without a description (detail not refetched) keeps what's known
   row.requiredYears ??= knownYears;
-  await upsertSourceRow(tx, row);
+  // Most polls change nothing: skip the write (no table bloat, no row locks against Save/Hide)
+  if (!stored || Object.keys(changes(stored, row)).length > 0) await upsertSourceRow(tx, row);
   const movedFrom = ws.upsertRow(jobId, row) ?? outsideJobId;
   if (movedFrom) {
     // Guarded in SQL: never based on the in-memory state (the user may have just saved it)
@@ -280,9 +299,11 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
   } else if (!m.job.companyId && p.company) {
     update.companyId = p.company.id;
   }
-  update.updatedAt = now;
-  Object.assign(m.job, update);
-  await tx.update(jobs).set(update).where(eq(jobs.id, jobId));
+  const changed = changes(m.job, update);
+  if (Object.keys(changed).length === 0) return;
+  changed.updatedAt = now;
+  Object.assign(m.job, changed);
+  await tx.update(jobs).set(changed).where(eq(jobs.id, jobId));
 };
 
 const insert = async (p: PreparedListing, ctx: ProcessContext, baseline: boolean) => {
