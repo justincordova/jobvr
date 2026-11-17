@@ -1,4 +1,11 @@
-import { createConsoleLogger, createNtfyNotifier, envLogLevel, runNotify } from "@jobvr/core";
+import {
+  buildPush,
+  createConsoleLogger,
+  createNtfyNotifier,
+  envLogLevel,
+  getSettings,
+  runNotify,
+} from "@jobvr/core";
 import { adapters } from "../src/sources";
 import { openDatabase } from "./db";
 
@@ -18,6 +25,16 @@ try {
   });
   if ("jobs" in summary) {
     for (const j of summary.jobs) console.log(`  ${j.companyName}: ${j.title}  (${j.url})`);
+  }
+  if (summary.sent === false && summary.reason === "dry_run" && summary.jobs.length > 0) {
+    // The push exactly as it would be sent
+    const settings = await getSettings(database.db);
+    const push = buildPush(summary.jobs, settings, adapters, new Date(), process.env.PUBLIC_URL);
+    const indent = (s: string) => s.replace(/^/gm, "  │ ");
+    console.log(`\n${indent(`${push.title}\n\n${push.body}`)}`);
+    if (push.clickUrl) console.log(`  tap: ${push.clickUrl}`);
+    for (const a of push.actions ?? []) console.log(`  button "${a.label}": ${a.url}`);
+    console.log("");
   }
   // This is the script's result, not a log line
   console.log(

@@ -2,7 +2,15 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "./db/client";
 import { companies, jobSources, jobs, settings } from "./db/schema";
-import { type Notifier, type PushMessage, runCleanup, runNotify, selectPushable } from "./notify";
+import {
+  buildPush,
+  createNtfyNotifier,
+  type Notifier,
+  type PushMessage,
+  runCleanup,
+  runNotify,
+  selectPushable,
+} from "./notify";
 import { createCompany } from "./repos/companies";
 import { getSettingsState, updateSettings } from "./repos/settings";
 import { DEFAULT_SETTINGS } from "./settings";
@@ -111,10 +119,67 @@ describe("selectPushable", () => {
   });
 });
 
+describe("buildPush", () => {
+  it("lists the best-ranked roles first and folds the rest into +N more", async () => {
+    const stripe = await createCompany(database.db, {
+      name: "Stripe",
+      tier: "S",
+      track: false,
+      ats: "other",
+      status: "manual_only",
+    });
+    await addJob("plain", { title: "Software Engineer, Payments" });
+    await addJob("stripe", { companyId: stripe.id, companyName: "Stripe", effectiveAt: ago(3) });
+    for (const n of [1, 2, 3, 4]) {
+      await addJob(`r${n}`, { title: `Role ${n} Engineer, New Grad`, locations: ["Remote - US"] });
+    }
+    const jobs = await selectPushable(database, registry, DEFAULT_SETTINGS, NOW);
+    const push = buildPush(jobs, DEFAULT_SETTINGS, registry, NOW);
+    expect(push.title).toBe("6 new jobs");
+    expect(push.body.split("\n")).toEqual([
+      "Stripe · Software Engineer, New Grad · NYC",
+      expect.stringMatching(/^Acme · Role \d Engineer, New Grad · Remote-US$/),
+      expect.stringMatching(/^Acme · Role \d Engineer, New Grad · Remote-US$/),
+      expect.stringMatching(/^Acme · Role \d Engineer, New Grad · Remote-US$/),
+      "+2 more",
+    ]);
+    expect(push.clickUrl).toBeUndefined();
+  });
+});
+
+describe("ntfy notifier", () => {
+  it("publishes JSON to the server root, so non-ASCII titles are safe", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const notifier = createNtfyNotifier("https://ntfy.sh/secret-topic", {
+      fetch: async (url, init) => {
+        calls.push({ url: String(url), init: init ?? {} });
+        return new Response("{}");
+      },
+    });
+    await notifier.send({
+      title: "New job: HRT",
+      body: "Software Engineer (C++ or Python) – 2027 Grads · NYC",
+      clickUrl: "https://jobvr.ts.net/?sort=newest",
+      actions: [{ label: "Open posting", url: "https://x.test/1" }],
+    });
+    expect(calls[0]?.url).toBe("https://ntfy.sh/");
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
+      topic: "secret-topic",
+      title: "New job: HRT",
+      message: "Software Engineer (C++ or Python) – 2027 Grads · NYC",
+      tags: ["briefcase"],
+      click: "https://jobvr.ts.net/?sort=newest",
+      actions: [{ action: "view", label: "Open posting", url: "https://x.test/1" }],
+    });
+  });
+});
+
 describe("runNotify", () => {
   it("sends one bundled push, marks exactly those jobs, then waits for the interval", async () => {
     await addJob("a");
-    await addJob("b");
+    await addJob("b", { title: "Backend Engineer, New Grad", effectiveAt: ago(2) });
+    // A repost of "a": counted once
+    await addJob("a2");
     const { sent, notifier } = recorder();
     const first = await runNotify({
       database,
@@ -125,7 +190,11 @@ describe("runNotify", () => {
     });
     expect(first.sent).toBe(true);
     expect(sent).toEqual([
-      { title: "jobvr", body: "2 new jobs", clickUrl: "https://jobvr.example.ts.net" },
+      {
+        title: "2 new jobs",
+        body: "Acme · Software Engineer, New Grad · NYC\nAcme · Backend Engineer, New Grad · NYC",
+        clickUrl: "https://jobvr.example.ts.net/?sort=newest",
+      },
     ]);
     const rows = await database.db.select().from(jobs);
     expect(rows.every((j) => j.notifiedAt?.getTime() === NOW.getTime())).toBe(true);
@@ -140,7 +209,11 @@ describe("runNotify", () => {
     const nextInterval = new Date(NOW.getTime() + 30 * 60_000);
     const third = await runNotify({ database, registry, notifier, now: () => nextInterval });
     expect(third.sent).toBe(true);
-    expect(sent[1]?.body).toBe("1 new job");
+    expect(sent[1]).toEqual({
+      title: "New job: Acme",
+      body: "Software Engineer, New Grad · NYC",
+      actions: [{ label: "Open posting", url: "https://x.test/c" }],
+    });
   });
 
   it("holds pushes during quiet hours and doesn't touch last_push_at when nothing is new", async () => {

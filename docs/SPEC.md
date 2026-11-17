@@ -581,9 +581,19 @@ don't.
 
 Order: take the notify lock → due check → quiet-hours check (inside quiet hours
 → return) → select pushable jobs → none: return with `last_push_at` unchanged →
-send one ntfy push (title "jobvr", body "N new jobs", click URL `PUBLIC_URL`) →
+send one ntfy push (see Push message) →
 on success, set `notified_at = now` on exactly the selected jobs and
 `last_push_at = now`; on failure, mark nothing (retried next tick).
+
+**Push message** (`buildPush`): reposts of one role count once (as in the
+feed); roles are ordered by [Feed order](#feed-order). Several roles: title
+"N new jobs", body one line per role for the first 4 ("Stripe · Software
+Engineer, New Grad · NYC", matched location labels last), then "+N more".
+One role: title "New job: <company>", body "<title> · <places>", plus an
+"Open posting" button to the job URL. Tapping opens `PUBLIC_URL/?sort=newest`,
+where the pushed jobs are on top and highlighted as new. Published as JSON to
+the ntfy server root (`{ topic, title, message, tags, click, actions }`), so
+non-ASCII titles never go through HTTP headers.
 
 Jobs held during quiet hours roll into the first push after quiet hours end.
 Jobs that exceed max age while held are never pushed. If `NTFY_URL` is unset,
@@ -798,7 +808,7 @@ the app shell only; API requests are network-only.
 - Backups live on the PC disk; point the backup folder at a synced folder
   (OneDrive/Dropbox) for off-machine copies.
 - ntfy.sh topics are readable by anyone who knows the name → long random topic;
-  push bodies contain only a count; the click URL is reachable only on the tailnet.
+  push bodies carry public job titles and company names only (nothing personal); the click URL is reachable only on the tailnet.
 
 ## Testing
 

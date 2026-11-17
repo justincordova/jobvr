@@ -5,7 +5,16 @@ import { jobs } from "./db/schema";
 import { HttpError } from "./http";
 import { withAdvisoryLock } from "./lock";
 import { formatDuration, type Logger, silentLogger } from "./logger";
-import { isFreshMatch, type JobRecord, kindLookup, loadJobViews } from "./repos/jobs";
+import { matchedLocationLabels } from "./matching";
+import { byRank } from "./rank";
+import {
+  collapseReposts,
+  isFreshMatch,
+  type JobRecord,
+  kindLookup,
+  loadJobViews,
+  scoreJob,
+} from "./repos/jobs";
 import { getSettingsState, setSettingsTimestamp } from "./repos/settings";
 import { inQuietHours, isDue } from "./schedule";
 import { retentionMs, type Settings } from "./settings";
@@ -15,6 +24,8 @@ export interface PushMessage {
   title: string;
   body: string;
   clickUrl?: string;
+  /** Buttons that open a URL (ntfy shows up to 3). */
+  actions?: { label: string; url: string }[];
 }
 
 /** Push port (ntfy today). */
@@ -22,20 +33,33 @@ export interface Notifier {
   send(message: PushMessage): Promise<void>;
 }
 
-/** ntfy.sh (or self-hosted) topic; the topic URL is the secret. */
+/**
+ * ntfy.sh (or self-hosted) topic; the topic URL is the secret. Published as
+ * JSON to the server root (`{ topic, title, message, ... }`), so titles with
+ * "–" or accents never have to fit in an HTTP header.
+ */
 export const createNtfyNotifier = (
   topicUrl: string,
   deps: { fetch?: typeof fetch; timeoutMs?: number } = {},
 ): Notifier => ({
   async send(message) {
-    const res = await (deps.fetch ?? fetch)(topicUrl, {
+    const url = new URL(topicUrl);
+    const parts = url.pathname.split("/").filter(Boolean);
+    const topic = parts.pop() ?? "";
+    url.pathname = `/${parts.join("/")}`;
+    const res = await (deps.fetch ?? fetch)(url.toString(), {
       method: "POST",
-      body: message.body,
-      headers: {
-        Title: message.title,
-        Tags: "briefcase",
-        ...(message.clickUrl && { Click: message.clickUrl }),
-      },
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        topic,
+        title: message.title,
+        message: message.body,
+        tags: ["briefcase"],
+        ...(message.clickUrl && { click: message.clickUrl }),
+        ...(message.actions?.length && {
+          actions: message.actions.map((a) => ({ action: "view", label: a.label, url: a.url })),
+        }),
+      }),
       signal: AbortSignal.timeout(deps.timeoutMs ?? 15_000),
     });
     // The topic URL is the secret, so it's never part of the error
@@ -65,6 +89,55 @@ export const selectPushable = async (
 };
 
 export const pushBody = (count: number) => `${count} new job${count === 1 ? "" : "s"}`;
+
+/** Roles listed in a push body before "+N more". */
+const PUSH_LINES = 4;
+const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s);
+
+/**
+ * The push, readable at a glance: a role posted several times counts once,
+ * the best-ranked roles are listed ("Stripe · Software Engineer, New Grad ·
+ * NYC"), and tapping opens the feed newest first, where they're on top and
+ * highlighted. A single role names its company and gets an "Open posting"
+ * button. Job titles and companies are public; nothing personal is sent.
+ */
+export const buildPush = (
+  selected: readonly JobRecord[],
+  settings: Settings,
+  registry: Registry,
+  now: Date,
+  publicUrl?: string,
+): PushMessage => {
+  const kindOf = kindLookup(registry);
+  const roles = collapseReposts(
+    [...selected].sort((a, b) => b.effectiveAt.getTime() - a.effectiveAt.getTime()),
+  )
+    .map((j) => ({ ...j, score: scoreJob(j, settings, kindOf, now) }))
+    .sort(byRank);
+  const line = (j: JobRecord, withCompany: boolean) => {
+    const places = matchedLocationLabels(j.locations, settings).join(", ");
+    return [withCompany && clip(j.companyName, 30), clip(j.title, 70), places]
+      .filter(Boolean)
+      .join(" · ");
+  };
+  const clickUrl = publicUrl ? `${publicUrl.replace(/\/$/, "")}/?sort=newest` : undefined;
+  const [first] = roles;
+  if (roles.length === 1 && first) {
+    return {
+      title: `New job: ${clip(first.companyName, 40)}`,
+      body: line(first, false),
+      ...(clickUrl && { clickUrl }),
+      actions: [{ label: "Open posting", url: first.url }],
+    };
+  }
+  const shown = roles.slice(0, PUSH_LINES).map((j) => line(j, true));
+  const more = roles.length - shown.length;
+  return {
+    title: pushBody(roles.length),
+    body: [...shown, ...(more > 0 ? [`+${more} more`] : [])].join("\n"),
+    ...(clickUrl && { clickUrl }),
+  };
+};
 
 export interface RunNotifyOptions {
   database: Database;
@@ -142,11 +215,9 @@ export const runNotify = async (options: RunNotifyOptions): Promise<NotifySummar
       }
       const started = performance.now();
       try {
-        await options.notifier.send({
-          title: "jobvr",
-          body: pushBody(selected.length),
-          clickUrl: options.publicUrl,
-        });
+        await options.notifier.send(
+          buildPush(selected, s, options.registry, now, options.publicUrl),
+        );
       } catch (err) {
         log.error(
           { pending: selected.length, ...pushError(err) },

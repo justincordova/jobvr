@@ -215,6 +215,29 @@ const VIEW_STATES: Record<JobViewName, JobState[]> = {
   hidden: ["hidden"],
 };
 
+/** "Best first" points for a stored job (see `rankScore`). */
+export const scoreJob = (
+  j: JobRecord,
+  s: Settings,
+  kindOf: (source: string) => SourceKind | undefined,
+  now: Date,
+): number => {
+  const years = j.sources
+    .map((src) => src.requiredYears)
+    .filter((y): y is number => y !== null && y !== undefined);
+  return rankScore(
+    {
+      effectiveAt: j.effectiveAt,
+      tier: j.tier,
+      entryTitle: isEntryLevelTitle(j.title, s),
+      onNewGradList: j.sources.some((src) => kindOf(src.source) === "aggregator"),
+      requiredYears: years.length > 0 ? Math.min(...years) : null,
+      namedPlace: matchedLocationLabels(j.locations, s).some((l) => l !== REMOTE_US_LABEL),
+    },
+    now,
+  );
+};
+
 export const listJobs = async (
   db: DbOrTx,
   registry: Registry,
@@ -273,24 +296,10 @@ export const listJobs = async (
   }
 
   const sort = query.sort ?? (view === "feed" ? "best" : "newest");
-  const scored = collapseReposts(filtered).map((j) => {
-    const entryTitle = isEntryLevelTitle(j.title, s);
-    const years = j.sources
-      .map((src) => src.requiredYears)
-      .filter((y): y is number => y !== null && y !== undefined);
-    const score = rankScore(
-      {
-        effectiveAt: j.effectiveAt,
-        tier: j.tier,
-        entryTitle,
-        onNewGradList: j.sources.some((src) => kindOf(src.source) === "aggregator"),
-        requiredYears: years.length > 0 ? Math.min(...years) : null,
-        namedPlace: matchedLocationLabels(j.locations, s).some((l) => l !== REMOTE_US_LABEL),
-      },
-      now,
-    );
-    return { ...j, score };
-  });
+  const scored = collapseReposts(filtered).map((j) => ({
+    ...j,
+    score: scoreJob(j, s, kindOf, now),
+  }));
   // Already newest first from the query
   if (sort === "best") scored.sort(byRank);
 
