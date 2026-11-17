@@ -590,7 +590,8 @@ even when a board already in flight then answers (no outage, but they were
 never asked; they count as skipped and the next poll retries them). Each
 poll records outages in `settings.source_outages` (`{ [source]: { since,
 lastSeenAt, error, boards } }`, `since` kept while it lasts) and clears a source
-once any of its boards answers; Settings → Sources, a notice on the feed and
+once any of its boards answers, or once it has no boards to poll (disabled,
+all untracked); Settings → Sources, a notice on the feed and
 the header's poll status show it (`sourceOutages` on `GET /api/settings`). (Lever was unreachable
 for hours on 2026-11-17 and every Lever board had been marked needs review.)
 

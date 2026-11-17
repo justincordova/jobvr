@@ -485,7 +485,8 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
           .filter((t) => t.kind === "company" && "result" in (fetched.get(t.key) ?? {}))
           .map((t) => t.adapter.id),
       );
-      await recordSourceOutages(db, down, answered, startedAt);
+      const polled = new Set(targets.filter((t) => t.kind === "company").map((t) => t.adapter.id));
+      await recordSourceOutages(db, down, answered, polled, startedAt);
       for (const [source, { count, error }] of down) {
         log.warn(
           { source, boards: count, error },

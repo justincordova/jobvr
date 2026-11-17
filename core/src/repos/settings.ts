@@ -34,17 +34,22 @@ export type SourceOutages = Record<string, SourceOutage>;
 
 /**
  * Records this poll's view of each ATS: down ones are added (keeping `since`),
- * ones where a board answered are cleared. Sources not polled are left alone.
+ * ones where a board answered are cleared, and so are ones with no boards
+ * polled at all (source disabled, boards untracked), which nothing would
+ * clear otherwise.
  */
 export const recordSourceOutages = async (
   db: DbOrTx,
   down: ReadonlyMap<string, { count: number; error: string }>,
   answered: ReadonlySet<string>,
+  polled: ReadonlySet<string>,
   now: Date,
 ): Promise<SourceOutages> => {
   const { sourceOutages: current } = await getSettingsState(db);
   const next: SourceOutages = { ...current };
-  for (const source of answered) delete next[source];
+  for (const source of Object.keys(next)) {
+    if (answered.has(source) || !polled.has(source)) delete next[source];
+  }
   for (const [source, { count, error }] of down) {
     next[source] = {
       since: current[source]?.since ?? now.toISOString(),

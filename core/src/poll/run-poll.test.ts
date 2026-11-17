@@ -625,6 +625,29 @@ describe("runPoll: health and transactions", () => {
     ).toBe(5);
   });
 
+  it("clears an outage once its source has no boards to poll", async () => {
+    for (const slug of ["a", "b", "c"]) {
+      await createCompany(database.db, {
+        name: `Co ${slug}`,
+        tier: "Startup",
+        track: true,
+        ats: "greenhouse",
+        slug,
+        status: "ok",
+      });
+      env.failing.add(slug);
+    }
+    await poll();
+    expect(Object.keys((await getSettingsState(database.db)).sourceOutages)).toEqual([
+      "greenhouse",
+    ]);
+    // Turned off in Settings: nothing would ever clear it otherwise
+    await updateSettings(database.db, { disabledSources: ["greenhouse"] });
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    expect((await getSettingsState(database.db)).sourceOutages).toEqual({});
+  });
+
   it("leaves boards the breaker skipped alone when a board in flight then answers", async () => {
     const slugs = ["a", "b", "c", "d", "e", "f"];
     for (const slug of slugs) {
