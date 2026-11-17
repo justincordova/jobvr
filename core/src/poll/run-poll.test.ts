@@ -604,6 +604,51 @@ describe("runPoll: health and transactions", () => {
     ).toBe(5);
   });
 
+  it("leaves boards the breaker skipped alone when a board in flight then answers", async () => {
+    const slugs = ["a", "b", "c", "d", "e", "f"];
+    for (const slug of slugs) {
+      await createCompany(database.db, {
+        name: `Co ${slug}`,
+        tier: "Startup",
+        track: true,
+        ats: "greenhouse",
+        slug,
+        status: "ok",
+      });
+      if (slug !== "a") env.failing.add(slug);
+    }
+    env.boards.set("a", []);
+    for (let i = 0; i < 3; i++) {
+      // "a" answers only after b, c and d have failed and tripped the breaker
+      let release: () => void = () => {};
+      const held = new Promise<void>((r) => {
+        release = r;
+      });
+      env.setOnFetch(async (ctx) => {
+        if (ctx.slug === "a") await held;
+        if (ctx.slug === "d") setTimeout(release, 20);
+      });
+      clock = new Date(T0.getTime() + i * HOUR);
+      env.calls.length = 0;
+      const summary = await poll();
+      expect(env.calls.map((c) => c.slug).sort()).toEqual(["a", "b", "c", "d"]);
+      expect(summary.ran && summary.targets.filter((t) => t.status === "skipped").length).toBe(2);
+    }
+    expect((await getSettingsState(database.db)).sourceOutages).toEqual({});
+    const status = new Map(
+      (await database.db.select().from(companies)).map((c) => [c.slug, c.status]),
+    );
+    // The three that really failed 3 times need review; e and f were never asked
+    expect(slugs.map((s) => status.get(s))).toEqual([
+      "ok",
+      "needs_review",
+      "needs_review",
+      "needs_review",
+      "ok",
+      "ok",
+    ]);
+  });
+
   it("carries a saved mark over when its only posting moves to another job", async () => {
     await addAcme();
     // A SimplifyJobs listing pointing at the company's own careers page, saved by the user

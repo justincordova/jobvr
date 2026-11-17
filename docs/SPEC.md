@@ -579,7 +579,9 @@ boards: those boards' health isn't written (no streak, no move to
 `needs_review`) and one warning names the source. A board that got a 404
 still counts it (that's about its slug). A circuit breaker in step 3
 stops requesting a source once its first 3 boards have all failed that way
-with none succeeding; the boards it never requested are left alone too. Each
+with none succeeding; the boards it never requested are left alone too,
+even when a board already in flight then answers (no outage, but they were
+never asked; they count as skipped and the next poll retries them). Each
 poll records outages in `settings.source_outages` (`{ [source]: { since,
 lastSeenAt, error, boards } }`, `since` kept while it lasts) and clears a source
 once any of its boards answers; Settings → Sources, a notice on the feed and

@@ -230,7 +230,13 @@ export const pollTargets = (
 
 type Fetched =
   | { result: FetchResult; ms: number; details: number }
-  | { error: string; fields: Record<string, unknown>; ms: number }
+  | {
+      error: string;
+      fields: Record<string, unknown>;
+      ms: number;
+      /** Never requested: the circuit breaker had tripped for its source. */
+      notFetched?: true;
+    }
   | { skipped: true };
 
 /**
@@ -285,6 +291,7 @@ const fetchAll = async (
                 error: `not fetched: ${t.adapter.label}'s first ${failedInARow} boards all failed`,
                 fields: {},
                 ms: 0,
+                notFetched: true,
               });
               continue;
             }
@@ -480,6 +487,16 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
         continue;
       }
       const f = fetched.get(target.key) ?? { skipped: true as const };
+      if ("notFetched" in f) {
+        // The breaker tripped but a board in flight then answered, so it's no outage;
+        // these boards were never asked and their health says nothing about them
+        log.warn(
+          { target: target.key },
+          `${label} · ${f.error}, but another board then answered; its health is left alone and the next poll retries`,
+        );
+        outcomes.push({ key: target.key, label, status: "skipped" });
+        continue;
+      }
       if ("skipped" in f) {
         log.warn(
           { target: target.key },
