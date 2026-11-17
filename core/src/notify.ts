@@ -173,6 +173,9 @@ const pushError = (err: unknown) => {
   };
 };
 
+const MARK_ATTEMPTS = 3;
+const MARK_RETRY_MS = 2000;
+
 export const runNotify = async (options: RunNotifyOptions): Promise<NotifySummary> => {
   const clock = options.now ?? (() => new Date());
   const log = (options.logger ?? silentLogger).child({ module: "notify" });
@@ -226,18 +229,36 @@ export const runNotify = async (options: RunNotifyOptions): Promise<NotifySummar
         );
         return { sent: false, reason: "failed", jobs: selected };
       }
-      await database.db.transaction(async (tx) => {
-        await tx
-          .update(jobs)
-          .set({ notifiedAt: now })
-          .where(
-            inArray(
-              jobs.id,
-              selected.map((j) => j.id),
-            ),
-          );
-        await setSettingsTimestamp(tx, "lastPushAt", now);
-      });
+      // The push is out: failing to record it means the next tick pushes the same jobs again
+      const markPushed = () =>
+        database.db.transaction(async (tx) => {
+          await tx
+            .update(jobs)
+            .set({ notifiedAt: now })
+            .where(
+              inArray(
+                jobs.id,
+                selected.map((j) => j.id),
+              ),
+            );
+          await setSettingsTimestamp(tx, "lastPushAt", now);
+        });
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await markPushed();
+          break;
+        } catch (err) {
+          if (attempt >= MARK_ATTEMPTS) {
+            log.error(
+              { err, jobIds: selected.map((j) => j.id) },
+              `push sent but marking ${selected.length} jobs pushed failed ${attempt} times; the next tick will likely push them again`,
+            );
+            return { sent: true, jobs: selected };
+          }
+          log.warn({ err, attempt }, "push sent but marking it failed; retrying in 2 s");
+          await new Promise((r) => setTimeout(r, MARK_RETRY_MS));
+        }
+      }
       log.info(
         { count: selected.length, jobIds: selected.map((j) => j.id) },
         `push sent: ${pushBody(selected.length)} · ${formatDuration(performance.now() - started)}`,
