@@ -146,7 +146,10 @@ interface SourceAdapter {
   concurrency: number; // max in-flight fetches for this source
   fetch(ctx: FetchCtx): Promise<FetchResult>; // ctx: { slug?, companyName?, etag?, signal, http }
   parseUrl?(url: string): { sourceJobId: string; slug?: string } | null; // ats only
-  probe?(slug: string, ctx: ProbeCtx): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
+  probe?(
+    slug: string,
+    ctx: ProbeCtx,
+  ): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
   // Sources whose list has no description (Greenhouse): one job's description and pay; null when gone
   fetchDetail?(
     slug: string,
@@ -754,7 +757,10 @@ Pages are built with the frontend-design skill:
 - **Settings**: all settings; Simplify source health; last poll / push times.
 
 PWA installable on the phone (over Tailscale HTTPS); manifest `id`/`scope` `/`,
-standalone, maskable icon, and home-screen shortcuts to Saved and Applied. The service worker caches
+standalone, maskable icon, and home-screen shortcuts to Saved and Applied. Updates: the
+service worker is checked whenever the app comes to the front (and hourly); a
+waiting version shows a "Reload" toast instead of swapping code under unsaved
+edits, and applies on the next cold launch if ignored. The service worker caches
 the app shell only; API requests are network-only.
 
 ## Constants

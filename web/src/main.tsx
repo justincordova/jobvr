@@ -4,6 +4,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Toaster } from '@/components/toast'
 import { router } from '@/router'
+import { setupPwaUpdates } from '@/lib/pwa'
 import '@/index.css'
 
 const queryClient = new QueryClient({
@@ -16,6 +17,8 @@ const rootElement = document.getElementById('root')
 if (!rootElement) {
   throw new Error('Root element #root not found in the document')
 }
+
+setupPwaUpdates()
 
 createRoot(rootElement).render(
   <StrictMode>
