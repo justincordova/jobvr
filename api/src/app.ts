@@ -80,7 +80,7 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
       },
     }),
   );
-  app.use(...securityHeaders());
+  app.use(...securityHeaders(docsEnabled));
   app.use("/api/*", rateLimit());
   app.use("/api/*", crossSiteGuard());
   app.use(...requestGuards());
@@ -170,6 +170,12 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
     .route("/api/settings", settingsRouter);
 
   const webDist = options.webDistDir ? path.resolve(options.webDistDir) : null;
+  if (webDist && !existsSync(path.join(webDist, "index.html"))) {
+    logger[env.NODE_ENV === "production" ? "error" : "warn"](
+      { webDistDir: webDist },
+      `no web app build at ${webDist}/index.html: only the API is served (build it with pnpm build)`,
+    );
+  }
   if (webDist && existsSync(path.join(webDist, "index.html"))) {
     // Hashed assets never change; the shell and service worker must revalidate
     app.use("*", async (c, next) => {

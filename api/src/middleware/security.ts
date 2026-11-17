@@ -15,8 +15,9 @@ import { fail } from "@/utils/response";
  */
 /**
  * The web app loads only its own files; job links are plain navigations. Inline
- * styles are allowed (Radix injects a scroll-lock <style>). /reference is left
- * out: the Scalar API docs load from a CDN.
+ * styles are allowed (Radix injects a scroll-lock <style>). /reference and
+ * /docs are left out only where the API docs exist (not production): Scalar
+ * loads from a CDN.
  */
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -33,15 +34,17 @@ export const CONTENT_SECURITY_POLICY = [
   "frame-ancestors 'none'",
 ].join("; ");
 
-const contentSecurityPolicy: MiddlewareHandler = async (c, next) => {
-  await next();
-  if (c.req.path === "/reference" || c.req.path === "/docs") return;
-  c.header("Content-Security-Policy", CONTENT_SECURITY_POLICY);
-};
+const contentSecurityPolicy =
+  (docsEnabled: boolean): MiddlewareHandler =>
+  async (c, next) => {
+    await next();
+    if (docsEnabled && (c.req.path === "/reference" || c.req.path === "/docs")) return;
+    c.header("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  };
 
-export const securityHeaders = (): MiddlewareHandler[] => [
+export const securityHeaders = (docsEnabled: boolean): MiddlewareHandler[] => [
   secureHeaders(),
-  contentSecurityPolicy,
+  contentSecurityPolicy(docsEnabled),
   cors({
     // Explicit allowlist in every environment (credentials + reflected origins is unsafe)
     origin: env.ALLOWED_ORIGINS,
