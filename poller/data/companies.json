@@ -345,8 +345,9 @@
     "city": "New York",
     "state": "NY",
     "tier": "Mid",
-    "ats": "other",
-    "slug": null
+    "ats": "greenhouse",
+    "slug": "oscar",
+    "notes": "Board found in the Nov 2026 manual_only audit"
   },
   {
     "name": "Traba",
@@ -370,7 +371,8 @@
     "state": "NY",
     "tier": "Startup",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Rippling ATS (unsupported); manual only"
   },
   {
     "name": "Northslope",
@@ -378,15 +380,17 @@
     "state": "NY",
     "tier": "Startup",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "northslopetech.com now redirects to the OpenAI Deployment Company (tracked separately); manual only"
   },
   {
     "name": "Enigma",
     "city": "New York",
     "state": "NY",
     "tier": "Startup",
-    "ats": "other",
-    "slug": null
+    "ats": "greenhouse",
+    "slug": "enigmaio",
+    "notes": "Board found in the Nov 2026 manual_only audit (enigma.com/careers redirects there)"
   },
   {
     "name": "Prelim",
@@ -450,15 +454,17 @@
     "state": "NJ",
     "tier": "Mid",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Own careers page, no supported board; manual only"
   },
   {
     "name": "Apprentice.io",
     "city": null,
     "state": "NJ",
     "tier": "Startup",
-    "ats": "other",
-    "slug": null
+    "ats": "greenhouse",
+    "slug": "apprentice",
+    "notes": "Board found in the Nov 2026 manual_only audit (linked from apprentice.io/about/careers)"
   },
   {
     "name": "FreedomPay",
@@ -473,8 +479,9 @@
     "city": null,
     "state": "PA",
     "tier": "Mid",
-    "ats": "other",
-    "slug": null
+    "ats": "ashby",
+    "slug": "vistar",
+    "notes": "Board found in the Nov 2026 manual_only audit (linked from vistarmedia.com/careers)"
   },
   {
     "name": "SoftWriters",
@@ -482,7 +489,8 @@
     "state": "PA",
     "tier": "Startup",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "No job board found on softwriters.com; manual only"
   },
   {
     "name": "Journey Robotics",
@@ -490,7 +498,8 @@
     "state": "PA",
     "tier": "Startup",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "No job board found (Greenhouse \"journey\" is an unrelated architecture firm); manual only"
   },
   {
     "name": "IAM Robotics",
@@ -498,15 +507,17 @@
     "state": "PA",
     "tier": "Startup",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Now Onward Robotics; hires through Paycom (unsupported); manual only"
   },
   {
     "name": "Skild AI",
-    "city": null,
+    "city": "Pittsburgh",
     "state": "PA",
     "tier": "Startup",
-    "ats": "other",
-    "slug": null
+    "ats": "greenhouse",
+    "slug": "skildai-careers",
+    "notes": "Board found in the Nov 2026 manual_only audit"
   },
   {
     "name": "Latitude AI",
@@ -554,22 +565,25 @@
     "state": "PA",
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "iCIMS (unsupported); manual only"
   },
   {
     "name": "Prudential",
-    "city": null,
-    "state": null,
+    "city": "Newark",
+    "state": "NJ",
     "tier": "Corporate",
     "ats": "other",
+    "notes": "Workday site pru.wd5/Careers, but Workday answers jobvr with a Cloudflare bot challenge; manual only",
     "slug": null
   },
   {
     "name": "PNC",
-    "city": null,
-    "state": null,
+    "city": "Pittsburgh",
+    "state": "PA",
     "tier": "Corporate",
     "ats": "other",
+    "notes": "Workday site pnc.wd5/External, but Workday answers jobvr with a Cloudflare bot challenge; manual only",
     "slug": null
   },
   {
@@ -578,14 +592,16 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Hires through Amazon Jobs (unsupported); manual only"
   },
   {
     "name": "Comcast",
-    "city": null,
-    "state": null,
+    "city": "Philadelphia",
+    "state": "PA",
     "tier": "Corporate",
     "ats": "other",
+    "notes": "Workday site comcast.wd115/comcast_careers, but Workday answers jobvr with a Cloudflare bot challenge; manual only",
     "slug": null
   },
   {
@@ -594,7 +610,8 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "SAP SuccessFactors (unsupported); manual only"
   },
   {
     "name": "BAE Systems",
@@ -602,7 +619,8 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Phenom careers site; its Workday site was not found; manual only"
   },
   {
     "name": "Ahold Delhaize USA",
@@ -610,7 +628,8 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Per-brand careers sites; no supported board found; manual only"
   },
   {
     "name": "Susquehanna/SIG",
@@ -618,7 +637,8 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "iCIMS (unsupported); manual only"
   },
   {
     "name": "Bloomberg",
@@ -626,7 +646,8 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Avature careers site (unsupported); manual only"
   },
   {
     "name": "MetLife",
@@ -634,7 +655,8 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Avature careers site (unsupported); manual only"
   },
   {
     "name": "ASRC Federal",
@@ -642,7 +664,8 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Dayforce (unsupported); manual only"
   },
   {
     "name": "Leidos",
@@ -650,7 +673,8 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Workday site leidos.wd5/External (Cloudflare bot challenge, and 1,300+ software postings); manual only"
   },
   {
     "name": "Lockheed Martin",
@@ -658,7 +682,8 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Eightfold / BrassRing (unsupported); manual only"
   },
   {
     "name": "JPMorgan Chase",
@@ -666,14 +691,16 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Oracle Cloud HCM (unsupported); manual only"
   },
   {
     "name": "Verizon",
-    "city": null,
-    "state": null,
+    "city": "Basking Ridge",
+    "state": "NJ",
     "tier": "Corporate",
     "ats": "other",
+    "notes": "Workday site verizon.wd12/verizon-careers, but Workday answers jobvr with a Cloudflare bot challenge; manual only",
     "slug": null
   },
   {
@@ -682,7 +709,8 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Own careers site (jobs.adp.com, blocks automated requests); manual only"
   },
   {
     "name": "NJ Transit",
@@ -690,7 +718,8 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
-    "slug": null
+    "slug": null,
+    "notes": "Oracle Cloud HCM (unsupported); manual only"
   },
   {
     "name": "Boeing",
@@ -698,14 +727,16 @@
     "state": null,
     "tier": "Corporate",
     "ats": "other",
+    "notes": "Workday site boeing.wd1/EXTERNAL_CAREERS, but Workday answers jobvr with a Cloudflare bot challenge; manual only",
     "slug": null
   },
   {
     "name": "Vanguard",
-    "city": null,
-    "state": null,
+    "city": "Malvern",
+    "state": "PA",
     "tier": "Corporate",
     "ats": "other",
+    "notes": "Workday site vanguard.wd5/vanguard_external, but Workday answers jobvr with a Cloudflare bot challenge; manual only",
     "slug": null
   },
   {
@@ -737,12 +768,12 @@
   },
   {
     "name": "HRT",
-    "city": null,
-    "state": null,
+    "city": "New York",
+    "state": "NY",
     "tier": "S",
-    "ats": "other",
-    "slug": null,
-    "track": false
+    "ats": "greenhouse",
+    "slug": "wehrtyou",
+    "notes": "Hudson River Trading; Greenhouse board \"wehrtyou\" (Nov 2026 audit)"
   },
   {
     "name": "Two Sigma",
@@ -751,7 +782,8 @@
     "tier": "S",
     "ats": "other",
     "slug": null,
-    "track": false
+    "track": false,
+    "notes": "Avature careers site (unsupported); manual only"
   },
   {
     "name": "Citadel",
@@ -760,7 +792,8 @@
     "tier": "S",
     "ats": "other",
     "slug": null,
-    "track": false
+    "track": false,
+    "notes": "Careers site blocks automated requests (403); manual only"
   },
   {
     "name": "Plaid",
@@ -1205,5 +1238,14 @@
     "ats": "ashby",
     "slug": "PAR Technology",
     "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "OpenAI Deployment Company",
+    "city": "New York",
+    "state": "NY",
+    "tier": "S",
+    "ats": "ashby",
+    "slug": "openai-deployment-company",
+    "notes": "OpenAI's forward deployed engineering company (absorbed Northslope; Nov 2026 audit)"
   }
 ]

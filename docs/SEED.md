@@ -99,6 +99,10 @@ tracked.
 - Verified/"(old)" entries: `probe` the slug; responds → status ok; fails →
   `needs_review` (kept, never dropped). The "(old)" marker is dropped from the slug.
 - `track = true` unless the company is `manual_only` / has no slug (then false).
+- One update rule: a company still stored as `ats = other` + `manual_only`
+  whose seed entry now names a supported board is moved to that board
+  (tracked, status ok) when its `probe` answers. This is how seed fixes reach
+  an existing database; nothing else about existing companies is changed.
 
 ## Discover results (2026-11-13)
 
@@ -158,3 +162,32 @@ Fluidstack, Safe Security, Rox Data Corp, Swarm Aero, ATOMS (Startup).
 Skipped: BJAK (posts each role in 100+ countries), and boards whose only
 matches were titles the rules now reject (Roblox contract role, Justworks GTM,
 Airbyte support, Proconex services).
+
+## manual_only audit (Nov 2026)
+
+Every `manual_only` company's careers site was checked for the system behind
+it. Fixed in `companies.json` (the seed moves an existing manual-only company
+to its board, see Seeding rules):
+
+- Greenhouse: HRT (`wehrtyou`, now tracked), Oscar Health (`oscar`), Enigma
+  (`enigmaio`), Apprentice.io (`apprentice`), Skild AI (`skildai-careers`).
+- Ashby: Vistar Media (`vistar`).
+- New: OpenAI Deployment Company (Ashby `openai-deployment-company`, tier S).
+  northslopetech.com now redirects to it; Northslope stays manual only.
+
+Still manual only, and why:
+
+| System                    | Companies                                                                                                                                                                                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Workday                   | Boeing (`boeing.wd1/EXTERNAL_CAREERS`), Comcast (`comcast.wd115/comcast_careers`), PNC (`pnc.wd5/External`), Prudential (`pru.wd5/Careers`), Vanguard (`vanguard.wd5/vanguard_external`), Verizon (`verizon.wd12/verizon-careers`), Leidos (`leidos.wd5/External`) |
+| Avature                   | Bloomberg, Two Sigma, MetLife                                                                                                                                                                                                                                      |
+| Oracle Cloud HCM          | JPMorgan Chase, NJ Transit                                                                                                                                                                                                                                         |
+| iCIMS                     | Susquehanna/SIG, Certara                                                                                                                                                                                                                                           |
+| Other                     | Westinghouse (SuccessFactors), ASRC Federal (Dayforce), Lockheed Martin (Eightfold/BrassRing), Audible (Amazon Jobs), BAE Systems (Phenom), Loop (Rippling), IAM Robotics (now Onward Robotics, Paycom), Graphite (joined Cursor), Trayd (Gem)                     |
+| Blocks automated requests | Citadel (403), ADP (403)                                                                                                                                                                                                                                           |
+| No board found            | Ahold Delhaize USA, Incedo, Journey Robotics, SoftWriters, Northslope                                                                                                                                                                                              |
+
+A Workday adapter was built and dropped: Workday's public JSON API covers 7 of
+these companies, but its Cloudflare front end answers Node's HTTP client with
+a bot challenge (`cf-mitigated: challenge`, HTTP 429) even for one request, and
+getting around that is off limits. Leidos would also need 60+ pages per poll.

@@ -45,13 +45,13 @@ pnpm dev:web                  # web on :5173, proxying /api to :3000
 The scheduler is off in development (`SCHEDULER_ENABLED=false`); use the
 scripts instead:
 
-| Command                        | What it does                                                                             |
-| ------------------------------ | ---------------------------------------------------------------------------------------- |
-| `pnpm poll`                    | Poll every target now (skips the due check)                                              |
-| `pnpm notify -- --dry-run`     | List the jobs a push would include, without sending                                      |
-| `pnpm notify`                  | Send the push now (skips the due check and quiet hours)                                  |
-| `pnpm seed`                    | Insert-only seed from `poller/data/companies.json`; slugs are confirmed via each ATS API |
-| `pnpm discover "Company Name"` | Try slug guesses against Greenhouse, Lever, and Ashby; prints hits, writes nothing       |
+| Command                        | What it does                                                                                                                                              |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm poll`                    | Poll every target now (skips the due check)                                                                                                               |
+| `pnpm notify -- --dry-run`     | List the jobs a push would include, without sending                                                                                                       |
+| `pnpm notify`                  | Send the push now (skips the due check and quiet hours)                                                                                                   |
+| `pnpm seed`                    | Insert-only seed from `poller/data/companies.json` (also moves manual-only companies to a board the seed now names); slugs are confirmed via each ATS API |
+| `pnpm discover "Company Name"` | Try slug guesses against Greenhouse, Lever, and Ashby; prints hits, writes nothing                                                                        |
 
 Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm fix`
 to apply Biome / Prettier fixes. Commits follow Conventional Commits (enforced

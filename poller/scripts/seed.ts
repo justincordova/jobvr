@@ -13,13 +13,15 @@ try {
   const outcomes = await seedCompanies(database.db, adapters, createHttpClient(), entries);
   for (const o of outcomes) {
     const detail =
-      o.result === "inserted"
+      o.result !== "skipped"
         ? `${o.status}${o.track ? ", tracked" : ""}${o.jobCount !== undefined ? `, ${o.jobCount} jobs` : ""}`
         : "already exists";
     console.log(`${o.result.padEnd(8)} ${o.name.padEnd(24)} ${detail}`);
   }
-  const inserted = outcomes.filter((o) => o.result === "inserted").length;
-  console.log(`\n${inserted} inserted, ${outcomes.length - inserted} skipped`);
+  const count = (r: string) => outcomes.filter((o) => o.result === r).length;
+  console.log(
+    `\n${count("inserted")} inserted, ${count("upgraded")} moved to a supported board, ${count("skipped")} skipped`,
+  );
 } finally {
   await database.close();
 }

@@ -7,6 +7,7 @@ import {
   OTHER_ATS_ID,
   type Registry,
   TIERS,
+  updateCompany,
 } from "@jobvr/core";
 import { z } from "zod";
 
@@ -27,11 +28,20 @@ export type SeedEntry = z.infer<typeof SeedEntrySchema>;
 
 export type SeedOutcome =
   | { name: string; result: "skipped" }
-  | { name: string; result: "inserted"; status: string; track: boolean; jobCount?: number };
+  | {
+      name: string;
+      result: "inserted" | "upgraded";
+      status: string;
+      track: boolean;
+      jobCount?: number;
+    };
 
 /**
- * Insert-only seed: existing companies (by normalized name) are never touched.
- * Supported slugs are confirmed with `probe`; failures are kept as needs_review.
+ * Insert-only seed: existing companies (by normalized name) are left alone,
+ * with one exception: a company still stored as manual-only "other" is moved
+ * to its supported board when the seed now names one and the board answers
+ * (the PC picks up seed fixes such as HRT moving to Greenhouse). Supported
+ * slugs are confirmed with `probe`; failures are kept as needs_review.
  */
 export const seedCompanies = async (
   db: Db,
@@ -41,11 +51,40 @@ export const seedCompanies = async (
 ): Promise<SeedOutcome[]> => {
   const outcomes: SeedOutcome[] = [];
   for (const entry of entries) {
-    if (await findCompanyByName(db, entry.name)) {
-      outcomes.push({ name: entry.name, result: "skipped" });
+    const adapter = getAdapter(registry, entry.ats);
+    const existing = await findCompanyByName(db, entry.name);
+    if (existing) {
+      const upgradable =
+        existing.ats === OTHER_ATS_ID &&
+        existing.status === "manual_only" &&
+        adapter?.kind === "ats" &&
+        entry.slug &&
+        adapter.probe;
+      const probe = upgradable
+        ? await adapter.probe?.(entry.slug ?? "", { http }).catch(() => null)
+        : null;
+      if (!adapter || !entry.slug || !probe?.found) {
+        outcomes.push({ name: entry.name, result: "skipped" });
+        continue;
+      }
+      const track = entry.track !== false;
+      await updateCompany(db, existing.id, {
+        ats: adapter.id,
+        slug: entry.slug,
+        track,
+        status: "ok",
+        ...(entry.notes && { notes: entry.notes }),
+        ...(entry.careersUrl && { careersUrl: entry.careersUrl }),
+      });
+      outcomes.push({
+        name: entry.name,
+        result: "upgraded",
+        status: "ok",
+        track,
+        jobCount: probe.jobCount,
+      });
       continue;
     }
-    const adapter = getAdapter(registry, entry.ats);
     const base = {
       name: entry.name,
       city: entry.city,

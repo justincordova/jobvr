@@ -57,4 +57,43 @@ describe("seedCompanies", () => {
     ]);
     expect(again).toEqual([{ name: "bluematrix inc", result: "skipped" }]);
   });
+
+  it("moves a manual-only company to its board once the seed names one, and nothing else", async () => {
+    const { http } = fakeHttp({
+      "https://boards-api.greenhouse.io/v1/boards/wehrtyou/jobs": {
+        status: "ok",
+        etag: null,
+        data: { jobs: [{}] },
+      },
+    });
+    await seedCompanies(database.db, adapters, http, [
+      { name: "HRT", tier: "S", ats: "other" },
+      { name: "Two Sigma", tier: "S", ats: "other" },
+    ]);
+    const out = await seedCompanies(database.db, adapters, http, [
+      { name: "HRT", tier: "S", ats: "greenhouse", slug: "wehrtyou", notes: "Greenhouse board" },
+      // A slug that doesn't answer leaves the company as it was
+      { name: "Two Sigma", tier: "S", ats: "greenhouse", slug: "twosigma" },
+      // Already on a board: never touched
+      { name: "Duolingo", tier: "S", ats: "lever", slug: "duo" },
+    ]);
+    expect(out).toEqual([
+      { name: "HRT", result: "upgraded", status: "ok", track: true, jobCount: 1 },
+      { name: "Two Sigma", result: "skipped" },
+      { name: "Duolingo", result: "skipped" },
+    ]);
+    const rows = await database.db.select().from(companies);
+    expect(rows.find((c) => c.name === "HRT")).toMatchObject({
+      ats: "greenhouse",
+      slug: "wehrtyou",
+      track: true,
+      status: "ok",
+      notes: "Greenhouse board",
+    });
+    expect(rows.find((c) => c.name === "Two Sigma")).toMatchObject({
+      ats: "other",
+      status: "manual_only",
+    });
+    expect(rows.find((c) => c.name === "Duolingo")).toMatchObject({ ats: "greenhouse", tier: "A" });
+  });
 });
