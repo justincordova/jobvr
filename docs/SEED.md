@@ -108,8 +108,10 @@ the outcome. Hits were spot-checked against job locations before use.
 - Moved ATS: Valon → Ashby `valon`, Permutive → Ashby `permutive`.
 - Find slug: Yext (Greenhouse `yext`), EliseAI (Ashby `eliseai`), Ellipsis Labs
   (Ashby `ellipsislabs`), Gecko Robotics (Ashby `gecko-robotics`), Rilla (Ashby
-  `rilla`), Astronomer (Ashby `astronomer`). Not found: Aurora Innovation,
-  Graphite (`graphitehq` is an unrelated SEO agency); both `needs_review`.
+  `rilla`), Astronomer (Ashby `astronomer`). Not found at first: Aurora
+  Innovation and Graphite (`graphitehq` is an unrelated SEO agency). Resolved
+  Nov 2026: Aurora posts on Ashby as `aurora-operations-inc`; Graphite joined
+  Cursor (Dec 2025) and is `manual_only`.
 - Research found: Sigma Computing, Squarespace, Zocdoc, FanDuel, AvePoint,
   Zinnia, Latitude AI (`latitude`), Hellbender (`hellbenderinc`), Stack AV,
   Woolpert (Greenhouse); Traba, Chalk, Prelim, PointOne, HIFI, Confido (Ashby);

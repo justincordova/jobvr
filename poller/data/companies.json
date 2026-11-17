@@ -256,8 +256,8 @@
     "city": "Pittsburgh",
     "state": "PA",
     "tier": "Mid",
-    "ats": "greenhouse",
-    "slug": null
+    "ats": "ashby",
+    "slug": "aurora-operations-inc"
   },
   {
     "name": "Yext",
@@ -304,8 +304,9 @@
     "city": "NYC",
     "state": "NY",
     "tier": "Startup",
-    "ats": "ashby",
-    "slug": null
+    "ats": "other",
+    "notes": "Joined Cursor (Dec 2025); hires through Cursor",
+    "careersUrl": "https://cursor.com/careers"
   },
   {
     "name": "Astronomer",
