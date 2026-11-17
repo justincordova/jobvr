@@ -11,8 +11,9 @@ import {
   type SourceKind,
 } from "../matching";
 import { normalizeCompanyName, tokenize } from "../normalize";
+import { byRank, rankScore } from "../rank";
 import { startOfEasternDay } from "../schedule";
-import type { Settings } from "../settings";
+import { REMOTE_US_LABEL, type Settings } from "../settings";
 import { getAdapter } from "../sources/registry";
 import type { Registry } from "../sources/types";
 import { getSettingsState, setSettingsTimestamp } from "./settings";
@@ -32,7 +33,12 @@ export interface JobQuery {
   source?: string[];
   /** "entry": only entry-level jobs (see `entryLevel`). */
   level?: "entry";
+  /** "best" (see `rankScore`; the feed's default) or "newest" (other views' default). */
+  sort?: JobSort;
 }
+
+export const JOB_SORTS = ["best", "newest"] as const;
+export type JobSort = (typeof JOB_SORTS)[number];
 
 export interface JobSourceView {
   source: string;
@@ -74,6 +80,8 @@ export type JobWithFlags = JobRecord & {
   matchedLocations: string[];
   /** Other postings of the same role (see `collapseReposts`), newest first. */
   duplicateIds: string[];
+  /** "Best first" points (see `rankScore`). */
+  score: number;
 };
 
 /**
@@ -264,15 +272,35 @@ export const listJobs = async (
     newSinceLastVisit = candidates.filter(isNew).length;
   }
 
+  const sort = query.sort ?? (view === "feed" ? "best" : "newest");
+  const scored = collapseReposts(filtered).map((j) => {
+    const entryTitle = isEntryLevelTitle(j.title, s);
+    const years = j.sources
+      .map((src) => src.requiredYears)
+      .filter((y): y is number => y !== null && y !== undefined);
+    const score = rankScore(
+      {
+        effectiveAt: j.effectiveAt,
+        tier: j.tier,
+        entryTitle,
+        onNewGradList: j.sources.some((src) => kindOf(src.source) === "aggregator"),
+        requiredYears: years.length > 0 ? Math.min(...years) : null,
+        namedPlace: matchedLocationLabels(j.locations, s).some((l) => l !== REMOTE_US_LABEL),
+      },
+      now,
+    );
+    return { ...j, score };
+  });
+  // Already newest first from the query
+  if (sort === "best") scored.sort(byRank);
+
   return {
-    jobs: collapseReposts(filtered)
-      .slice(0, MAX_JOBS)
-      .map((j) => ({
-        ...j,
-        isNew: isNew(j),
-        entryLevel: entryLevel(j),
-        matchedLocations: j.locations.filter((l) => passesLocationRule([l], s)),
-      })),
+    jobs: scored.slice(0, MAX_JOBS).map((j) => ({
+      ...j,
+      isNew: isNew(j),
+      entryLevel: entryLevel(j),
+      matchedLocations: j.locations.filter((l) => passesLocationRule([l], s)),
+    })),
     lastVisitAt,
     newSinceLastVisit,
   };

@@ -2,8 +2,10 @@ import { TIER_FILTERS, type TierFilter } from '@/lib/types'
 
 export const VIEWS = ['feed', 'saved', 'applied', 'hidden'] as const
 export const AGES = ['1h', 'today', '3d', 'all'] as const
+export const SORTS = ['best', 'newest'] as const
 export type View = (typeof VIEWS)[number]
 export type Age = (typeof AGES)[number]
+export type Sort = (typeof SORTS)[number]
 
 export interface FeedSearch {
   view?: View
@@ -14,7 +16,12 @@ export interface FeedSearch {
   company?: string[]
   /** Only jobs flagged entry level. */
   level?: 'entry'
+  /** Unset: best first in the feed, newest first in the other views. */
+  sort?: Sort
 }
+
+export const defaultSort = (view: View | undefined): Sort =>
+  (view ?? 'feed') === 'feed' ? 'best' : 'newest'
 
 const strings = (v: unknown): string[] | undefined => {
   const list = Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : []
@@ -37,6 +44,7 @@ export function parseFeedSearch(raw: Record<string, unknown>): FeedSearch {
     source: strings(raw.source),
     company: strings(raw.company),
     level: raw.level === 'entry' ? 'entry' : undefined,
+    sort: oneOf(SORTS, raw.sort),
   }
 }
 
@@ -51,6 +59,7 @@ export function toJobQuery(s: FeedSearch) {
     source: csv(s.source),
     company: csv(s.company),
     level: s.level,
+    sort: s.sort,
   }
   return Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined)) as {
     view?: View
@@ -60,6 +69,7 @@ export function toJobQuery(s: FeedSearch) {
     source?: string
     company?: string
     level?: 'entry'
+    sort?: Sort
   }
 }
 

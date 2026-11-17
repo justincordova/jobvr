@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { JOB_AGES, JOB_STATES, JOB_VIEWS, TIER_FILTERS } from "@jobvr/core";
+import { JOB_AGES, JOB_SORTS, JOB_STATES, JOB_VIEWS, TIER_FILTERS } from "@jobvr/core";
 import { csv, envelope, isoNullable } from "@/lib/routes";
 
 export const JobSourceSchema = z.object({
@@ -35,6 +35,8 @@ export const JobSchema = z
     matchedLocations: z.array(z.string()),
     /** Other postings of the same role (same company, title, and locations); actions apply to all. */
     duplicateIds: z.array(z.string()),
+    /** "Best first" points: freshness, entry level, tier, place (see SPEC). */
+    score: z.number().int(),
     sources: z.array(JobSourceSchema),
   })
   .openapi("Job");
@@ -48,6 +50,8 @@ export const JobListQuery = z.object({
   source: csv(z.string()).openapi({ example: "greenhouse,simplify" }),
   /** `entry`: only jobs flagged entry level. */
   level: z.enum(["entry"]).optional(),
+  /** `best` (feed default) or `newest` (default elsewhere). */
+  sort: z.enum(JOB_SORTS).optional(),
 });
 
 export const JobListResponse = envelope(

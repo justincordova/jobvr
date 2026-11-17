@@ -13,6 +13,7 @@ describe('feed search params', () => {
       source: undefined,
       company: undefined,
       level: undefined,
+      sort: undefined,
     })
   })
 

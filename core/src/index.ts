@@ -18,6 +18,7 @@ export * from "./matching";
 export * from "./normalize";
 export * from "./notify";
 export * from "./poll/run-poll";
+export * from "./rank";
 export * from "./repos/companies";
 export * from "./repos/jobs";
 export * from "./repos/settings";

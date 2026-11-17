@@ -10,7 +10,9 @@ import {
   type Age,
   CLEARED_FILTERS,
   DEFAULT_AGE,
+  defaultSort,
   type FeedSearch,
+  type Sort,
   type View,
 } from './search'
 
@@ -67,6 +69,11 @@ const VIEW_OPTIONS: { id: View; label: string }[] = [
   { id: 'saved', label: 'Saved' },
   { id: 'applied', label: 'Applied' },
   { id: 'hidden', label: 'Hidden' },
+]
+
+const SORT_OPTIONS: { id: Sort; label: string }[] = [
+  { id: 'best', label: 'Best first' },
+  { id: 'newest', label: 'Newest first' },
 ]
 
 const AGE_OPTIONS: { id: Age; label: string }[] = [
@@ -152,6 +159,25 @@ export function FilterBar({ search, onChange, locations, sources, companies }: F
       >
         <div className="min-h-0 overflow-hidden">
           <div className="mt-3 grid gap-4 rounded-xl border border-line bg-panel/70 p-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <span>
+                <span className="block text-sm font-medium">Order</span>
+                <span className="block text-xs text-dim">
+                  Best first weighs freshness, a new-grad title, the company’s tier, and a named
+                  place; ties go to the newest.
+                </span>
+              </span>
+              <div className="shrink-0 self-start sm:self-auto">
+                <Segmented
+                  label="Order"
+                  value={search.sort ?? defaultSort(search.view)}
+                  options={SORT_OPTIONS}
+                  onChange={(s) =>
+                    onChange({ sort: s === defaultSort(search.view) ? undefined : s })
+                  }
+                />
+              </div>
+            </div>
             <label className="flex cursor-pointer items-center justify-between gap-4 sm:col-span-2">
               <span>
                 <span className="block text-sm font-medium">Entry level only</span>

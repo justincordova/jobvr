@@ -24,6 +24,7 @@ const job = (extra: Partial<Job> = {}): Job => ({
   entryLevel: true,
   matchedLocations: ['New York, NY'],
   duplicateIds: [],
+  score: 0,
   sources: [
     { source: 'greenhouse', url: '', title: '', category: null, removedAt: null, requiredYears: 0 },
     {

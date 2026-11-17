@@ -58,7 +58,7 @@ beforeEach(async () => {
 const body = async <T>(res: { json(): Promise<unknown> }) => (await res.json()) as T;
 
 describe("jobs routes", () => {
-  it("lists the feed newest first, applying V and filters", async () => {
+  it("lists the feed (newest first on request), applying V and filters", async () => {
     await insertJob("gh:1", { effectiveAt: at(2) });
     await insertJob("gh:2", { effectiveAt: at(1) });
     await insertJob("gh:3", { state: "hidden" });
@@ -70,7 +70,7 @@ describe("jobs routes", () => {
       { source: "simplify", title: "Software Engineer", category: "Software" },
     );
 
-    const res = await client.api.jobs.$get({ query: {} });
+    const res = await client.api.jobs.$get({ query: { sort: "newest" } });
     expect(res.status).toBe(200);
     const data = await res.json();
     if (!data.success) throw new Error("expected success");
@@ -79,7 +79,7 @@ describe("jobs routes", () => {
     expect(data.data.jobs[0]).toMatchObject({ tier: "Unlisted", isNew: false, state: "new" });
     expect(data.data.jobs[0]?.duplicateIds).toEqual([]);
     const recent = await body<{ data: { jobs: { id: string }[] } }>(
-      await client.api.jobs.$get({ query: { age: "3d" } }),
+      await client.api.jobs.$get({ query: { age: "3d", sort: "newest" } }),
     );
     expect(recent.data.jobs.map((j) => j.id)).toEqual(["gh:2", "sj:6", "gh:1"]);
 
@@ -99,7 +99,7 @@ describe("jobs routes", () => {
       },
     );
     const entry = await body<{ data: { jobs: { id: string; entryLevel: boolean }[] } }>(
-      await client.api.jobs.$get({ query: { level: "entry" } }),
+      await client.api.jobs.$get({ query: { level: "entry", sort: "newest" } }),
     );
     expect(entry.data.jobs.map((j) => j.id)).toEqual(["gh:2", "sj:6", "gh:1", "gh:5"]);
     expect(entry.data.jobs.every((j) => j.entryLevel)).toBe(true);
@@ -129,6 +129,31 @@ describe("jobs routes", () => {
       await client.api.jobs.$get({ query: {} }),
     );
     expect(res.data.jobs.map((j) => [j.id, j.duplicateIds])).toEqual([["sj:b", ["sj:c", "sj:a"]]]);
+  });
+
+  it("ranks the feed best first by default (new-grad title over a fresher plain one)", async () => {
+    await insertJob(
+      "gh:plain",
+      { effectiveAt: at(1) },
+      {
+        source: "greenhouse",
+        title: "Software Engineer, Payments",
+        category: null,
+      },
+    );
+    await insertJob("gh:grad", { effectiveAt: at(30) });
+    const best = await body<{ data: { jobs: { id: string; score: number }[] } }>(
+      await client.api.jobs.$get({ query: {} }),
+    );
+    expect(best.data.jobs.map((j) => [j.id, j.score])).toEqual([
+      ["gh:grad", 24 + 20 + 4],
+      ["gh:plain", 30 + 4],
+    ]);
+    // Other views stay newest first
+    const newest = await body<{ data: { jobs: { id: string }[] } }>(
+      await client.api.jobs.$get({ query: { sort: "newest" } }),
+    );
+    expect(newest.data.jobs.map((j) => j.id)).toEqual(["gh:plain", "gh:grad"]);
   });
 
   it("counts new jobs since the last visit", async () => {
