@@ -894,7 +894,9 @@ data"; writes fail with "Can't reach jobvr".
   jobvr → `/api` writes (not GET/HEAD/OPTIONS) are refused with 403 when
   `Sec-Fetch-Site` is `cross-site`/`same-site`, or (browsers without it) when
   `Origin` names another host; `ALLOWED_ORIGINS` and requests with neither
-  header (curl, scripts) pass.
+  header (curl, scripts) pass. `docker-compose.yml` sets `ALLOWED_ORIGINS` empty
+  (the PC is same-origin), so the Mac's localhost origins from `.env.example`
+  are never trusted in production.
 - A deploy replaces the hashed assets → `/assets/*` that no longer exist return
   404 (never `index.html`, which would be cached for a year as immutable).
 

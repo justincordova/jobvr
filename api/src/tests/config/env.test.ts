@@ -10,6 +10,10 @@ describe("EnvSchema", () => {
     expect(env.ALLOWED_ORIGINS).toEqual(["http://localhost:3000", "http://localhost:5173"]);
   });
 
+  it("accepts an empty ALLOWED_ORIGINS (production is same-origin only)", () => {
+    expect(EnvSchema.parse({ ALLOWED_ORIGINS: "" }).ALLOWED_ORIGINS).toEqual([]);
+  });
+
   it("splits and trims ALLOWED_ORIGINS", () => {
     const env = EnvSchema.parse({ ALLOWED_ORIGINS: "https://a.com, https://b.com:8443" });
     expect(env.ALLOWED_ORIGINS).toEqual(["https://a.com", "https://b.com:8443"]);

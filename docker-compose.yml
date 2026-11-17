@@ -37,6 +37,9 @@ services:
       DATABASE_URL: postgres://jobvr:${POSTGRES_PASSWORD}@postgres:5432/jobvr
       SCHEDULER_ENABLED: "true"
       AUTH_MODE: none
+      # The app is same-origin behind Tailscale; .env.example's localhost origins are for
+      # the Mac and would let a localhost page on any tailnet device read and write jobvr
+      ALLOWED_ORIGINS: ""
       # .env.example's LOG_LEVEL is for the Mac (debug); set PC_LOG_LEVEL=debug to dig into an issue
       LOG_LEVEL: ${PC_LOG_LEVEL:-info}
     depends_on:
