@@ -31,6 +31,17 @@ describe("App", () => {
     expect(await res.json()).toMatchObject({ success: false, error: "Route not found" });
   });
 
+  it("GET /health is 503 when the scheduler is on but no poll ran for 3 intervals", async () => {
+    let now = new Date("2026-11-17T12:00:00Z");
+    const scheduled = createApp({ ...ctx.deps, now: () => now }, { schedulerEnabled: true });
+    // Just started: within the grace window
+    expect((await scheduled.request("/health")).status).toBe(200);
+    now = new Date(now.getTime() + 31 * 60_000);
+    const stale = await scheduled.request("/health");
+    expect(stale.status).toBe(503);
+    expect(await stale.json()).toEqual({ status: "stale", lastPollAt: null });
+  });
+
   it("sets security headers and echoes a request ID", async () => {
     const res = await app.request("/health", { headers: { "X-Request-Id": "test-id-123" } });
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");

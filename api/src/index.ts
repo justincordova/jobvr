@@ -35,7 +35,7 @@ log.info(
 
 const app = createApp(
   { database, registry: adapters, now: () => new Date() },
-  { webDistDir: env.WEB_DIST_DIR },
+  { webDistDir: env.WEB_DIST_DIR, schedulerEnabled: env.SCHEDULER_ENABLED },
 );
 
 const scheduler = env.SCHEDULER_ENABLED

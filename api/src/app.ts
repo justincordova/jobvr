@@ -25,7 +25,12 @@ import pkg from "../package.json" with { type: "json" };
 export interface AppOptions {
   /** Built SPA to serve (skipped when missing, e.g. in tests). */
   webDistDir?: string;
+  /** The scheduler runs in this process: /health then also reports a stalled poll. */
+  schedulerEnabled?: boolean;
 }
+
+/** /health turns 503 when the last poll is older than this many poll intervals. */
+const STALE_POLL_INTERVALS = 3;
 
 /**
  * Build and configure the Hono application.
@@ -34,6 +39,7 @@ export interface AppOptions {
  * tests stay isolated. `src/index.ts` passes `app.fetch` to the Node server.
  */
 export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
+  const bootedAt = deps.now();
   const app = createRouter();
 
   const docsEnabled = env.NODE_ENV !== "production";
@@ -129,10 +135,16 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
     .get("/health", async (c) => {
       try {
         const state = await getSettingsState(deps.database.db);
-        return c.json(
-          { status: "ok" as const, lastPollAt: state.lastPollAt?.toISOString() ?? null },
-          200,
-        );
+        const lastPollAt = state.lastPollAt?.toISOString() ?? null;
+        if (options.schedulerEnabled) {
+          // A fresh process gets one stale window to run its first poll
+          const since = Math.max(state.lastPollAt?.getTime() ?? 0, bootedAt.getTime());
+          const staleMs = STALE_POLL_INTERVALS * state.settings.pollEveryMinutes * 60_000;
+          if (deps.now().getTime() - since > staleMs) {
+            return c.json({ status: "stale" as const, lastPollAt }, 503);
+          }
+        }
+        return c.json({ status: "ok" as const, lastPollAt }, 200);
       } catch {
         return c.json({ status: "unavailable" as const, lastPollAt: null }, 503);
       }
