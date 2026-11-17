@@ -127,6 +127,8 @@ export const jobSources = pgTable(
     removedAt: ts("removed_at"),
     /** Years of experience the description asks for: null = not checked, 0 = none named. */
     requiredYears: integer("required_years"),
+    /** Plain-text description (capped), for the detail panel; null when the source has none. */
+    description: text("description"),
   },
   (t) => [
     primaryKey({ columns: [t.source, t.sourceJobId] }),

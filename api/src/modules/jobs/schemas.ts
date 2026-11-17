@@ -75,6 +75,22 @@ export const JobListResponse = envelope(
   }),
 );
 
+export const JobDetailsResponse = envelope(
+  z
+    .object({
+      id: z.string(),
+      source: z.string().nullable(),
+      description: z.string().nullable(),
+      keyLines: z.array(
+        z.object({
+          topic: z.enum(["experience", "degree", "visa", "workplace", "pay"]),
+          text: z.string(),
+        }),
+      ),
+    })
+    .openapi("JobDetails"),
+);
+
 export const JobParams = z.object({
   id: z
     .string()

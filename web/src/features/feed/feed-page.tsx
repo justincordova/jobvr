@@ -9,6 +9,7 @@ import { companiesQuery } from '@/lib/companies-query'
 import { cn } from '@/lib/cn'
 import { FEED_GRID } from './columns'
 import { FilterBar } from './filter-bar'
+import { JobDetailsDialog } from './job-details'
 import { JobRow } from './job-row'
 import {
   activeFilterCount,
@@ -83,6 +84,7 @@ export function FeedPage() {
   const navigate = useNavigate({ from: '/' })
   const [bannerOpen, setBannerOpen] = useState(true)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [detailsId, setDetailsId] = useState<string | null>(null)
   const baseQuery = toJobQuery(search)
   const view = search.view ?? 'feed'
   // "Show more" raises the page size; any other change of query starts over
@@ -140,7 +142,10 @@ export function FeedPage() {
     onState: act,
     onView: (v) => update({ view: v === 'feed' ? undefined : v }),
     onHelp: () => setHelpOpen(true),
+    onDetails: (job) => setDetailsId(job.id),
   })
+  // From the full response, so the panel stays open if the job leaves this view
+  const detailsJob = jobs.data?.jobs.find((j) => j.id === detailsId) ?? null
   const empty = EMPTY_COPY[view]
   const filtered = activeFilterCount(search) > 0 || Boolean(search.q)
   // Rows just acted on leave the list before the refetch lowers `total`
@@ -179,6 +184,12 @@ export function FeedPage() {
         }
       />
       <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      <JobDetailsDialog
+        job={detailsJob}
+        sourceLabel={sourceLabel}
+        onOpenChange={(open) => !open && setDetailsId(null)}
+        onState={act}
+      />
 
       {newCount > 0 && bannerOpen && view === 'feed' && (
         <div
@@ -279,6 +290,7 @@ export function FeedPage() {
               busy={setState.isPending && setState.variables?.id === job.id}
               selected={keys.selected === job.id}
               onFocusRow={() => keys.focusRow(job.id)}
+              onDetails={() => setDetailsId(job.id)}
               onState={(state) => act(job, state)}
             />
           ))}

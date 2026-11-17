@@ -374,7 +374,10 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
     const checked = new Map<string, MemJob>();
     for (const m of window.values()) {
       for (const s of m.sources) {
-        if (s.requiredYears !== null) checked.set(`${s.source}:${s.sourceJobId}`, m);
+        // Description too: rows from before descriptions were stored get one detail request
+        if (s.requiredYears !== null && s.description !== null) {
+          checked.set(`${s.source}:${s.sourceJobId}`, m);
+        }
       }
     }
     const enrich: Enrich = async (t, result, signal) => {

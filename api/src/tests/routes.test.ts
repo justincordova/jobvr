@@ -1,4 +1,5 @@
 import { schema } from "@jobvr/core";
+import { eq } from "drizzle-orm";
 import { testClient } from "hono/testing";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "@/app";
@@ -176,6 +177,30 @@ describe("jobs routes", () => {
     const page = await ids({ limit: "2", sort: "newest" });
     expect(page.jobs).toHaveLength(2);
     expect(page.total).toBe(3);
+  });
+
+  it("returns a job's description and key lines; 404 for an unknown job", async () => {
+    await insertJob("gh:d");
+    await ctx.database.db
+      .update(schema.jobSources)
+      .set({
+        description:
+          "Great team.\nBachelor's degree in Computer Science required.\nHybrid in our NYC office.",
+      })
+      .where(eq(schema.jobSources.jobId, "gh:d"));
+    const res = await client.api.jobs[":id"].details.$get({ param: { id: "gh:d" } });
+    expect(await res.json()).toMatchObject({
+      data: {
+        source: "greenhouse",
+        keyLines: [
+          { topic: "degree", text: "Bachelor's degree in Computer Science required." },
+          { topic: "workplace", text: "Hybrid in our NYC office." },
+        ],
+      },
+    });
+    expect((await client.api.jobs[":id"].details.$get({ param: { id: "gh:none" } })).status).toBe(
+      404,
+    );
   });
 
   it("counts new jobs since the last visit", async () => {

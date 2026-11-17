@@ -183,6 +183,13 @@ const existsInDb = async (p: PreparedListing, ctx: ProcessContext): Promise<bool
 const yearsOf = (p: PreparedListing): number | null =>
   !p.listing.description?.trim() ? null : (requiredYears(p.listing.description) ?? 0);
 
+/** Long enough for any real posting; a runaway one can't bloat the table. */
+const DESCRIPTION_MAX = 20_000;
+const storedDescription = (p: PreparedListing): string | null => {
+  const text = p.listing.description?.trim();
+  return text ? text.slice(0, DESCRIPTION_MAX) : null;
+};
+
 const sourceRowFor = (p: PreparedListing, jobId: string, removedAt: Date | null): JobSourceRow => ({
   source: p.listing.source,
   sourceJobId: p.listing.sourceJobId,
@@ -195,6 +202,7 @@ const sourceRowFor = (p: PreparedListing, jobId: string, removedAt: Date | null)
   postedAtPrecision: p.listing.postedAtPrecision,
   removedAt,
   requiredYears: yearsOf(p),
+  description: storedDescription(p),
 });
 
 const upsertSourceRow = (tx: Tx, row: JobSourceRow) =>
@@ -212,6 +220,7 @@ const upsertSourceRow = (tx: Tx, row: JobSourceRow) =>
         postedAt: row.postedAt,
         postedAtPrecision: row.postedAtPrecision,
         requiredYears: row.requiredYears,
+        description: row.description,
       },
     });
 
@@ -265,6 +274,7 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
   let removedAt: Date | null = null;
   let knownYears: number | null = null;
   let outsideJobId: string | undefined;
+  let knownDescription: string | null = null;
   let stored: JobSourceRow | undefined;
   const inWindowId = ws.jobIdForSource(source, sourceJobId);
   if (inWindowId) {
@@ -273,18 +283,21 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
       ?.sources.find((s) => s.source === source && s.sourceJobId === sourceJobId);
     removedAt = stored?.removedAt ?? null;
     knownYears = stored?.requiredYears ?? null;
+    knownDescription = stored?.description ?? null;
   } else {
     const [existing] = await tx
       .select({
         jobId: jobSources.jobId,
         removedAt: jobSources.removedAt,
         requiredYears: jobSources.requiredYears,
+        description: jobSources.description,
       })
       .from(jobSources)
       .where(and(eq(jobSources.source, source), eq(jobSources.sourceJobId, sourceJobId)));
     if (existing) {
       removedAt = existing.removedAt;
       knownYears = existing.requiredYears;
+      knownDescription = existing.description;
       if (existing.jobId !== jobId) outsideJobId = existing.jobId;
     }
   }
@@ -292,6 +305,7 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
   const row = sourceRowFor(p, jobId, removedAt);
   // A listing without a description (detail not refetched) keeps what's known
   row.requiredYears ??= knownYears;
+  row.description ??= knownDescription;
   // Most polls change nothing: skip the write (no table bloat, no row locks against Save/Hide)
   if (!stored || Object.keys(changes(stored, row)).length > 0) await upsertSourceRow(tx, row);
   const movedFrom = ws.upsertRow(jobId, row) ?? outsideJobId;

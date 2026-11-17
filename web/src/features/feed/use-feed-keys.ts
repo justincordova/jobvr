@@ -8,6 +8,7 @@ export const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['j', '↓'], label: 'Next role' },
   { keys: ['k', '↑'], label: 'Previous role' },
   { keys: ['o', 'Enter'], label: 'Open the posting' },
+  { keys: ['d'], label: 'Details: what it asks for, full description' },
   { keys: ['a'], label: 'Mark applied' },
   { keys: ['s'], label: 'Save or unsave' },
   { keys: ['h'], label: 'Hide or unhide' },
@@ -45,11 +46,13 @@ export function useFeedKeys({
   onState,
   onView,
   onHelp,
+  onDetails = () => {},
 }: {
   list: Job[]
   onState: (job: Job, state: Job['state']) => void
   onView: (view: View) => void
   onHelp: () => void
+  onDetails?: (job: Job) => void
 }) {
   // The id picked, and where it was: if it leaves the list, its successor is selected
   const [picked, setPicked] = useState<{ id: string; index: number } | null>(null)
@@ -70,9 +73,9 @@ export function useFeedKeys({
     }
   }, [current])
 
-  const latest = useRef({ list, index, onState, onView, onHelp })
+  const latest = useRef({ list, index, onState, onView, onHelp, onDetails })
   useLayoutEffect(() => {
-    latest.current = { list, index, onState, onView, onHelp }
+    latest.current = { list, index, onState, onView, onHelp, onDetails }
   })
 
   useEffect(() => {
@@ -88,7 +91,7 @@ export function useFeedKeys({
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return
-      const { list, index, onState, onView, onHelp } = latest.current
+      const { list, index, onState, onView, onHelp, onDetails } = latest.current
       const job = index >= 0 ? list[index] : undefined
       const key = e.key
       const control = controlOf(e.target)
@@ -108,7 +111,8 @@ export function useFeedKeys({
         // Enter on a focused control does what that control does (a title link opens itself)
         const href = safeHref(job.url)
         if (href) window.open(href, '_blank', 'noopener,noreferrer')
-      } else if (job && key === 'a') onState(job, job.state === 'applied' ? 'new' : 'applied')
+      } else if (job && key === 'd') onDetails(job)
+      else if (job && key === 'a') onState(job, job.state === 'applied' ? 'new' : 'applied')
       else if (job && key === 's') onState(job, job.state === 'saved' ? 'new' : 'saved')
       else if (job && key === 'h') onState(job, job.state === 'hidden' ? 'new' : 'hidden')
       else handled = false

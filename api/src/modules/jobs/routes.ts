@@ -7,7 +7,13 @@ import {
   notFound,
   validationError,
 } from "@/lib/routes";
-import { JobListQuery, JobListResponse, JobParams, JobStateBody } from "./schemas";
+import {
+  JobDetailsResponse,
+  JobListQuery,
+  JobListResponse,
+  JobParams,
+  JobStateBody,
+} from "./schemas";
 
 const tags = ["jobs"];
 
@@ -33,6 +39,21 @@ export const visit = createRoute({
   summary: "Record a feed visit (for 'new since last visit')",
   responses: {
     200: json(NullResponse, "Visit recorded"),
+    ...commonErrors,
+  },
+});
+
+export const details = createRoute({
+  operationId: "getJobDetails",
+  method: "get",
+  path: "/{id}/details",
+  tags,
+  summary: "A job's description and the key lines to read before applying",
+  request: { params: JobParams },
+  responses: {
+    200: json(JobDetailsResponse, "Description and key lines"),
+    400: validationError,
+    404: notFound,
     ...commonErrors,
   },
 });

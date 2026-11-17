@@ -3,6 +3,7 @@ import type { JobState, TierFilter } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { companies, type JobRow, jobSources, jobs } from "../db/schema";
 import { NotFoundError } from "../errors";
+import { type KeyLine, keyLines } from "../key-lines";
 import {
   isEntryLevelTitle,
   isVisible,
@@ -349,4 +350,35 @@ export const setJobState = async (
     .where(eq(jobs.id, id))
     .returning({ id: jobs.id });
   if (!row) throw new NotFoundError("Job not found");
+};
+
+export interface JobDetails {
+  id: string;
+  /** The source the description came from (null when none has one). */
+  source: string | null;
+  description: string | null;
+  keyLines: KeyLine[];
+}
+
+/**
+ * The description for the detail panel: the primary source's, else the
+ * longest any source has (SimplifyJobs has none). Kept out of `listJobs`, so
+ * the feed never loads description text.
+ */
+export const getJobDetails = async (db: DbOrTx, id: string): Promise<JobDetails> => {
+  const [job] = await db
+    .select({ primarySource: jobs.primarySource })
+    .from(jobs)
+    .where(eq(jobs.id, id));
+  if (!job) throw new NotFoundError("Job not found");
+  const rows = await db
+    .select({ source: jobSources.source, description: jobSources.description })
+    .from(jobSources)
+    .where(eq(jobSources.jobId, id));
+  const withText = rows.filter((r) => r.description);
+  const pick =
+    withText.find((r) => r.source === job.primarySource) ??
+    withText.sort((a, b) => (b.description?.length ?? 0) - (a.description?.length ?? 0))[0];
+  const description = pick?.description ?? null;
+  return { id, source: pick?.source ?? null, description, keyLines: keyLines(description) };
 };

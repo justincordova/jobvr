@@ -1,4 +1,13 @@
-import { Bookmark, BookmarkCheck, Check, EyeOff, Eye, ExternalLink, Undo2 } from 'lucide-react'
+import {
+  Bookmark,
+  BookmarkCheck,
+  Check,
+  EyeOff,
+  Eye,
+  ExternalLink,
+  PanelRightOpen,
+  Undo2,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
@@ -18,6 +27,8 @@ interface JobRowProps {
   /** The keyboard selection (j/k). */
   selected?: boolean
   onFocusRow?: () => void
+  /** Opens the detail panel. */
+  onDetails?: () => void
 }
 
 /** Matching places first ("King of Prussia, PA" before "Farmington Hills, MI"), then a count. */
@@ -39,6 +50,7 @@ export function JobRow({
   busy,
   selected = false,
   onFocusRow,
+  onDetails,
 }: JobRowProps) {
   const salary = salaryRange(job.salaryMinUsd, job.salaryMaxUsd)
   const sources = [...new Set(job.sources.map((s) => sourceLabel(s.source)))].join(' · ')
@@ -189,6 +201,18 @@ export function JobRow({
               </Button>
             )}
           </>
+        )}
+        {onDetails && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={onDetails}
+            aria-label={`Details for ${job.title}`}
+            title="Details (d)"
+            className="size-8"
+          >
+            <PanelRightOpen />
+          </Button>
         )}
       </div>
     </li>

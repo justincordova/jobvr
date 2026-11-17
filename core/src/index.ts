@@ -13,6 +13,7 @@ export * from "./errors";
 export * from "./experience";
 export * from "./freshness";
 export * from "./http";
+export * from "./key-lines";
 export * from "./lock";
 export * from "./logger";
 export * from "./matching";
