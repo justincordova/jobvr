@@ -15,6 +15,16 @@ describe("EnvSchema", () => {
     expect(env.ALLOWED_ORIGINS).toEqual(["https://a.com", "https://b.com:8443"]);
   });
 
+  it("requires an http(s) ntfy URL with a topic", () => {
+    expect(EnvSchema.safeParse({ NTFY_URL: "https://ntfy.sh/" }).success).toBe(false);
+    expect(EnvSchema.safeParse({ NTFY_URL: "ntfy.sh/topic" }).success).toBe(false);
+    expect(EnvSchema.safeParse({ NTFY_URL: "ftp://ntfy.sh/topic" }).success).toBe(false);
+    expect(EnvSchema.parse({ NTFY_URL: " https://ntfy.sh/abc123 " }).NTFY_URL).toBe(
+      "https://ntfy.sh/abc123",
+    );
+    expect(EnvSchema.parse({ NTFY_URL: "" }).NTFY_URL).toBeUndefined();
+  });
+
   it("rejects invalid values with issues instead of throwing", () => {
     const result = EnvSchema.safeParse({
       PORT: "70000",

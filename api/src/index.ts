@@ -25,6 +25,18 @@ const describeDb = (url: string) => {
   }
 };
 
+// Pushes link to PUBLIC_URL: a localhost one opens nothing on the phone
+if (
+  env.SCHEDULER_ENABLED &&
+  env.NTFY_URL &&
+  /^(localhost|127\.|\[::1\])/.test(new URL(env.PUBLIC_URL).host)
+) {
+  log.warn(
+    { publicUrl: env.PUBLIC_URL },
+    `PUBLIC_URL is ${env.PUBLIC_URL}: tapping a push on the phone won't open jobvr; set it to https://jobvr.<tailnet>.ts.net`,
+  );
+}
+
 const database = createDatabase(env.DATABASE_URL);
 const migrateStarted = performance.now();
 await runMigrations(database.db, env.MIGRATIONS_DIR);

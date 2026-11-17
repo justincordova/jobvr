@@ -43,9 +43,16 @@ export const EnvSchema = z.object({
     .string()
     .optional()
     .transform((v) => v?.trim() || undefined)
-    .pipe(z.url().optional()),
+    .pipe(
+      z
+        .url({ protocol: /^https?$/ })
+        .refine((url) => !URL.canParse(url) || new URL(url).pathname.replace(/\//g, "") !== "", {
+          message: "NTFY_URL must include the topic, e.g. https://ntfy.sh/<long-random-topic>",
+        })
+        .optional(),
+    ),
   /** Push click target, e.g. https://jobvr.<tailnet>.ts.net */
-  PUBLIC_URL: z.url().default("http://localhost:5173"),
+  PUBLIC_URL: z.url({ protocol: /^https?$/ }).default("http://localhost:5173"),
   /** The tailnet is the auth boundary in the MVP. */
   AUTH_MODE: z.enum(["none"]).default("none"),
   SCHEDULER_ENABLED: z
