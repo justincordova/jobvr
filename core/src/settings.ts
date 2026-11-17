@@ -180,6 +180,9 @@ export const DEFAULT_SETTINGS: Settings = {
     "recruiter",
     "designer",
     "educator",
+    "customer support",
+    "gtm",
+    "go to market",
     // "developer" outside software
     "curriculum",
     "instructional",

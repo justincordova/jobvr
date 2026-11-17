@@ -31,6 +31,8 @@ describe("keyword rule", () => {
       "Machine Learning Compiler Engineer",
       "AI Forward Deployed Engineer",
       "Forward Deployed Software Engineer, New Grad - Warp Speed",
+      "Software Engineer, Smart Contracts",
+      "Software Engineer, Contracts Platform",
     ]) {
       expect(ats(t), t).toBe(true);
     }
@@ -63,6 +65,12 @@ describe("keyword rule", () => {
       "Campus Recruiter, Machine Learning and Quantitative Research",
       "Software Engineer (Part-Time)",
       "Temporary Manager - Python Developer - Risk Technology & AI",
+      // From the wider board scan (Nov 2026)
+      "Developer Engagement Team  (Contract)",
+      "Software Engineer - Contractor",
+      "Customer Support Developer (Databases)",
+      "Associate GTM Engineer",
+      "Lifecycle Services Engineer I",
     ]) {
       expect(ats(t), t).toBe(false);
     }

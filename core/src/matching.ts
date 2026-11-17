@@ -40,7 +40,15 @@ const NON_SOFTWARE = [
   "solutions",
   "customer",
   "network",
+  "services",
 ];
+
+/**
+ * A contract tag: "(Contract)", "- Contractor", ", Contract (Remote)". Contracts
+ * as the subject ("Smart Contract Engineer") don't count.
+ */
+const CONTRACT_TAG =
+  /[([]\s*contract(?:or|ual)?(?:\s+(?:position|role|basis))?\s*[)\]]|[-,|/]\s*contract(?:or|ual)?(?:\s+(?:position|role|basis))?\s*(?:$|[([])/i;
 const GENERIC_ENGINEERING = ["engineer", "engineering", "developer", "programmer"];
 
 /** True when the title says it's entry level (a level keyword, or "I" / "1"). */
@@ -53,7 +61,8 @@ export const isEntryLevelTitle = (title: string, settings: Pick<Settings, "level
 };
 
 /**
- * 1. Exclude keywords always reject ("Senior", "Intern").
+ * 1. Exclude keywords and a contract tag always reject ("Senior", "Intern",
+ *    "(Contract)").
  * 2. Numbered experienced levels ("II", "3") reject unless the title is also
  *    entry level ("Engineer 1/2", "Engineer 2 New Grad").
  * 3. A role keyword passes ("Software Engineer", "AI Engineer"). A level
@@ -71,7 +80,7 @@ export const passesKeywordRule = (
   category?: string | null,
 ): boolean => {
   const tokens = tokenize(title);
-  if (matchesAnyKeyword(tokens, settings.excludeKeywords)) return false;
+  if (matchesAnyKeyword(tokens, settings.excludeKeywords) || CONTRACT_TAG.test(title)) return false;
   const entry = isEntryLevelTitle(title, settings);
   if (!entry && tokens.some((t) => EXPERIENCED_LEVEL_TOKENS.has(t))) return false;
   const role = matchesAnyKeyword(tokens, settings.roleKeywords);
