@@ -132,7 +132,9 @@ const findFuzzy = (p: PreparedListing, ctx: ProcessContext): MemJob | null => {
     const jobHasAts = hasAtsRow(m, registry);
     if (incomingIsAts) {
       if (jobHasAts || !aggregatorPrefixes.some((x) => m.job.id.startsWith(x))) continue;
-    } else if (!jobHasAts) {
+    } else if (!jobHasAts && m.sources.some((s) => s.source === p.listing.source)) {
+      // Another list's copy of a role at a company with no readable board (Amazon,
+      // Workday) merges; a list's own near-duplicates (one per city) stay apart
       continue;
     }
     if (!sameCompany(jobCompany(m.job), listingCompany(p))) continue;

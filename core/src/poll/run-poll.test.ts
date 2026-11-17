@@ -817,6 +817,48 @@ describe("runPoll: health and transactions", () => {
   });
 });
 
+describe("runPoll: several lists", () => {
+  const list = (id: string, prefix: string, jobs: () => SourceJob[]): SourceAdapter => ({
+    id,
+    label: id,
+    kind: "aggregator",
+    idPrefix: prefix,
+    concurrency: 1,
+    async fetch() {
+      return { status: "ok", etag: null, invalidCount: 0, jobs: jobs() };
+    },
+  });
+  const pollWith = (extra: SourceAdapter[]) =>
+    runPoll({
+      database,
+      registry: [...env.registry, ...extra],
+      http: {} as never,
+      force: true,
+      now: () => clock,
+    });
+
+  it("merges another list's copy of a role at a company with no readable board", async () => {
+    // Amazon-like: no ATS adapter, and the second list links its own page, not the posting
+    env.setSimplify([
+      sjJob("s1", "Globex", "Software Development Engineer", "https://globex.jobs/1"),
+      sjJob("s2", "Globex", "Software Development Engineer", "https://globex.jobs/2", {
+        locations: ["Seattle, WA", "NYC"],
+      }),
+    ]);
+    const jr = list("jobright", "jr", () => [
+      sjJob("j1", "Globex", "Software Development Engineer", "https://jobright.test/1", {
+        source: "jobright",
+      }),
+    ]);
+    await pollWith([jr]);
+    const stored = await allJobs();
+    // Simplify's two near-duplicates stay apart; Jobright's copy joins one of them
+    expect(stored.map((j) => j.id)).toEqual(["sj:s1", "sj:s2"]);
+    const sources = await database.db.select().from(jobSources).orderBy(jobSources.source);
+    expect(sources.map((r) => r.source)).toEqual(["jobright", "simplify", "simplify"]);
+  });
+});
+
 describe("runPoll: Simplify companies and suggestions", () => {
   it("baselines the aggregator's first poll", async () => {
     env.setSimplify([sjJob("s1", "Globex", "Software Engineer", "https://globex.com/jobs/1")]);
