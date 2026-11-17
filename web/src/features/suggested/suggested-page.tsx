@@ -30,10 +30,10 @@ function SuggestionCard({
   return (
     <li
       style={{ viewTransitionName: vtName('sug', s.id) }}
-      className="flex animate-rise flex-col rounded-xl border border-line bg-panel/60 p-4 transition-colors duration-150 hover:border-line-strong"
+      className="flex min-w-0 animate-rise flex-col rounded-xl border border-line bg-panel/60 p-4 transition-colors duration-150 hover:border-line-strong"
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-lg leading-tight font-semibold tracking-tight">{s.displayName}</h2>
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-dim">
             <Badge tone={trackable ? 'go' : 'neutral'}>{atsLabel}</Badge>
@@ -69,7 +69,7 @@ function SuggestionCard({
           aria-label={`Tier for ${s.displayName}`}
           value={tier}
           onChange={(e) => setTier(e.target.value as Tier)}
-          className="h-8 w-28 py-1 text-xs"
+          className="h-8 w-28 py-1 text-xs pointer-coarse:h-11"
         >
           {TIERS.map((t) => (
             <option key={t}>{t}</option>
@@ -166,7 +166,10 @@ export function SuggestedPage() {
           retrying={suggestions.isFetching}
         />
       ) : suggestions.isPending ? (
-        <ul aria-hidden className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        <ul
+          aria-hidden
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+        >
           {Array.from({ length: 3 }, (_, i) => (
             <li key={i} className="h-56 animate-pulse rounded-xl border border-line bg-panel/60" />
           ))}
@@ -189,7 +192,7 @@ export function SuggestedPage() {
           }
         />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {suggestions.data.map((s) => (
             <SuggestionCard
               key={s.id}

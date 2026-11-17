@@ -440,7 +440,7 @@ export function CompaniesPage() {
           }
         />
       ) : (
-        <div className="-mx-4 overflow-x-auto sm:mx-0 sm:rounded-xl sm:border sm:border-line">
+        <div className="relative -mx-4 overflow-x-auto sm:mx-0 sm:rounded-xl sm:border sm:border-line">
           <table className="w-full min-w-[34rem] text-sm md:min-w-[52rem]">
             <thead>
               <tr className="border-b border-line text-left font-mono text-[0.68rem] tracking-wider text-faint uppercase">
