@@ -5,7 +5,7 @@ the API before seeding; if it fails, mark `needs_review` (don't drop it).
 (old) = from a 1–3 year old posting; the ATS may have changed.
 Every tier starts tracked (S and A included).
 
-## Greenhouse — verified
+## Greenhouse: verified
 
 | Slug                | Name                | Location       | Tier    |
 | ------------------- | ------------------- | -------------- | ------- |
@@ -24,7 +24,7 @@ Every tier starts tracked (S and A included).
 
 Find slug: Aurora Innovation (Pittsburgh, Mid), Yext (NYC, Mid)
 
-## Lever — verified
+## Lever: verified
 
 | Slug        | Name        | Location                | Tier    |
 | ----------- | ----------- | ----------------------- | ------- |
@@ -39,7 +39,7 @@ Find slug: Aurora Innovation (Pittsburgh, Mid), Yext (NYC, Mid)
 | seekai      | Seek AI     | NYC                     | Startup |
 | palantir    | Palantir    | NYC                     | S       |
 
-## Ashby — verified
+## Ashby: verified
 
 | Slug          | Name          | Location   | Tier    |
 | ------------- | ------------- | ---------- | ------- |
@@ -66,8 +66,8 @@ Run `discover`; if found on Greenhouse/Lever/Ashby, seed with `track = true`
 
 | Region | Mid                                                | Startup                                                                                              | Corporate         |
 | ------ | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------- |
-| NYC    | Sigma Computing, Squarespace, Zocdoc, Oscar Health | Traba, Chalk, Loop, Northslope, Enigma, Prelim, PointOne, HIFI, Confido                              | —                 |
-| NJ     | FanDuel, AvePoint, Zinnia, Incedo                  | Apprentice.io                                                                                        | —                 |
+| NYC    | Sigma Computing, Squarespace, Zocdoc, Oscar Health | Traba, Chalk, Loop, Northslope, Enigma, Prelim, PointOne, HIFI, Confido                              |;                 |
+| NJ     | FanDuel, AvePoint, Zinnia, Incedo                  | Apprentice.io                                                                                        |;                 |
 | PA     | FreedomPay, Vistar Media                           | SoftWriters, Journey Robotics, IAM Robotics, Skild AI, Latitude AI, Hellbender, Stack AV, SoundStack | Woolpert, Certara |
 
 ## manual_only (unsupported ATS; `ats = other`, track = false, tier Corporate)
