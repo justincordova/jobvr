@@ -53,4 +53,29 @@ describe("scheduler", () => {
     await scheduler.tick();
     expect((await getSettingsState(ctx.database.db)).lastPollAt).toBeNull();
   });
+
+  it("logs a crashing task and still runs the ones after it", async () => {
+    const errors: string[] = [];
+    const logger = {
+      ...silent,
+      child: () => logger,
+      error: (_fields: unknown, msg: string) => void errors.push(msg),
+    };
+    // No usable database: every task throws
+    const broken = { ...ctx.database, db: undefined as never };
+    const scheduler = startScheduler({
+      database: broken,
+      registry: [],
+      publicUrl: "http://localhost:5173",
+      logger: logger as never,
+    });
+    await scheduler.tick();
+    await scheduler.stop();
+    expect(errors).toEqual([
+      "poll crashed; the next tick tries again",
+      "notify crashed; the next tick tries again",
+      "cleanup crashed; the next tick tries again",
+      "backup check crashed; the next tick tries again",
+    ]);
+  });
 });
