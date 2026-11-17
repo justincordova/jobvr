@@ -1,4 +1,4 @@
-import { and, ne, notInArray, sql } from "drizzle-orm";
+import { and, notInArray, sql } from "drizzle-orm";
 import type { Tx } from "../db/client";
 import { suggestions } from "../db/schema";
 import { OTHER_ATS_ID } from "../sources/registry";
@@ -70,41 +70,54 @@ const resolvesToCompany = sql`EXISTS (
          AND lower(c.slug) = lower(${suggestions.slug}))
 )`;
 
-/** Step 9: refresh suggestion rows from this run's unresolved, matching listings. */
+/**
+ * Step 9: refresh this aggregator's share of the suggestion rows from its
+ * unresolved, matching listings. Each list keeps its own count (one list's
+ * poll must not zero what another found); `listing_count` is their sum. A
+ * list that only knows "other" never replaces an ATS + slug another found.
+ */
 export const updateSuggestions = async (
   tx: Tx,
+  source: string,
   listings: readonly PreparedListing[],
   registry: Registry,
   now: Date,
 ): Promise<void> => {
   const groups = groupSuggestions(listings, registry);
+  const better = sql`${suggestions.state} = 'open' AND (excluded.ats <> ${OTHER_ATS_ID} OR ${suggestions.ats} = ${OTHER_ATS_ID})`;
   for (const g of groups) {
+    const counts = { [source]: g.listingCount };
     await tx
       .insert(suggestions)
-      .values({ ...g, lastSeenAt: now, state: "open" })
+      .values({ ...g, listingCounts: counts, lastSeenAt: now, state: "open" })
       .onConflictDoUpdate({
         target: suggestions.id,
         set: {
-          listingCount: g.listingCount,
+          listingCounts: sql`${suggestions.listingCounts} || ${JSON.stringify(counts)}::jsonb`,
           sampleTitles: g.sampleTitles,
           lastSeenAt: now,
           displayName: sql`CASE WHEN ${suggestions.state} = 'open' THEN ${g.displayName} ELSE ${suggestions.displayName} END`,
-          ats: sql`CASE WHEN ${suggestions.state} = 'open' THEN ${g.ats} ELSE ${suggestions.ats} END`,
-          slug: sql`CASE WHEN ${suggestions.state} = 'open' THEN ${g.slug}::text ELSE ${suggestions.slug} END`,
+          ats: sql`CASE WHEN ${better} THEN ${g.ats} ELSE ${suggestions.ats} END`,
+          slug: sql`CASE WHEN ${better} THEN ${g.slug}::text ELSE ${suggestions.slug} END`,
         },
       });
   }
   const seen = groups.map((g) => g.id);
+  // This list no longer has them; only rows that change (most never had this source)
   await tx
     .update(suggestions)
-    .set({ listingCount: 0 })
-    // Only rows that change: most are already 0, and rewriting them every poll is churn
+    .set({ listingCounts: sql`${suggestions.listingCounts} - ${source}::text` })
     .where(
       and(
-        ne(suggestions.listingCount, 0),
+        sql`${suggestions.listingCounts} ->> ${source} IS NOT NULL`,
         seen.length > 0 ? notInArray(suggestions.id, seen) : undefined,
       ),
     );
+  const total = sql`COALESCE((SELECT sum(value::int) FROM jsonb_each_text(${suggestions.listingCounts})), 0)::int`;
+  await tx
+    .update(suggestions)
+    .set({ listingCount: total })
+    .where(sql`${suggestions.listingCount} <> ${total}`);
   await tx.execute(
     sql`UPDATE suggestions SET state = 'added' WHERE state = 'open' AND ${resolvesToCompany}`,
   );

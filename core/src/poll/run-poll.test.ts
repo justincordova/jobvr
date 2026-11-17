@@ -865,4 +865,43 @@ describe("runPoll: Simplify companies and suggestions", () => {
     const stored = await allJobs();
     expect(stored.every((j) => j.id === "sj:s4" || j.companyId === initech.id)).toBe(true);
   });
+
+  it("keeps each list's suggestion count when another list doesn't have the company", async () => {
+    const other: SourceAdapter = {
+      id: "speedyapply",
+      label: "SpeedyApply",
+      kind: "aggregator",
+      idPrefix: "sa",
+      concurrency: 1,
+      async fetch() {
+        return {
+          status: "ok",
+          etag: null,
+          invalidCount: 0,
+          jobs: [
+            sjJob("x1", "Initech", "Platform Engineer", "https://initech.com/careers/pe", {
+              source: "speedyapply",
+            }),
+          ],
+        };
+      },
+    };
+    env.setSimplify([
+      sjJob("s1", "Initech", "Software Engineer", "https://boards.test/initech/jobs/11"),
+      sjJob("s2", "Globex", "Backend Engineer", "https://globex.com/jobs/2"),
+    ]);
+    await runPoll({
+      database,
+      registry: [...env.registry, other],
+      http: {} as never,
+      force: true,
+      now: () => clock,
+    });
+    const rows = await database.db.select().from(suggestions).orderBy(suggestions.id);
+    expect(rows.map((r) => [r.id, r.listingCount, r.listingCounts, r.ats])).toEqual([
+      ["globex", 1, { simplify: 1 }, "other"],
+      // SpeedyApply only knows "other": the Greenhouse slug from SimplifyJobs stays
+      ["initech", 2, { simplify: 1, speedyapply: 1 }, "greenhouse"],
+    ]);
+  });
 });

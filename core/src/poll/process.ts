@@ -544,6 +544,7 @@ export const processTarget = async (ctx: ProcessContext): Promise<TargetStats> =
     if (target.kind === "aggregator" && settings.suggestCompanies) {
       await updateSuggestions(
         tx,
+        target.adapter.id,
         passing.filter((p) => !p.company),
         registry,
         now,

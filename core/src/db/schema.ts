@@ -153,7 +153,10 @@ export const suggestions = pgTable(
     displayName: text("display_name").notNull(),
     ats: text("ats").notNull(),
     slug: text("slug"),
+    /** Sum of `listingCounts`, kept for sorting and the "> 0" filter. */
     listingCount: integer("listing_count").notNull().default(0),
+    /** Matching listings per aggregator (`{ simplify: 3, speedyapply: 1 }`), each replaced by its own poll. */
+    listingCounts: jsonb("listing_counts").$type<Record<string, number>>().notNull().default({}),
     sampleTitles: text("sample_titles").array().notNull().default(sql`'{}'::text[]`),
     lastSeenAt: ts("last_seen_at").notNull().defaultNow(),
     state: text("state").notNull().default("open"),

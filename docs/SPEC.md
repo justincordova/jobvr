@@ -261,7 +261,7 @@ All timestamps are `timestamptz`. Migrations run automatically on app start.
 | `source_state` | `key` text PK (`<aggregator id>` or `company:<uuid>`), `source`, `company_id` (FK, cascade delete, nullable), `slug` (the slug this state belongs to; null for aggregators), `etag`, `filters_hash`, `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error`, `baselined_at`                                                                                                                                                                                                                                                                                                                                                |
 | `jobs`         | `id` text PK (canonical ID), `company_id` (FK, set null), `company_name`, `title`, `locations` text[], `url`, `primary_source`, `first_seen_at`, `effective_at`, `salary_min_usd`, `salary_max_usd` (annual), `state` (new/saved/hidden/applied), `baseline` bool, `notified_at`, `closed_at`, `updated_at`                                                                                                                                                                                                                                                                                                                                    |
 | `job_sources`  | PK (`source`, `source_job_id`); `job_id` (FK, cascade delete; indexed); `url`, `url_key` (normalized URL or null; indexed), `title`, `category` (aggregators; else null), `posted_at`, `posted_at_precision` (instant/day), `removed_at`, `required_years` (years of experience the description asks for: null = not checked, 0 = none named; see Experience rule), `description` (plain text, capped at 20k characters; kept when a later listing has none; never loaded by the feed list, pushes or the poll's in-memory window). A job can have several rows, including several from the same source (SimplifyJobs has duplicate listings). |
-| `suggestions`  | `id` text PK (normalized company name), `display_name`, `ats` (registered ATS id or `other`), `slug` (nullable, case preserved), `listing_count`, `sample_titles` text[] (≤ 3), `last_seen_at`, `state` (open/dismissed/added)                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `suggestions`  | `id` text PK (normalized company name), `display_name`, `ats` (registered ATS id or `other`), `slug` (nullable, case preserved), `listing_counts` JSONB (matching listings per aggregator), `listing_count` (their sum), `sample_titles` text[] (≤ 3), `last_seen_at`, `state` (open/dismissed/added)                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 Indexes: `jobs(effective_at desc)`; partial `jobs(effective_at) where notified_at
 is null`; `jobs(company_id)`.
@@ -561,11 +561,14 @@ EXISTS (SELECT 1 FROM job_sources WHERE job_id = $1)`), never based on the
    poll-time filter and resolved to no company; group them by normalized company
    name. Per group: `ats` = the most common ATS among URLs recognized by `parseUrl`
    (`other` if none); `slug` = the most common non-null slug for that ATS (null if
-   none); `listing_count` = group size; `sample_titles` = up to 3 titles;
+   none); the group size is this list's count; `sample_titles` = up to 3 titles;
    `display_name` = the most common raw `company_name`. Insert new groups as
-   `open`; for existing rows update `listing_count`, `sample_titles`,
-   `last_seen_at` (and `display_name`/`ats`/`slug` only while `open`). Rows not
-   in this run get `listing_count = 0`. `open` rows that now resolve to a company
+   `open`; for existing rows set this list's entry in `listing_counts`, update
+   `sample_titles`, `last_seen_at` (and `display_name`, and `ats`/`slug` unless
+   this list only knows `other` and the row has an ATS, only while `open`).
+   Rows not in this run drop this list's entry; `listing_count` is the sum of
+   `listing_counts` (each list replaces only its own count, so SpeedyApply's
+   poll can't zero what SimplifyJobs found). `open` rows that now resolve to a company
    (by normalized name, or `ats` + `slug`) become `added`; `added` rows that no
    longer resolve to any company (it was deleted) become `open` again.
 10. **Health** (success): in the same transaction, `last_attempt_at = now`,
