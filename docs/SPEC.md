@@ -550,7 +550,9 @@ EXISTS (SELECT 1 FROM job_sources WHERE job_id = $1)`), never based on the
    `meta.visible` are true; otherwise it is **removed**. Set `removed_at = now` on
    newly removed rows and `removed_at = null` on live rows. Then for each affected
    job: all rows removed → `closed_at = now` (if not already set); any row live →
-   `closed_at = null`. Rows of targets that are not polled (untracked company,
+   `closed_at = null`. A job with an ATS row counts only its ATS rows: the
+   company's board is the truth and lists lag (SpeedyApply still listed an
+   Abnormal Security role the day Greenhouse dropped it). Rows of targets that are not polled (untracked company,
    disabled source) and jobs outside the store window are not re-evaluated;
    their open/closed status stays as last computed. A listing that failed
    validation but has an `id` keeps its row exactly as it was (neither removed

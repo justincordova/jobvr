@@ -458,7 +458,10 @@ const applyClosures = async (
       if (removeSet.has(r.sourceJobId)) r.removedAt = now;
       if (reviveSet.has(r.sourceJobId)) r.removedAt = null;
     }
-    const anyLive = m.sources.some((r) => !r.removedAt);
+    // The company's own board is the truth: lists lag (SpeedyApply still listed an
+    // Abnormal Security role Greenhouse had dropped). Lists decide only without one
+    const board = m.sources.filter((r) => isAts(ctx.registry, r.source));
+    const anyLive = (board.length > 0 ? board : m.sources).some((r) => !r.removedAt);
     if (!anyLive && !m.job.closedAt) {
       m.job.closedAt = now;
       close.push(id);

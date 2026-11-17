@@ -478,18 +478,12 @@ describe("runPoll: closures and user state", () => {
     expect((await rowsOf("gh:1"))[0]?.removedAt).toBeNull();
   });
 
-  it("keeps a merged job open while Simplify still lists it; inactive Simplify rows count as removed", async () => {
-    await addAcme();
-    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
-    env.setSimplify([sjJob("s1", "Acme", "SWE", "https://boards.test/acme/jobs/1")]);
-    await poll();
-    env.boards.set("acme", []);
-    clock = new Date(T0.getTime() + HOUR);
+  it("closes a Simplify-only job once its row turns inactive", async () => {
+    env.setSimplify([sjJob("s1", "Globex", "Software Engineer", "https://globex.com/jobs/1")]);
     await poll();
     expect((await allJobs())[0]?.closedAt).toBeNull();
-
     env.setSimplify([
-      sjJob("s1", "Acme", "SWE", "https://boards.test/acme/jobs/1", {
+      sjJob("s1", "Globex", "Software Engineer", "https://globex.com/jobs/1", {
         meta: { active: false, visible: true, category: "Software" },
       }),
     ]);
@@ -762,6 +756,21 @@ describe("runPoll: health and transactions", () => {
     clock = new Date(T0.getTime() + 2 * HOUR);
     await poll();
     expect((await allJobs()).find((j) => j.id === "gh:2")?.closedAt).toEqual(clock);
+  });
+
+  it("closes a job its board dropped even while a list still has it", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    env.setSimplify([
+      sjJob("s1", "Acme", "Software Engineer, New Grad", "https://boards.test/acme/jobs/1"),
+    ]);
+    await poll();
+    expect((await allJobs()).map((j) => [j.id, j.closedAt])).toEqual([["gh:1", null]]);
+    // Lists lag behind the board
+    env.boards.set("acme", []);
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    expect((await allJobs()).map((j) => [j.id, j.closedAt])).toEqual([["gh:1", clock]]);
   });
 
   it("keeps only the invalid listing's own job open when it has an id", async () => {
