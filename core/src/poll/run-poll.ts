@@ -115,11 +115,11 @@ const logTarget = (log: Logger, o: TargetOutcome) => {
     stats.closed > 0 && `${stats.closed} closed`,
     stats.reopened > 0 && `${stats.reopened} reopened`,
     stats.skippedOld > 0 && `${stats.skippedOld} already seen`,
-    stats.invalid > 0 && `${stats.invalid} invalid (closures held)`,
+    stats.invalid > 0 && `${stats.invalid} invalid${stats.closuresHeld ? " (closures held)" : ""}`,
     o.details > 0 && `${o.details} details`,
     formatDuration(o.durationMs),
   ].filter(Boolean);
-  log[changed(stats) || stats.invalid > 0 ? "info" : "debug"](
+  log[changed(stats) || stats.closuresHeld ? "info" : "debug"](
     fields,
     `${o.label} · ${parts.join(" · ")}`,
   );
@@ -313,7 +313,8 @@ const fetchAll = async (
               // detail, or runs the closures held back for listings that failed validation
               const kept =
                 result.status === "ok" &&
-                (incomplete || (t.kind === "company" && result.invalidCount > 0))
+                (incomplete ||
+                  (t.kind === "company" && result.invalidCount > (result.invalidIds?.length ?? 0)))
                   ? { ...result, etag: null }
                   : result;
               out.set(t.key, { result: kept, ms: performance.now() - started, details: fetched });

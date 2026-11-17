@@ -52,7 +52,14 @@ export interface ProbeCtx {
 
 export type FetchResult =
   | { status: "not_modified" }
-  | { status: "ok"; etag: string | null; jobs: SourceJob[]; invalidCount: number };
+  | {
+      status: "ok";
+      etag: string | null;
+      jobs: SourceJob[];
+      invalidCount: number;
+      /** Lowercased ids of invalid items that had one; their rows are neither closed nor reopened. */
+      invalidIds?: string[];
+    };
 
 /** What `fetchDetail` adds to a listing. */
 export interface JobDetail {

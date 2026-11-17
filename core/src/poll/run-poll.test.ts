@@ -32,6 +32,7 @@ const makeEnv = () => {
   const detailFailing = new Set<string>();
   let simplify: SourceJob[] = [];
   let invalid = 0;
+  let invalidIds: string[] | undefined;
   let onFetch: ((ctx: FetchCtx) => Promise<void>) | null = null;
 
   const ats: SourceAdapter = {
@@ -54,6 +55,7 @@ const makeEnv = () => {
         etag: tag,
         jobs: list.map((j) => ({ ...j, companyName: ctx.companyName ?? slug })),
         invalidCount: invalid,
+        ...(invalidIds && { invalidIds }),
       };
     },
     async fetchDetail(_slug, id) {
@@ -91,8 +93,9 @@ const makeEnv = () => {
     setOnFetch: (f: typeof onFetch) => {
       onFetch = f;
     },
-    setInvalid: (n: number) => {
+    setInvalid: (n: number, ids?: string[]) => {
       invalid = n;
+      invalidIds = ids;
     },
   };
 };
@@ -756,6 +759,26 @@ describe("runPoll: health and transactions", () => {
     clock = new Date(T0.getTime() + 2 * HOUR);
     await poll();
     expect((await allJobs()).find((j) => j.id === "gh:2")?.closedAt).toEqual(clock);
+  });
+
+  it("keeps only the invalid listing's own job open when it has an id", async () => {
+    await addAcme();
+    env.boards.set("acme", [
+      ghJob("acme", "1", "Software Engineer, New Grad"),
+      ghJob("acme", "2", "Backend Engineer, New Grad"),
+      ghJob("acme", "3", "Frontend Engineer, New Grad"),
+    ]);
+    await poll();
+    // 2 comes back malformed (OpenAI's board has had a blank-title one for a month); 3 is gone
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    env.setInvalid(1, ["2"]);
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    expect((await allJobs()).map((j) => [j.id, j.closedAt])).toEqual([
+      ["gh:1", null],
+      ["gh:2", null],
+      ["gh:3", clock],
+    ]);
   });
 
   it("rolls back a failed target without saving its ETag", async () => {

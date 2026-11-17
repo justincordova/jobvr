@@ -93,7 +93,7 @@ export const lever: SourceAdapter = {
     if (res.status === "not_modified") return res;
     const items = z.array(z.unknown()).parse(res.data);
     const companyName = ctx.companyName ?? ctx.slug;
-    const { jobs, invalidCount } = validateItems("lever", items, RawPosting, (p) => {
+    const { jobs, invalidCount, invalidIds } = validateItems("lever", items, RawPosting, (p) => {
       const locations = p.categories?.allLocations?.length
         ? [...p.categories.allLocations]
         : p.categories?.location
@@ -124,7 +124,7 @@ export const lever: SourceAdapter = {
         ...(description && { description }),
       };
     });
-    return { status: "ok", etag: res.etag, jobs, invalidCount };
+    return { status: "ok", etag: res.etag, jobs, invalidCount, invalidIds };
   },
 
   parseUrl: parseLeverUrl,

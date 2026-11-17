@@ -9,7 +9,15 @@ export class SchemaDriftError extends Error {
 export interface ValidatedJobs {
   jobs: SourceJob[];
   invalidCount: number;
+  /** Lowercased `id` of each invalid item that has one (its job may still be open). */
+  invalidIds: string[];
 }
+
+/** The raw item's `id`, when it has a usable one. */
+const rawId = (item: unknown): string | null => {
+  const id = item && typeof item === "object" ? (item as { id?: unknown }).id : undefined;
+  return typeof id === "string" || typeof id === "number" ? String(id).toLowerCase() : null;
+};
 
 /**
  * Parses each raw item with `raw`, maps it, and validates the result as a
@@ -26,36 +34,40 @@ export const validateItems = <R extends z.ZodType>(
 ): ValidatedJobs => {
   const jobs: SourceJob[] = [];
   let invalidCount = 0;
-  items.forEach((item, index) => {
+  const invalidIds: string[] = [];
+  const invalid = (item: unknown, index: number, error: unknown) => {
+    invalidCount++;
+    const id = rawId(item);
+    if (id !== null) invalidIds.push(id);
+    onInvalid?.(index, error);
+  };
+  for (const [index, item] of items.entries()) {
     const parsed = raw.safeParse(item);
     if (!parsed.success) {
-      invalidCount++;
-      onInvalid?.(index, parsed.error);
-      return;
+      invalid(item, index, parsed.error);
+      continue;
     }
     let mapped: SourceJob | null;
     try {
       mapped = map(parsed.data);
     } catch (err) {
-      invalidCount++;
-      onInvalid?.(index, err);
-      return;
+      invalid(item, index, err);
+      continue;
     }
-    if (mapped === null) return;
+    if (mapped === null) continue;
     const job = SourceJobSchema.safeParse(mapped);
     if (!job.success) {
-      invalidCount++;
-      onInvalid?.(index, job.error);
-      return;
+      invalid(item, index, job.error);
+      continue;
     }
     jobs.push(job.data);
-  });
+  }
   if (items.length > 0 && invalidCount / items.length > INVALID_ITEM_THRESHOLD) {
     throw new SchemaDriftError(
       `${source}: ${invalidCount} of ${items.length} items failed validation`,
     );
   }
-  return { jobs, invalidCount };
+  return { jobs, invalidCount, invalidIds };
 };
 
 /** Parses an ISO timestamp, throwing on garbage (so the item counts as invalid). */

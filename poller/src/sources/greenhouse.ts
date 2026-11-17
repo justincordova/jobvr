@@ -97,7 +97,7 @@ export const greenhouse: SourceAdapter = {
     if (res.status === "not_modified") return res;
     const { jobs: items } = Response.parse(res.data);
     const companyName = ctx.companyName ?? ctx.slug;
-    const { jobs, invalidCount } = validateItems("greenhouse", items, RawJob, (j) => ({
+    const { jobs, invalidCount, invalidIds } = validateItems("greenhouse", items, RawJob, (j) => ({
       source: "greenhouse",
       sourceJobId: String(j.id),
       companyName,
@@ -109,7 +109,7 @@ export const greenhouse: SourceAdapter = {
       postedAt: parseDate(j.first_published),
       postedAtPrecision: "instant",
     }));
-    return { status: "ok", etag: res.etag, jobs, invalidCount };
+    return { status: "ok", etag: res.etag, jobs, invalidCount, invalidIds };
   },
 
   // The board list has no description or pay (`content=true` is ~50x larger

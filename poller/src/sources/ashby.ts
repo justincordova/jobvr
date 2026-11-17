@@ -98,7 +98,7 @@ export const ashby: SourceAdapter = {
     if (res.status === "not_modified") return res;
     const { jobs: items } = Response.parse(res.data);
     const companyName = ctx.companyName ?? ctx.slug;
-    const { jobs, invalidCount } = validateItems("ashby", items, RawJob, (j) => {
+    const { jobs, invalidCount, invalidIds } = validateItems("ashby", items, RawJob, (j) => {
       // Unlisted jobs are treated as absent (closures see them as removed)
       if (j.isListed === false) return null;
       const locations = [j.location, ...(j.secondaryLocations ?? []).map((s) => s.location)].filter(
@@ -124,7 +124,7 @@ export const ashby: SourceAdapter = {
         ...(j.descriptionPlain && { description: j.descriptionPlain }),
       };
     });
-    return { status: "ok", etag: res.etag, jobs, invalidCount };
+    return { status: "ok", etag: res.etag, jobs, invalidCount, invalidIds };
   },
 
   parseUrl: parseAshbyUrl,

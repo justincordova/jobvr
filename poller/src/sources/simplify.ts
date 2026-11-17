@@ -29,21 +29,26 @@ export const simplify: SourceAdapter = {
     const res = await ctx.http.getJson(SIMPLIFY_URL, { etag: ctx.etag, signal: ctx.signal });
     if (res.status === "not_modified") return res;
     const items = z.array(z.unknown()).parse(res.data);
-    const { jobs, invalidCount } = validateItems("simplify", items, RawListing, (l) => ({
-      source: "simplify",
-      sourceJobId: l.id,
-      companyName: l.company_name.trim(),
-      title: l.title.trim(),
-      locations: l.locations ?? [],
-      url: l.url,
-      postedAt: new Date(l.date_posted * 1000),
-      postedAtPrecision: l.date_posted % 86_400 === 0 ? "day" : "instant",
-      meta: {
-        active: l.active,
-        visible: l.is_visible,
-        ...(l.category && { category: l.category }),
-      },
-    }));
-    return { status: "ok", etag: res.etag, jobs, invalidCount };
+    const { jobs, invalidCount, invalidIds } = validateItems(
+      "simplify",
+      items,
+      RawListing,
+      (l) => ({
+        source: "simplify",
+        sourceJobId: l.id,
+        companyName: l.company_name.trim(),
+        title: l.title.trim(),
+        locations: l.locations ?? [],
+        url: l.url,
+        postedAt: new Date(l.date_posted * 1000),
+        postedAtPrecision: l.date_posted % 86_400 === 0 ? "day" : "instant",
+        meta: {
+          active: l.active,
+          visible: l.is_visible,
+          ...(l.category && { category: l.category }),
+        },
+      }),
+    );
+    return { status: "ok", etag: res.etag, jobs, invalidCount, invalidIds };
   },
 };

@@ -31,8 +31,10 @@ export interface TargetStats {
   skippedOld: number;
   closed: number;
   reopened: number;
-  /** A company board's listings that failed validation (its closures were held). */
+  /** Listings that failed validation this fetch. */
   invalid: number;
+  /** Closures skipped: a company board had invalid listings without an id. */
+  closuresHeld: boolean;
   baseline: boolean;
   abandoned: boolean;
 }
@@ -56,6 +58,7 @@ const emptyStats = (): TargetStats => ({
   closed: 0,
   reopened: 0,
   invalid: 0,
+  closuresHeld: false,
   baseline: false,
   abandoned: false,
 });
@@ -410,6 +413,7 @@ const applyClosures = async (
   ctx: ProcessContext,
   liveKeys: Set<string>,
   closeMissing: boolean,
+  unknown: ReadonlySet<string>,
 ): Promise<[number, number]> => {
   const { tx, ws, target, now } = ctx;
   const source = target.adapter.id;
@@ -422,6 +426,8 @@ const applyClosures = async (
     if (rows.length === 0) continue;
     affected.push(m.job.id);
     for (const r of rows) {
+      // Listed but failed validation this time: no telling whether it's still open
+      if (unknown.has(r.sourceJobId.toLowerCase())) continue;
       const live = liveKeys.has(r.sourceJobId);
       if (closeMissing && !live && !r.removedAt) toRemove.push(r.sourceJobId);
       if (live && r.removedAt) toRevive.push(r.sourceJobId);
@@ -525,12 +531,15 @@ export const processTarget = async (ctx: ProcessContext): Promise<TargetStats> =
         )
         .map((l) => l.sourceJobId),
     );
-    // On a company board a listing that failed validation may be one of ours that's still
-    // open: close nothing. Not for aggregators: one bad community-edited row out of 18k
-    // would hold every closure for as long as it stays
-    const hold = target.kind === "company" && result.invalidCount > 0;
-    if (hold) stats.invalid = result.invalidCount;
-    [stats.closed, stats.reopened] = await applyClosures(ctx, liveKeys, !hold);
+    // A listing that failed validation keeps its row as it was (it's still listed). One
+    // without an id could be any of ours: on a company board nothing closes that poll.
+    // Aggregators don't hold: one bad community-edited row out of 18k would block them
+    const unknown = new Set(result.invalidIds ?? []);
+    const idless = result.invalidCount - (result.invalidIds?.length ?? 0);
+    const hold = target.kind === "company" && idless > 0;
+    stats.invalid = result.invalidCount;
+    stats.closuresHeld = hold;
+    [stats.closed, stats.reopened] = await applyClosures(ctx, liveKeys, !hold, unknown);
 
     if (target.kind === "aggregator" && settings.suggestCompanies) {
       await updateSuggestions(

@@ -25,4 +25,14 @@ describe("validateItems", () => {
     expect(out.jobs.map((j) => j.url)).toEqual(["https://x.test/1", "http://x.test/2"]);
     expect(out.invalidCount).toBe(2);
   });
+
+  it("reports the ids of invalid items that have one", () => {
+    const Raw = z.object({ id: z.union([z.string(), z.number()]), title: z.string().min(1) });
+    const ok = (id: string) => ({ id, title: "SWE" });
+    const items = [ok("a"), ok("b"), ok("c"), { id: "B2", title: "" }, { id: 7 }, { title: "" }];
+    const out = validateItems("ashby", items, Raw, (r) => job(`https://x.test/${r.id}`));
+    expect(out.jobs).toHaveLength(3);
+    expect(out.invalidCount).toBe(3);
+    expect(out.invalidIds).toEqual(["b2", "7"]);
+  });
 });
