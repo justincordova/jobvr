@@ -146,7 +146,10 @@ interface SourceAdapter {
   concurrency: number; // max in-flight fetches for this source
   fetch(ctx: FetchCtx): Promise<FetchResult>; // ctx: { slug?, companyName?, etag?, signal, http }
   parseUrl?(url: string): { sourceJobId: string; slug?: string } | null; // ats only
-  probe?(slug: string, ctx: ProbeCtx): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
+  probe?(
+    slug: string,
+    ctx: ProbeCtx,
+  ): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
   // Sources whose list has no description (Greenhouse): one job's description and pay; null when gone
   fetchDetail?(
     slug: string,
@@ -829,6 +832,12 @@ the app shell only; API requests are network-only.
   at startup on 18).
 - Backups live on the PC disk; point the backup folder at a synced folder
   (OneDrive/Dropbox) for off-machine copies.
+- Docker Desktop never rotates container logs → every compose service caps
+  them at 5 × 10 MB, and the app logs at `PC_LOG_LEVEL` (default `info`), not
+  the `.env` `LOG_LEVEL` meant for the Mac.
+- Compose puts `POSTGRES_PASSWORD` into `DATABASE_URL` unescaped → the password
+  must be letters and digits (`openssl rand -hex 32`); the app rejects a
+  `DATABASE_URL` that doesn't parse with that hint.
 - ntfy.sh topics are readable by anyone who knows the name → long random topic;
   push bodies carry public job titles and company names only (nothing personal); the click URL is reachable only on the tailnet.
 - Job links come from third-party data (SimplifyJobs is community-edited) →

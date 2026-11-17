@@ -15,6 +15,12 @@ describe("EnvSchema", () => {
     expect(env.ALLOWED_ORIGINS).toEqual(["https://a.com", "https://b.com:8443"]);
   });
 
+  it("explains a DATABASE_URL broken by special characters in the password", () => {
+    const r = EnvSchema.safeParse({ DATABASE_URL: "postgres://jobvr:ab/c#d@postgres:5432/jobvr" });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.message).toContain("openssl rand -hex 32");
+  });
+
   it("requires an http(s) ntfy URL with a topic", () => {
     expect(EnvSchema.safeParse({ NTFY_URL: "https://ntfy.sh/" }).success).toBe(false);
     expect(EnvSchema.safeParse({ NTFY_URL: "ntfy.sh/topic" }).success).toBe(false);

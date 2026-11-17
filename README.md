@@ -75,7 +75,7 @@ Then on the PC:
 git clone <repo> jobvr && cd jobvr
 cp .env.example .env
 # Edit .env:
-#   POSTGRES_PASSWORD=<strong password>
+#   POSTGRES_PASSWORD=<openssl rand -hex 32>   (letters and digits only)
 #   TS_AUTHKEY=tskey-auth-...
 #   NTFY_URL=https://ntfy.sh/<your-random-topic>
 #   PUBLIC_URL=https://jobvr.<your-tailnet>.ts.net
@@ -100,6 +100,17 @@ an undeployed migration never reaches production from the Mac.
 
 Update: `git pull && docker compose up -d --build`.
 
+The database password is read only when the `pgdata` volume is first created.
+Use letters and digits only: compose puts it into `DATABASE_URL` unescaped, and
+`/ # % $ @` break it. To change it later, change it in Postgres first, then in
+`.env`:
+
+```sh
+docker compose exec postgres psql -U jobvr -d jobvr -c "ALTER USER jobvr PASSWORD '<new hex password>'"
+# set POSTGRES_PASSWORD=<new hex password> in .env, then:
+docker compose up -d
+```
+
 ### Logs
 
 The app logs one line per event, tagged with the part that wrote it
@@ -117,7 +128,10 @@ they're JSON; in development (`pnpm dev`) and the scripts they're plain text:
   `debug`: every board on every poll, and why a push didn't go out (not due,
   quiet hours, nothing new).
 - `LOG_LEVEL` sets the level (default `info`; the `poll` and `notify` scripts
-  default to `debug`).
+  default to `debug`). On the PC compose sets it from `PC_LOG_LEVEL` (default
+  `info`), so the Mac's `debug` from `.env.example` doesn't carry over.
+- Docker keeps at most 50 MB of logs per service (5 files of 10 MB), so the
+  disk never fills; older lines roll off.
 - Filter on the PC, for example the failures of the last day:
   `docker compose logs --since 24h app | jq -c 'select(.level == "warn" or .level == "error")'`,
   or one board: `... | jq -c 'select(.module == "poll" and (.msg | contains("Remedy")))'`.

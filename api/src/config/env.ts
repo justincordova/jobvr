@@ -37,7 +37,14 @@ export const EnvSchema = z.object({
     .default("false")
     .transform((value) => value === "true"),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
-  DATABASE_URL: z.string().min(1).default("postgres://jobvr:jobvr@localhost:5432/jobvr"),
+  DATABASE_URL: z
+    .string()
+    .min(1)
+    .default("postgres://jobvr:jobvr@localhost:5432/jobvr")
+    .refine((url) => URL.canParse(url) && new URL(url).pathname.length > 1, {
+      message:
+        "DATABASE_URL doesn't parse; on the PC use a letters-and-digits POSTGRES_PASSWORD (openssl rand -hex 32), since / # % $ break the URL",
+    }),
   /** Full ntfy topic URL (secret). Pushes are skipped with a warning when unset. */
   NTFY_URL: z
     .string()

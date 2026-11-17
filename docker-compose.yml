@@ -1,5 +1,12 @@
 # Home PC (Docker Desktop + WSL2). Nothing is published on the host: the only way
 # in is the Tailscale sidecar (HTTPS for the app, TCP 5432 for Postgres from the Mac).
+# Docker Desktop keeps container logs forever by default; cap each service at 50 MB
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:18
@@ -16,6 +23,7 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    logging: *logging
 
   app:
     build: .
@@ -29,10 +37,13 @@ services:
       DATABASE_URL: postgres://jobvr:${POSTGRES_PASSWORD}@postgres:5432/jobvr
       SCHEDULER_ENABLED: "true"
       AUTH_MODE: none
+      # .env.example's LOG_LEVEL is for the Mac (debug); set PC_LOG_LEVEL=debug to dig into an issue
+      LOG_LEVEL: ${PC_LOG_LEVEL:-info}
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    logging: *logging
 
   tailscale:
     image: tailscale/tailscale:stable
@@ -48,6 +59,7 @@ services:
     depends_on:
       - app
     restart: unless-stopped
+    logging: *logging
 
   backup:
     image: postgres:18
@@ -64,6 +76,7 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    logging: *logging
 
 volumes:
   pgdata:
