@@ -20,6 +20,12 @@ describe("normalizeCompanyName", () => {
     expect(normalizeCompanyName("Regal")).toBe(normalizeCompanyName("Regal Inc"));
     expect(normalizeCompanyName("AT&T")).toBe("at and t");
     expect(normalizeCompanyName("Apprentice.io")).toBe("apprentice io");
+    // How the lists name companies tracked under their short names
+    expect(normalizeCompanyName("Palantir Technologies")).toBe("palantir");
+    expect(normalizeCompanyName("CACI International Inc")).toBe("caci");
+    expect(normalizeCompanyName("The D. E. Shaw Group")).toBe("d e shaw");
+    // Never down to nothing
+    expect(normalizeCompanyName("Group")).toBe("group");
   });
 });
 

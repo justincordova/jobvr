@@ -373,7 +373,9 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
       primarySource: p.listing.source,
     });
   } else {
-    if (!m.job.companyId && p.company) update.companyId = p.company.id;
+    if (!m.job.companyId && p.company) {
+      Object.assign(update, { companyId: p.company.id, companyName: p.company.name });
+    }
     // A Jobright page link gives way to another list's link to the posting itself
     const current = getAdapter(ctx.registry, m.job.primarySource);
     if (current?.indirectLinks && !p.adapter.indirectLinks && !hasAtsRow(m, ctx.registry)) {

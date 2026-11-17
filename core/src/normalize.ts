@@ -49,16 +49,34 @@ const COMPANY_STOP_TOKENS = new Set([
   "company",
 ]);
 
-/** "The Regal Co., Inc." → "regal"; "AT&T" → "at and t". */
-export const normalizeCompanyName = (name: string): string =>
-  name
+/**
+ * Dropped only at the end of a longer name: the lists say "Palantir
+ * Technologies" and "CACI International Inc" for companies tracked as
+ * "Palantir" and "CACI". Keep in sync with migration 0009.
+ */
+const COMPANY_TRAILING_TOKENS = new Set([
+  "technologies",
+  "technology",
+  "international",
+  "group",
+  "holdings",
+  "incorporated",
+  "limited",
+  "plc",
+]);
+
+/** "The Regal Co., Inc." → "regal"; "AT&T" → "at and t"; "Palantir Technologies" → "palantir". */
+export const normalizeCompanyName = (name: string): string => {
+  const tokens = name
     .toLowerCase()
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .split(" ")
-    .filter((t) => t && !COMPANY_STOP_TOKENS.has(t))
-    .join(" ");
+    .filter((t) => t && !COMPANY_STOP_TOKENS.has(t));
+  while (tokens.length > 1 && COMPANY_TRAILING_TOKENS.has(tokens.at(-1) ?? "")) tokens.pop();
+  return tokens.join(" ");
+};
 
 const KEPT_QUERY_PARAMS = ["gh_jid", "token"];
 

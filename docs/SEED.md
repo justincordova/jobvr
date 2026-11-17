@@ -66,8 +66,8 @@ Run `discover`; if found on Greenhouse/Lever/Ashby, seed with `track = true`
 
 | Region | Mid                                                | Startup                                                                                              | Corporate         |
 | ------ | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------- |
-| NYC    | Sigma Computing, Squarespace, Zocdoc, Oscar Health | Traba, Chalk, Loop, Northslope, Enigma, Prelim, PointOne, HIFI, Confido                              |;                 |
-| NJ     | FanDuel, AvePoint, Zinnia, Incedo                  | Apprentice.io                                                                                        |;                 |
+| NYC    | Sigma Computing, Squarespace, Zocdoc, Oscar Health | Traba, Chalk, Loop, Northslope, Enigma, Prelim, PointOne, HIFI, Confido                              | ;                 |
+| NJ     | FanDuel, AvePoint, Zinnia, Incedo                  | Apprentice.io                                                                                        | ;                 |
 | PA     | FreedomPay, Vistar Media                           | SoftWriters, Journey Robotics, IAM Robotics, Skild AI, Latitude AI, Hellbender, Stack AV, SoundStack | Woolpert, Certara |
 
 ## manual_only (unsupported ATS; `ats = other`, track = false, tier Corporate)
@@ -197,12 +197,12 @@ getting around that is off limits. Leidos would also need 60+ pages per poll.
 Most mid-size and large companies post on systems jobvr can't read, so
 "Mid" jobs were rare. Public GitHub lists name many of them:
 
-| List                              | Rows | NY/NJ/PA/Remote | Notes                                                                                  |
-| --------------------------------- | ---- | --------------- | -------------------------------------------------------------------------------------- |
-| SimplifyJobs/New-Grad-Positions   | 19k  | (in use)        | JSON with ids                                                                          |
-| speedyapply/2027-SWE-College-Jobs | 913  | 115             | Links go to the postings. Added: first poll +43 new jobs, 16 merged into existing ones |
-| jobright-ai/2026-Software-Engineer-New-Grad | 641 | 61 | Links go to jobright.ai pages (dedupe by company + title). Added: +53 new, 12 merged |
-| vanshb03/New-Grad-2027 | 2080 | 373 | Not added: see below |
+| List                                        | Rows | NY/NJ/PA/Remote | Notes                                                                                  |
+| ------------------------------------------- | ---- | --------------- | -------------------------------------------------------------------------------------- |
+| SimplifyJobs/New-Grad-Positions             | 19k  | (in use)        | JSON with ids                                                                          |
+| speedyapply/2027-SWE-College-Jobs           | 913  | 115             | Links go to the postings. Added: first poll +43 new jobs, 16 merged into existing ones |
+| jobright-ai/2026-Software-Engineer-New-Grad | 641  | 61              | Links go to jobright.ai pages (dedupe by company + title). Added: +53 new, 12 merged   |
+| vanshb03/New-Grad-2027                      | 2080 | 373             | Not added: see below                                                                   |
 
 After both, the feed went from 174 to 262 rows (88 new: 70 Unlisted, 10
 Corporate, 5 A, 3 Mid, 1 S). Most Unlisted ones are mid-size and large
