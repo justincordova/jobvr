@@ -25,7 +25,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { Switch } from '@/components/ui/switch'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { companiesQuery, pendingDeletes } from '@/lib/companies-query'
-import { relative } from '@/lib/format'
+import { relative, shortAge } from '@/lib/format'
 import { type Company, TIERS, type Tier } from '@/lib/types'
 
 type Status = Company['status']
@@ -113,6 +113,17 @@ function useCompanyMutations() {
     })
   }
   return { patch, removeWithUndo, invalidate }
+}
+
+function Roles({ c }: { c: Company }) {
+  const { roles30d, lastRoleAt } = c.stats
+  if (!lastRoleAt) return <span className="text-faint">none yet</span>
+  return (
+    <span className="tabular-nums">
+      <span className={roles30d > 0 ? 'text-paper' : 'text-faint'}>{roles30d}</span>
+      <span className="text-faint"> · newest {shortAge(lastRoleAt)}</span>
+    </span>
+  )
 }
 
 function Health({ c }: { c: Company }) {
@@ -274,7 +285,7 @@ function CompanyDialog({
   )
 }
 
-type Quick = 'all' | 'polled' | 'review' | 'manual'
+type Quick = 'all' | 'polled' | 'quiet' | 'review' | 'manual'
 
 function SkeletonTable() {
   return (
@@ -295,6 +306,9 @@ function SkeletonTable() {
           </td>
           <td className="px-2 py-3">
             <Skeleton className="h-4 w-16" />
+          </td>
+          <td className="hidden px-2 py-3 lg:table-cell">
+            <Skeleton className="h-4 w-20" />
           </td>
           <td className="hidden px-2 py-3 md:table-cell">
             <Skeleton className="h-4 w-20" />
@@ -340,9 +354,12 @@ export function CompaniesPage() {
 
   const isPolled = (c: Company) =>
     c.track && !trackBlocker(c) && c.status !== 'manual_only' && tracked.has(c.tier)
+  // Polled, but nothing matching in 30 days: worth re-tiering or untracking
+  const isQuiet = (c: Company) => isPolled(c) && c.stats.roles30d === 0
   const matchesQuick = (c: Company) =>
     quick === 'all' ||
     (quick === 'polled' && isPolled(c)) ||
+    (quick === 'quiet' && isQuiet(c)) ||
     (quick === 'review' && c.status === 'needs_review') ||
     (quick === 'manual' && c.status === 'manual_only')
 
@@ -356,6 +373,7 @@ export function CompaniesPage() {
   const counts = {
     all: all.length,
     polled: all.filter(isPolled).length,
+    quiet: all.filter(isQuiet).length,
     review: all.filter((c) => c.status === 'needs_review').length,
     manual: all.filter((c) => c.status === 'manual_only').length,
   }
@@ -404,6 +422,7 @@ export function CompaniesPage() {
           options={[
             { id: 'all', label: <>All{count(counts.all)}</> },
             { id: 'polled', label: <>Polled{count(counts.polled)}</> },
+            { id: 'quiet', label: <>Quiet{count(counts.quiet)}</> },
             { id: 'review', label: <>Needs review{count(counts.review)}</> },
             { id: 'manual', label: <>Manual{count(counts.manual)}</> },
           ]}
@@ -455,6 +474,12 @@ export function CompaniesPage() {
                 <th className="px-2 py-2.5 font-medium">Track</th>
                 <th className="hidden px-2 py-2.5 font-medium md:table-cell">ATS / slug</th>
                 <th className="px-2 py-2.5 font-medium">Status</th>
+                <th
+                  className="hidden px-2 py-2.5 font-medium lg:table-cell"
+                  title="Matching roles posted in the last 30 days, and how long ago the newest was posted"
+                >
+                  Roles · 30d
+                </th>
                 <th className="hidden px-2 py-2.5 font-medium md:table-cell">Last good poll</th>
                 <th className="w-10 px-2 py-2.5">
                   <span className="sr-only">Actions</span>
@@ -526,6 +551,9 @@ export function CompaniesPage() {
                       </td>
                       <td className="px-2 py-2.5">
                         <Badge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</Badge>
+                      </td>
+                      <td className="hidden px-2 py-2.5 font-mono text-xs lg:table-cell">
+                        <Roles c={c} />
                       </td>
                       <td className="hidden px-2 py-2.5 font-mono text-xs md:table-cell">
                         <Health c={c} />

@@ -8,14 +8,15 @@ import { assertKnownAts, toCompanyDto, withCreateDefaults } from "./services";
 const withHealth = async (db: AppBindings["Variables"]["deps"]["database"]["db"], id: string) => {
   const [found] = await listCompaniesWithHealth(db, id);
   if (!found) throw new Error("company vanished after write");
-  return toCompanyDto(found, found.health);
+  return toCompanyDto(found, found.health, found.stats);
 };
 
 export const listHandler: RouteHandler<typeof routes.list, AppBindings> = async (c) => {
-  const rows = await listCompaniesWithHealth(c.var.deps.database.db);
+  const { database, now } = c.var.deps;
+  const rows = await listCompaniesWithHealth(database.db, undefined, now());
   return ok(
     c,
-    rows.map((r) => toCompanyDto(r, r.health)),
+    rows.map((r) => toCompanyDto(r, r.health, r.stats)),
     { count: rows.length },
   );
 };

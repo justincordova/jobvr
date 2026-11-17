@@ -203,6 +203,23 @@ describe("jobs routes", () => {
     );
   });
 
+  it("reports each company's recent roles", async () => {
+    const res = await client.api.companies.$post({
+      json: { name: "Acme", tier: "Startup", ats: "lever", slug: "acme" },
+    });
+    const acme = await res.json();
+    if (!acme.success) throw new Error("expected success");
+    await insertJob("gh:r1", { companyId: acme.data.id, effectiveAt: at(24) });
+    await insertJob("gh:r2", { companyId: acme.data.id, effectiveAt: at(40 * 24) });
+    const list = await body<{ data: { name: string; stats: unknown }[] }>(
+      await client.api.companies.$get(),
+    );
+    expect(list.data.find((c) => c.name === "Acme")?.stats).toEqual({
+      roles30d: 1,
+      lastRoleAt: at(24).toISOString(),
+    });
+  });
+
   it("counts new jobs since the last visit", async () => {
     await client.api.jobs.visit.$post();
     ctx.clock = new Date(ctx.clock.getTime() + HOUR);

@@ -1,7 +1,7 @@
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import type { CompanyStatus, Tier } from "../constants";
 import type { DbOrTx } from "../db/client";
-import { type CompanyRow, companies, type SourceStateRow, sourceState } from "../db/schema";
+import { type CompanyRow, companies, jobs, type SourceStateRow, sourceState } from "../db/schema";
 import { ConflictError, InvalidError, isUniqueViolation, NotFoundError } from "../errors";
 import { normalizeCompanyName } from "../normalize";
 
@@ -29,7 +29,15 @@ export interface CompanyHealth {
   lastError: string | null;
 }
 
-export type CompanyWithHealth = CompanyRow & { health: CompanyHealth | null };
+/** What a company's board has produced: matching roles, from any source. */
+export interface CompanyStats {
+  /** Stored roles posted in the last 30 days (any state, including closed). */
+  roles30d: number;
+  /** When its newest stored role was posted; null if none is stored. */
+  lastRoleAt: Date | null;
+}
+
+export type CompanyWithHealth = CompanyRow & { health: CompanyHealth | null; stats: CompanyStats };
 
 export const companyStateKey = (companyId: string) => `company:${companyId}`;
 
@@ -72,6 +80,7 @@ export const listCompanies = (db: DbOrTx): Promise<CompanyRow[]> =>
 export const listCompaniesWithHealth = async (
   db: DbOrTx,
   id?: string,
+  now: Date = new Date(),
 ): Promise<CompanyWithHealth[]> => {
   const rows = await db
     .select({ company: companies, state: sourceState })
@@ -79,7 +88,25 @@ export const listCompaniesWithHealth = async (
     .leftJoin(sourceState, eq(sourceState.key, sql`'company:' || ${companies.id}::text`))
     .where(id ? eq(companies.id, id) : undefined)
     .orderBy(asc(companies.name));
-  return rows.map((r) => ({ ...r.company, health: toHealth(r.state) }));
+  const since = new Date(now.getTime() - 30 * 86_400_000);
+  const counts = await db
+    .select({
+      companyId: jobs.companyId,
+      roles30d: sql<number>`(count(*) filter (where ${jobs.effectiveAt} >= ${since}))::int`,
+      lastRoleAt: sql<Date | null>`max(${jobs.effectiveAt})`.mapWith(jobs.effectiveAt),
+    })
+    .from(jobs)
+    .where(id ? eq(jobs.companyId, id) : sql`${jobs.companyId} is not null`)
+    .groupBy(jobs.companyId);
+  const byCompany = new Map(counts.map((c) => [c.companyId, c]));
+  return rows.map((r) => {
+    const c = byCompany.get(r.company.id);
+    return {
+      ...r.company,
+      health: toHealth(r.state),
+      stats: { roles30d: c?.roles30d ?? 0, lastRoleAt: c?.lastRoleAt ?? null },
+    };
+  });
 };
 
 export const getCompany = async (db: DbOrTx, id: string): Promise<CompanyRow | null> =>

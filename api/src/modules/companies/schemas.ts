@@ -27,6 +27,8 @@ export const CompanySchema = z
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
     health: CompanyHealthSchema.nullable(),
+    /** Matching roles stored for it: posted in the last 30 days, and the newest one's date. */
+    stats: z.object({ roles30d: z.number().int(), lastRoleAt: isoNullable }),
   })
   .openapi("Company");
 

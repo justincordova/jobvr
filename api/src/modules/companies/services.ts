@@ -15,6 +15,7 @@ import type { CompanySchema, CreateCompanyBody } from "./schemas";
 export const toCompanyDto = (
   c: CompanyRow,
   health: CompanyWithHealth["health"] = null,
+  stats: CompanyWithHealth["stats"] = { roles30d: 0, lastRoleAt: null },
 ): z.infer<typeof CompanySchema> => ({
   id: c.id,
   name: c.name,
@@ -35,6 +36,7 @@ export const toCompanyDto = (
     consecutiveFailures: health.consecutiveFailures,
     lastError: health.lastError,
   },
+  stats: { roles30d: stats.roles30d, lastRoleAt: isoOrNull(stats.lastRoleAt) },
 });
 
 export const assertKnownAts = (registry: Registry, ats: string | undefined) => {

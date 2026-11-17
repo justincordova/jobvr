@@ -775,6 +775,10 @@ Pages are built with the frontend-design skill:
   reposts); `u` presses the newest Undo; `1`–`4` switch views; Esc clears; `?`
   lists them (also a "Shortcuts" button on pointer-fine screens). After a row
   leaves the list, the row that takes its place is selected and focused.
+- **Company insights** (Companies): each company's matching roles posted in
+  the last 30 days and how long ago its newest was posted (`stats` on
+  `GET /api/companies`; any state, including closed); a "Quiet" filter lists
+  polled companies with none in 30 days, candidates to re-tier or untrack.
 - **Companies**: table with tier, Track toggle, ATS, slug, status, health (last
   successful poll, consecutive failures, last error); add / edit / delete.
 - **Suggested**: Add (with tier picker) / Dismiss.
