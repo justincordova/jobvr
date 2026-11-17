@@ -56,9 +56,15 @@ const CONTRACT_TAG =
   /[([]\s*contract(?:or|ual)?(?:\s+(?:position|role|basis))?\s*[)\]]|[-,|/]\s*contract(?:or|ual)?(?:\s+(?:position|role|basis))?\s*(?:$|[([])/i;
 const GENERIC_ENGINEERING = ["engineer", "engineering", "developer", "programmer"];
 
+/**
+ * Tokens for the level checks, without dotted codes: Amazon's "Software Dev
+ * Engineer II - AMZ27480.1" would otherwise read as level 1 (entry).
+ */
+const levelTokens = (title: string) => tokenize(title.replace(/\b[a-z]*\d+\w*(?:\.\d+)+\b/gi, " "));
+
 /** True when the title says it's entry level (a level keyword, or "I" / "1"). */
 export const isEntryLevelTitle = (title: string, settings: Pick<Settings, "levelKeywords">) => {
-  const tokens = tokenize(title);
+  const tokens = levelTokens(title);
   return (
     matchesAnyKeyword(tokens, settings.levelKeywords) ||
     tokens.some((t) => ENTRY_LEVEL_TOKENS.has(t))
@@ -106,7 +112,7 @@ export const passesKeywordRule = (
     return false;
   }
   const entry = isEntryLevelTitle(title, settings);
-  if (!entry && tokens.some((t) => EXPERIENCED_LEVEL_TOKENS.has(t))) return false;
+  if (!entry && levelTokens(title).some((t) => EXPERIENCED_LEVEL_TOKENS.has(t))) return false;
   const role = matchesAnyKeyword(tokens, settings.roleKeywords);
 
   if (role) {

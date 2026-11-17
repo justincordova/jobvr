@@ -51,6 +51,8 @@ describe("keyword rule", () => {
       "Software Engineering Intern",
       "Software Engineer II",
       "Software Engineer 3",
+      // A requisition code isn't a level ("AMZ27480.1" isn't "1")
+      "Software Dev Engineer II - AMZ27480.1",
       "Staff Software Engineer (AI Agents)",
       "Field Engineer, Healthcare",
       "Analytics Engineer",
