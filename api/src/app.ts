@@ -69,7 +69,8 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
           if (c.req.path === "/health" || !c.req.path.startsWith("/api")) return "trace";
           if (c.res.status >= 500) return "error";
           if (c.res.status >= 400) return "warn";
-          return "info";
+          // Open tabs refetch every 2 min; only writes (your actions) are worth info
+          return c.req.method === "GET" || c.req.method === "HEAD" ? "debug" : "info";
         },
       },
     }),
