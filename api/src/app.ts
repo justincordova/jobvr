@@ -14,7 +14,7 @@ import { logger } from "@/lib/logger";
 import { configureOpenAPI } from "@/lib/openapi";
 import { auth } from "@/middleware/auth";
 import { rateLimit } from "@/middleware/rate-limit";
-import { requestGuards, securityHeaders } from "@/middleware/security";
+import { crossSiteGuard, requestGuards, securityHeaders } from "@/middleware/security";
 import companiesRouter from "@/modules/companies";
 import jobsRouter from "@/modules/jobs";
 import settingsRouter from "@/modules/settings";
@@ -70,6 +70,7 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
   );
   app.use(...securityHeaders());
   app.use("/api/*", rateLimit());
+  app.use("/api/*", crossSiteGuard());
   app.use(...requestGuards());
   app.use("/api/*", auth());
   app.use(async (c, next) => {

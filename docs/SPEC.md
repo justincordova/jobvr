@@ -834,6 +834,11 @@ the app shell only; API requests are network-only.
   listing and careers URLs must be http(s) (others are invalid items), the
   feed renders only http(s) links, and every response except `/reference` sends
   a Content-Security-Policy allowing only the app's own scripts.
+- No login (tailnet only), so any page open in the browser could POST to
+  jobvr → `/api` writes (not GET/HEAD/OPTIONS) are refused with 403 when
+  `Sec-Fetch-Site` is `cross-site`/`same-site`, or (browsers without it) when
+  `Origin` names another host; `ALLOWED_ORIGINS` and requests with neither
+  header (curl, scripts) pass.
 - A deploy replaces the hashed assets → `/assets/*` that no longer exist return
   404 (never `index.html`, which would be cached for a year as immutable).
 

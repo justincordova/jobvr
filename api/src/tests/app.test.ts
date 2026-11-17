@@ -59,6 +59,26 @@ describe("App", () => {
     expect(res.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
   });
 
+  it("refuses writes started by another site; same-origin, allowed origins and scripts pass", async () => {
+    const visit = (headers: Record<string, string>) =>
+      app.request("/api/jobs/visit", { method: "POST", headers });
+    expect(
+      (await visit({ "Sec-Fetch-Site": "cross-site", Origin: "https://evil.test" })).status,
+    ).toBe(403);
+    // Older browsers: Origin only
+    expect((await visit({ Origin: "https://evil.test", Host: "jobvr.ts.net" })).status).toBe(403);
+    expect((await visit({ Origin: "null" })).status).toBe(403);
+    expect((await visit({ "Sec-Fetch-Site": "same-origin" })).status).toBe(200);
+    expect(
+      (await visit({ Origin: "http://localhost:5173", "Sec-Fetch-Site": "same-site" })).status,
+    ).toBe(200);
+    expect((await visit({})).status).toBe(200);
+    // Reads aren't affected
+    expect(
+      (await app.request("/api/settings", { headers: { "Sec-Fetch-Site": "cross-site" } })).status,
+    ).toBe(200);
+  });
+
   it("returns 405 with an Allow header for unsupported methods", async () => {
     const res = await app.request("/api/companies/00000000-0000-4000-8000-000000000000", {
       method: "PUT",

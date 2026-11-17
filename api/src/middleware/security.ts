@@ -71,3 +71,30 @@ export const requestGuards = (): MiddlewareHandler[] => [
       ),
   }),
 ];
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * Cross-site request guard. There's no login (tailnet only), so any page open
+ * in the browser could POST to jobvr (add a suggestion, mark a visit). Writes
+ * are refused when the browser says another site started them
+ * (`Sec-Fetch-Site`), or, for browsers that don't send it, when `Origin` names
+ * another host. Allowed origins always pass; requests with neither header
+ * (curl, scripts) aren't from a web page and pass too.
+ */
+export const crossSiteGuard = (): MiddlewareHandler => async (c, next) => {
+  if (SAFE_METHODS.has(c.req.method)) return next();
+  const origin = c.req.header("origin");
+  if (origin && env.ALLOWED_ORIGINS.includes(origin)) return next();
+  const site = c.req.header("sec-fetch-site");
+  const otherHost = () => {
+    if (!origin) return false;
+    if (!URL.canParse(origin)) return true; // includes the opaque "null" origin
+    return new URL(origin).host !== c.req.header("host");
+  };
+  const foreign = site ? site === "cross-site" || site === "same-site" : otherHost();
+  if (foreign) {
+    return fail(c, HTTP_STATUS.FORBIDDEN, "Cross-site requests can't change jobvr data");
+  }
+  return next();
+};
