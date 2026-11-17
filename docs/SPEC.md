@@ -514,7 +514,10 @@ window, 180 days)` (everything the poll filter can still store).
      re-pointed; a job left with no rows is deleted with a single guarded
      statement (`DELETE … WHERE id = $1 AND state IN ('new','hidden') AND NOT
 EXISTS (SELECT 1 FROM job_sources WHERE job_id = $1)`), never based on the
-     in-memory state. If the listing is from an ATS source, overwrite the job's `title`,
+     in-memory state. A `saved`/`applied` job left with no rows (it could
+     never close) passes its mark to the job the row moved to (applied beats
+     saved beats new/hidden; never downgraded) and is deleted the same guarded
+     way. If the listing is from an ATS source, overwrite the job's `title`,
      `locations`, `url`, salary, `company_id`, `company_name`, and set
      `primary_source` to that ATS. If the job's `company_id` is null, re-resolve
      it. Update `effective_at` (see Freshness). Never changed by a match: `id`,

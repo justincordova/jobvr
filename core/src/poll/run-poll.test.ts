@@ -594,6 +594,29 @@ describe("runPoll: health and transactions", () => {
     ).toBe(5);
   });
 
+  it("carries a saved mark over when its only posting moves to another job", async () => {
+    await addAcme();
+    // A SimplifyJobs listing pointing at the company's own careers page, saved by the user
+    env.setSimplify([
+      sjJob("s1", "Acme", "Software Engineer, New Grad", "https://acme.test/careers/1"),
+    ]);
+    env.boards.set("acme", [ghJob("acme", "1", "Platform Engineer, New Grad")]);
+    await poll();
+    const sj = (await allJobs()).find((j) => j.id.startsWith("sj:"));
+    if (!sj) throw new Error("expected the SimplifyJobs job");
+    await database.db.update(jobs).set({ state: "saved" }).where(eq(jobs.id, sj.id));
+
+    // SimplifyJobs now links the Greenhouse posting: its row moves to gh:1
+    clock = new Date(T0.getTime() + HOUR);
+    env.setSimplify([
+      sjJob("s1", "Acme", "Software Engineer, New Grad", "https://boards.test/acme/jobs/1"),
+    ]);
+    await poll();
+    const after = await allJobs();
+    // No empty saved row left behind (it could never close); the mark moved with the posting
+    expect(after.map((j) => [j.id, j.state])).toEqual([["gh:1", "saved"]]);
+  });
+
   it("rolls back a failed target without saving its ETag", async () => {
     const acme = await addAcme();
     env.boards.set("acme", [

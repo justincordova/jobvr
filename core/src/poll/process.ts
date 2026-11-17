@@ -1,5 +1,5 @@
 import { and, eq, inArray, or, sql } from "drizzle-orm";
-import { FAILURES_BEFORE_REVIEW, FUZZY_TITLE_THRESHOLD } from "../constants";
+import { FAILURES_BEFORE_REVIEW, FUZZY_TITLE_THRESHOLD, type JobState } from "../constants";
 import type { Tx } from "../db/client";
 import {
   type CompanyRow,
@@ -232,6 +232,30 @@ const changes = <T extends object>(current: T, next: Partial<T>): Partial<T> => 
   return out;
 };
 
+/**
+ * A saved/applied job whose only posting moved to another job would stay
+ * forever with no sources (never closed). Its mark moves with the posting
+ * (applied beats saved beats new/hidden; never downgraded) and the empty row
+ * goes. Guarded in SQL like the delete above.
+ */
+const carryMark = async (tx: Tx, ws: WorkingSet, fromId: string, toId: string, now: Date) => {
+  const removed = await tx.execute<{ state: JobState }>(sql`
+    DELETE FROM jobs
+    WHERE id = ${fromId} AND state IN ('saved', 'applied')
+      AND NOT EXISTS (SELECT 1 FROM job_sources WHERE job_id = ${fromId})
+    RETURNING state`);
+  const state = removed.rows[0]?.state;
+  if (!state) return;
+  ws.remove(fromId);
+  const lower = state === "applied" ? ["new", "hidden", "saved"] : ["new", "hidden"];
+  const raised = await tx
+    .update(jobs)
+    .set({ state, updatedAt: now })
+    .where(and(eq(jobs.id, toId), inArray(jobs.state, lower as JobState[])))
+    .returning({ state: jobs.state });
+  if (raised.length > 0) ws.touch(toId).job.state = state;
+};
+
 const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => {
   const { tx, ws, now } = ctx;
   const jobId = match.job.id;
@@ -279,6 +303,7 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
         AND NOT EXISTS (SELECT 1 FROM job_sources WHERE job_id = ${movedFrom})
       RETURNING id`);
     if (deleted.rows.length > 0) ws.remove(movedFrom);
+    else await carryMark(tx, ws, movedFrom, jobId, now);
   }
 
   const m = ws.touch(jobId);
