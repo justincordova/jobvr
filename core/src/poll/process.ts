@@ -15,7 +15,7 @@ import { adjustedPostedAt, initialEffectiveAt, mergedEffectiveAt } from "../fres
 import { annualUsd, matchedLocationLabels, passesPollFilter } from "../matching";
 import { normalizeCompanyName, titleJaccard } from "../normalize";
 import type { Settings } from "../settings";
-import { isAts, parseAtsUrl } from "../sources/registry";
+import { getAdapter, isAts, parseAtsUrl } from "../sources/registry";
 import type { FetchResult, Registry, SourceAdapter } from "../sources/types";
 import { type CompanyIndex, type PreparedListing, prepareListing, sameCompany } from "./resolve";
 import { descriptionMd5, type MemJob, type MemSourceRow, type WorkingSet } from "./store";
@@ -372,8 +372,13 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
       companyName: p.company?.name ?? p.listing.companyName,
       primarySource: p.listing.source,
     });
-  } else if (!m.job.companyId && p.company) {
-    update.companyId = p.company.id;
+  } else {
+    if (!m.job.companyId && p.company) update.companyId = p.company.id;
+    // A Jobright page link gives way to another list's link to the posting itself
+    const current = getAdapter(ctx.registry, m.job.primarySource);
+    if (current?.indirectLinks && !p.adapter.indirectLinks && !hasAtsRow(m, ctx.registry)) {
+      Object.assign(update, { url: p.listing.url, primarySource: p.listing.source });
+    }
   }
   const changed = changes(m.job, update);
   if (Object.keys(changed).length === 0) return;

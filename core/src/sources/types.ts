@@ -78,7 +78,7 @@ export interface SourceAdapter {
   label: string;
   /** ats: one fetch per company slug; aggregator: one global fetch. */
   kind: "ats" | "aggregator";
-  /** Canonical ID prefix: "gh" | "lv" | "ab" | "sj". */
+  /** Canonical ID prefix: "gh" | "lv" | "ab" | "sj" | "sa" | "jr". */
   idPrefix: string;
   /** Max in-flight fetches for this source. */
   concurrency: number;
@@ -89,6 +89,11 @@ export interface SourceAdapter {
    * poll filter and haven't been checked yet. Null when the job is gone.
    */
   fetchDetail?(slug: string, sourceJobId: string, ctx: ProbeCtx): Promise<JobDetail | null>;
+  /**
+   * Aggregators whose links go to their own page, not the posting (Jobright):
+   * a job they found takes the link of any other list that has it.
+   */
+  indirectLinks?: boolean;
   /** ATS adapters only. */
   parseUrl?(url: string): ParsedUrl | null;
   /** ATS adapters only; used by `discover` and `seed`. */

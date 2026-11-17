@@ -27,7 +27,7 @@ and is structured so it can later move to AWS serverless with minimal change.
 
 - Multi-user, signup, or public internet access.
 - Sources beyond the three ATS APIs and the public new-grad lists (SimplifyJobs,
-  SpeedyApply): no Workday, Amazon Jobs, iCIMS, Avature,
+  SpeedyApply, Jobright's GitHub list): no Workday, Amazon Jobs, iCIMS, Avature,
   custom career sites, other ATS platforms, HN, headless scraping, or anything
   requiring login or forbidden by terms (LinkedIn, Indeed, Glassdoor, Handshake).
 - SMS and email digests (push covers alerts; the unbuilt setting was removed in Nov 2026).
@@ -127,10 +127,11 @@ phone/Mac ── Tailscale HTTPS ──> Hono (API + SPA) ──> Postgres
 
 Verified 2026-11-12: the first four respond, return ETags, and return 304 on a matching
 `If-None-Match`. The three ATS APIs return 404 for unknown slugs. The GitHub
-lists (SimplifyJobs, then SpeedyApply in Nov 2026) are "aggregators": the ATS
+lists (SimplifyJobs, then SpeedyApply and Jobright in Nov 2026) are "aggregators": the ATS
 APIs can't read most mid-size and large companies (Workday, Oracle, iCIMS), and
-the lists name many of them. SpeedyApply is a markdown README fetched with
-`getText` (same retries, ETag and size cap).
+the lists name many of them. SpeedyApply and Jobright are markdown READMEs
+fetched with `getText` (same retries, ETag and size cap). Jobright has no public
+API (its site needs a login); its public GitHub list is the feed used.
 
 | Source       | Endpoint                                                                                      | Posted date                                                                                         | Notes                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------ | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -228,6 +229,19 @@ SHA-1 of the apply link (rows have no id; the link is stable), `meta` =
 new-grad SWE list: listed means open). A row whose cell count doesn't match
 its table counts as invalid; a README with no table at all throws (the layout
 changed). Its links point at the postings, so board jobs dedupe by URL.
+
+**Jobright** (`raw.githubusercontent.com/jobright-ai/2026-Software-Engineer-New-Grad/master/README.md`,
+~640 rows, daily): columns Company, Job Title, Location, Work Model, Date
+Posted. A `↳` company cell repeats the row above. `sourceJobId` is the id in
+the title's `jobright.ai/jobs/info/<id>` link (tracking params removed; that
+link is the job's `url`). Locations are the cell as is (`City, ST, United
+States`; the country suffix is ignored by matching), plus `Remote - US` when
+Work Model is Remote and the location is in the US. Date Posted (`Nov 17`, no
+year) is midnight UTC of the latest such date not after tomorrow (so `Dec 30`
+read on Jan 2 is last year's). Same `meta` as SpeedyApply. Its links go to
+Jobright's page, not the posting (`indirectLinks`), so its jobs dedupe by
+company and title (fuzzy rule), and a Jobright-found job with no ATS row takes
+the link (and `primary_source`) of the first other list that merges into it.
 
 - Adapters throw on transport errors, non-2xx/304 statuses (including 404), and
   when more than 50% of a non-empty response's items fail Zod validation (likely

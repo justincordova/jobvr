@@ -869,6 +869,26 @@ describe("runPoll: several lists", () => {
     const sources = await database.db.select().from(jobSources).orderBy(jobSources.source);
     expect(sources.map((r) => r.source)).toEqual(["jobright", "simplify", "simplify"]);
   });
+  it("gives a Jobright-found job another list's direct link", async () => {
+    const jrJobs: SourceJob[] = [
+      sjJob("j1", "Globex", "Software Development Engineer", "https://jobright.test/1", {
+        source: "jobright",
+      }),
+    ];
+    const jr = { ...list("jobright", "jr", () => jrJobs), indirectLinks: true };
+    await pollWith([jr]);
+    expect((await allJobs()).map((j) => [j.id, j.url])).toEqual([
+      ["jr:j1", "https://jobright.test/1"],
+    ]);
+    env.setSimplify([
+      sjJob("s1", "Globex", "Software Development Engineer", "https://globex.jobs/1"),
+    ]);
+    clock = new Date(T0.getTime() + HOUR);
+    await pollWith([jr]);
+    expect((await allJobs()).map((j) => [j.id, j.url, j.primarySource])).toEqual([
+      ["jr:j1", "https://globex.jobs/1", "simplify"],
+    ]);
+  });
 });
 
 describe("runPoll: Simplify companies and suggestions", () => {

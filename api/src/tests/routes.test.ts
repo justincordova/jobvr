@@ -384,6 +384,7 @@ describe("settings routes", () => {
       "ashby",
       "simplify",
       "speedyapply",
+      "jobright",
     ]);
     // One health entry per new-grad list
     expect(data.data.sourceHealth).toEqual([
@@ -393,6 +394,7 @@ describe("settings routes", () => {
         consecutiveFailures: 0,
       }),
       expect.objectContaining({ source: "speedyapply", label: "SpeedyApply" }),
+      expect.objectContaining({ source: "jobright", label: "Jobright" }),
     ]);
 
     const patched = await client.api.settings.$patch({

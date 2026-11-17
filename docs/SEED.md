@@ -201,6 +201,25 @@ Most mid-size and large companies post on systems jobvr can't read, so
 | --------------------------------- | ---- | --------------- | -------------------------------------------------------------------------------------- |
 | SimplifyJobs/New-Grad-Positions   | 19k  | (in use)        | JSON with ids                                                                          |
 | speedyapply/2027-SWE-College-Jobs | 913  | 115             | Links go to the postings. Added: first poll +43 new jobs, 16 merged into existing ones |
+| jobright-ai/2026-Software-Engineer-New-Grad | 641 | 61 | Links go to jobright.ai pages (dedupe by company + title). Added: +53 new, 12 merged |
+| vanshb03/New-Grad-2027 | 2080 | 373 | Not added: see below |
+
+After both, the feed went from 174 to 262 rows (88 new: 70 Unlisted, 10
+Corporate, 5 A, 3 Mid, 1 S). Most Unlisted ones are mid-size and large
+companies not on the list yet (Palantir, American Express, Pinterest, IBM,
+BMO, D. E. Shaw, Priceline, Vanguard, Highmark Health); they show under
+Suggested, and tiering them is what makes "Mid" jobs show as Mid. Known
+leftovers: the lists sometimes name a company differently ("CACI" vs "CACI
+International Inc", "Abnormal Security" vs "Abnormal AI"), so those copies
+don't merge.
+
+vanshb03 was measured and left out: its titles are rewritten ("New Grad 2027:
+Junior Forward Deployed Software Engineer"), so they don't dedupe by title;
+its links are `go.vansh.nyc` redirects, so they don't dedupe by URL without a
+request per row; multi-city rows hide their places in `<details>` blocks. Of
+its 373 NY/NJ/PA/Remote rows only 75 were posted in November, and those
+sampled (CrossCountry, Empire State Realty Trust, Bask Health, Citi) were
+already in the feed.
 
 ## Suggested backlog (Nov 2026)
 
