@@ -244,6 +244,8 @@ export const runNotify = async (options: RunNotifyOptions): Promise<NotifySummar
       );
       return { sent: true, jobs: selected };
     },
+    (err) =>
+      log.error({ err }, "lost the push lock's database connection; the lock is dropped with it"),
   );
   if (!locked.acquired) log.info({}, "push skipped: another notify run holds the lock");
   return locked.acquired ? locked.value : { sent: false, reason: "locked" };

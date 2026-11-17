@@ -351,246 +351,261 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
   const clock = options.now ?? (() => new Date());
   const log = (options.logger ?? silentLogger).child({ module: "poll" });
 
-  const locked = await withAdvisoryLock(database.pool, POLL_LOCK_KEY, async () => {
-    const { db } = database;
-    const startedAt = clock();
-    const state = await getSettingsState(db);
-    const settings = state.settings;
-    if (!options.force && !isDue(state.lastPollAt, settings.pollEveryMinutes * 60_000, startedAt)) {
-      log.debug({ lastPollAt: state.lastPollAt }, "poll not due yet");
-      return { ran: false, reason: "not_due" } as const;
-    }
-    const runStarted = performance.now();
-    await setSettingsTimestamp(db, "lastPollAt", startedAt);
+  const locked = await withAdvisoryLock(
+    database.pool,
+    POLL_LOCK_KEY,
+    async () => {
+      const { db } = database;
+      const startedAt = clock();
+      const state = await getSettingsState(db);
+      const settings = state.settings;
+      if (
+        !options.force &&
+        !isDue(state.lastPollAt, settings.pollEveryMinutes * 60_000, startedAt)
+      ) {
+        log.debug({ lastPollAt: state.lastPollAt }, "poll not due yet");
+        return { ran: false, reason: "not_due" } as const;
+      }
+      const runStarted = performance.now();
+      await setSettingsTimestamp(db, "lastPollAt", startedAt);
 
-    const companyRows = await db.select().from(companies);
-    const companyIndex = indexCompanies(companyRows);
-    const states = new Map((await db.select().from(sourceState)).map((s) => [s.key, s]));
-    let window = await loadWindow(database, startedAt, settings);
+      const companyRows = await db.select().from(companies);
+      const companyIndex = indexCompanies(companyRows);
+      const states = new Map((await db.select().from(sourceState)).map((s) => [s.key, s]));
+      let window = await loadWindow(database, startedAt, settings);
 
-    const targets = pollTargets(registry, settings, companyRows);
-    const hash = filtersHash(settings);
-    const etagFor = (t: Target) => {
-      const s = states.get(t.key);
-      if (!s) return null;
-      const slug = t.kind === "company" ? t.company.slug : null;
-      return s.slug === slug && s.filtersHash === hash ? s.etag : null;
-    };
+      const targets = pollTargets(registry, settings, companyRows);
+      const hash = filtersHash(settings);
+      const etagFor = (t: Target) => {
+        const s = states.get(t.key);
+        if (!s) return null;
+        const slug = t.kind === "company" ? t.company.slug : null;
+        return s.slug === slug && s.filtersHash === hash ? s.etag : null;
+      };
 
-    // Source rows already checked for experience, so their detail isn't refetched
-    const checked = new Map<string, MemJob>();
-    for (const m of window.values()) {
-      for (const s of m.sources) {
-        // Description too: rows from before descriptions were stored get one detail request
-        if (s.requiredYears !== null && s.description !== null) {
-          checked.set(`${s.source}:${s.sourceJobId}`, m);
+      // Source rows already checked for experience, so their detail isn't refetched
+      const checked = new Map<string, MemJob>();
+      for (const m of window.values()) {
+        for (const s of m.sources) {
+          // Description too: rows from before descriptions were stored get one detail request
+          if (s.requiredYears !== null && s.description !== null) {
+            checked.set(`${s.source}:${s.sourceJobId}`, m);
+          }
         }
       }
-    }
-    const enrich: Enrich = async (t, result, signal) => {
-      const { adapter } = t;
-      const slug = t.kind === "company" ? t.company.slug : null;
-      if (result.status !== "ok" || !adapter.fetchDetail || !slug) {
-        return { fetched: 0, incomplete: false };
-      }
-      let fetchedCount = 0;
-      let incomplete = false;
-      for (const listing of result.jobs) {
-        if (listing.description !== undefined) continue;
-        if (!passesPollFilter(listing, adapter.kind, settings, startedAt)) continue;
-        const known = checked.get(`${listing.source}:${listing.sourceJobId}`);
-        if (known) {
-          // Keep the pay found by the earlier detail request (the list has none)
-          const { salaryMinUsd: min, salaryMaxUsd: max } = known.job;
-          if (!listing.salary && (min !== null || max !== null)) {
-            listing.salary = {
-              currency: "USD",
-              interval: "year",
-              ...(min !== null && { min }),
-              ...(max !== null && { max }),
-            };
+      const enrich: Enrich = async (t, result, signal) => {
+        const { adapter } = t;
+        const slug = t.kind === "company" ? t.company.slug : null;
+        if (result.status !== "ok" || !adapter.fetchDetail || !slug) {
+          return { fetched: 0, incomplete: false };
+        }
+        let fetchedCount = 0;
+        let incomplete = false;
+        for (const listing of result.jobs) {
+          if (listing.description !== undefined) continue;
+          if (!passesPollFilter(listing, adapter.kind, settings, startedAt)) continue;
+          const known = checked.get(`${listing.source}:${listing.sourceJobId}`);
+          if (known) {
+            // Keep the pay found by the earlier detail request (the list has none)
+            const { salaryMinUsd: min, salaryMaxUsd: max } = known.job;
+            if (!listing.salary && (min !== null || max !== null)) {
+              listing.salary = {
+                currency: "USD",
+                interval: "year",
+                ...(min !== null && { min }),
+                ...(max !== null && { max }),
+              };
+            }
+            continue;
           }
+          if (signal.aborted) {
+            incomplete = true;
+            break;
+          }
+          try {
+            const detail = await adapter.fetchDetail(slug, listing.sourceJobId, { http, signal });
+            fetchedCount++;
+            if (!detail) continue;
+            listing.description = detail.description;
+            if (detail.salary && !listing.salary) listing.salary = detail.salary;
+          } catch (err) {
+            // Left unchecked: retried on the next poll
+            incomplete = true;
+            log.warn(
+              { job: listing.sourceJobId, ...errorFields(err) },
+              `${targetLabel(t)} · detail for "${listing.title}" failed; retrying next poll`,
+            );
+          }
+        }
+        return { fetched: fetchedCount, incomplete };
+      };
+
+      log.debug(
+        { targets: targets.length, jobsInWindow: window.size, forced: options.force ?? false },
+        `poll started · ${targets.length} targets`,
+      );
+      const fetched = await fetchAll(
+        targets,
+        etagFor,
+        http,
+        options.budgetMs ?? POLL_BUDGET_MS,
+        enrich,
+        options.signal,
+      );
+      if (options.signal?.aborted) {
+        // Half a poll would mark unfetched boards failed; the next start polls again
+        await setSettingsTimestamp(db, "lastPollAt", state.lastPollAt);
+        log.info(
+          {},
+          "poll stopped for shutdown before writing anything; the next start polls again",
+        );
+        return { ran: false, reason: "aborted" } as const;
+      }
+
+      // ATS targets first so their data is in place before aggregators merge into it
+      const ordered = [
+        ...targets.filter((t) => t.kind === "company"),
+        ...targets.filter((t) => t.kind === "aggregator"),
+      ];
+      const down = sourcesDown(targets, fetched);
+      const answered = new Set(
+        targets
+          .filter((t) => t.kind === "company" && "result" in (fetched.get(t.key) ?? {}))
+          .map((t) => t.adapter.id),
+      );
+      await recordSourceOutages(db, down, answered, startedAt);
+      for (const [source, { count, error }] of down) {
+        log.warn(
+          { source, boards: count, error },
+          `${getAdapter(registry, source)?.label ?? source} looks down: no board answered, ${count} failed (${error}); their health is left alone and the next poll retries`,
+        );
+      }
+      const outcomes: TargetOutcome[] = [];
+      for (const target of ordered) {
+        const label = targetLabel(target);
+        const f0 = fetched.get(target.key);
+        if (target.kind === "company" && down.has(target.adapter.id) && f0 && transient(f0)) {
+          log.debug({ target: target.key }, `${label} failed (source down): ${f0.error}`);
+          outcomes.push({
+            key: target.key,
+            label,
+            status: "failed",
+            error: f0.error,
+            failures: null,
+          });
           continue;
         }
-        if (signal.aborted) {
-          incomplete = true;
-          break;
-        }
-        try {
-          const detail = await adapter.fetchDetail(slug, listing.sourceJobId, { http, signal });
-          fetchedCount++;
-          if (!detail) continue;
-          listing.description = detail.description;
-          if (detail.salary && !listing.salary) listing.salary = detail.salary;
-        } catch (err) {
-          // Left unchecked: retried on the next poll
-          incomplete = true;
+        const f = fetched.get(target.key) ?? { skipped: true as const };
+        if ("notFetched" in f) {
+          // The breaker tripped but a board in flight then answered, so it's no outage;
+          // these boards were never asked and their health says nothing about them
           log.warn(
-            { job: listing.sourceJobId, ...errorFields(err) },
-            `${targetLabel(t)} · detail for "${listing.title}" failed; retrying next poll`,
+            { target: target.key },
+            `${label} · ${f.error}, but another board then answered; its health is left alone and the next poll retries`,
+          );
+          outcomes.push({ key: target.key, label, status: "skipped" });
+          continue;
+        }
+        if ("skipped" in f) {
+          log.warn(
+            { target: target.key },
+            `${label} · not fetched: the ${formatDuration(options.budgetMs ?? POLL_BUDGET_MS)} poll budget ran out; next poll retries`,
+          );
+          outcomes.push({ key: target.key, label, status: "skipped" });
+          continue;
+        }
+        const now = clock();
+        let error = "error" in f ? f.error : null;
+        let fields = "error" in f ? f.fields : {};
+        if ("result" in f) {
+          const ws = new WorkingSet(window);
+          try {
+            const stats = await db.transaction((tx) =>
+              processTarget({
+                tx,
+                ws,
+                registry,
+                settings,
+                companies: companyIndex,
+                target,
+                result: f.result,
+                filtersHash: hash,
+                now,
+              }),
+            );
+            window = ws.commit();
+            const outcome: TargetOutcome = {
+              key: target.key,
+              label,
+              status: f.result.status,
+              stats,
+              durationMs: f.ms,
+              listings: f.result.status === "ok" ? f.result.jobs.length : null,
+              details: f.details,
+            };
+            logTarget(log, outcome);
+            outcomes.push(outcome);
+            continue;
+          } catch (err) {
+            error = errorMessage(err);
+            fields = { err };
+            log.error(
+              { target: target.key, err },
+              `${label} · saving results failed; rolled back, next poll refetches in full`,
+            );
+          }
+        }
+        const message = error ?? "unknown error";
+        const health = await db
+          .transaction((tx) => recordFailure(tx, target, message, now))
+          .catch((err) => {
+            log.error({ target: target.key, err }, `${label} · could not record the failure`);
+            return null;
+          });
+        const company =
+          target.kind === "company"
+            ? { company: target.company.name, ats: target.company.ats, slug: target.company.slug }
+            : { source: target.adapter.id };
+        const inARow = health ? ` (${health.failures} in a row)` : "";
+        // The error itself was logged above when processing failed
+        log.warn(
+          // The message already carries the error text; keep the extra details (status)
+          {
+            target: target.key,
+            ...company,
+            ...("err" in fields ? {} : { ...fields, error: undefined }),
+          },
+          `${label} failed${inARow}: ${message}`,
+        );
+        if (health?.needsReview) {
+          log.warn(
+            { target: target.key, ...company },
+            `${label} · marked needs review after ${health.failures} failures in a row; check its slug on the Companies page`,
           );
         }
-      }
-      return { fetched: fetchedCount, incomplete };
-    };
-
-    log.debug(
-      { targets: targets.length, jobsInWindow: window.size, forced: options.force ?? false },
-      `poll started · ${targets.length} targets`,
-    );
-    const fetched = await fetchAll(
-      targets,
-      etagFor,
-      http,
-      options.budgetMs ?? POLL_BUDGET_MS,
-      enrich,
-      options.signal,
-    );
-    if (options.signal?.aborted) {
-      // Half a poll would mark unfetched boards failed; the next start polls again
-      await setSettingsTimestamp(db, "lastPollAt", state.lastPollAt);
-      log.info({}, "poll stopped for shutdown before writing anything; the next start polls again");
-      return { ran: false, reason: "aborted" } as const;
-    }
-
-    // ATS targets first so their data is in place before aggregators merge into it
-    const ordered = [
-      ...targets.filter((t) => t.kind === "company"),
-      ...targets.filter((t) => t.kind === "aggregator"),
-    ];
-    const down = sourcesDown(targets, fetched);
-    const answered = new Set(
-      targets
-        .filter((t) => t.kind === "company" && "result" in (fetched.get(t.key) ?? {}))
-        .map((t) => t.adapter.id),
-    );
-    await recordSourceOutages(db, down, answered, startedAt);
-    for (const [source, { count, error }] of down) {
-      log.warn(
-        { source, boards: count, error },
-        `${getAdapter(registry, source)?.label ?? source} looks down: no board answered, ${count} failed (${error}); their health is left alone and the next poll retries`,
-      );
-    }
-    const outcomes: TargetOutcome[] = [];
-    for (const target of ordered) {
-      const label = targetLabel(target);
-      const f0 = fetched.get(target.key);
-      if (target.kind === "company" && down.has(target.adapter.id) && f0 && transient(f0)) {
-        log.debug({ target: target.key }, `${label} failed (source down): ${f0.error}`);
         outcomes.push({
           key: target.key,
           label,
           status: "failed",
-          error: f0.error,
-          failures: null,
+          error: message,
+          failures: health?.failures ?? null,
         });
-        continue;
       }
-      const f = fetched.get(target.key) ?? { skipped: true as const };
-      if ("notFetched" in f) {
-        // The breaker tripped but a board in flight then answered, so it's no outage;
-        // these boards were never asked and their health says nothing about them
-        log.warn(
-          { target: target.key },
-          `${label} · ${f.error}, but another board then answered; its health is left alone and the next poll retries`,
-        );
-        outcomes.push({ key: target.key, label, status: "skipped" });
-        continue;
-      }
-      if ("skipped" in f) {
-        log.warn(
-          { target: target.key },
-          `${label} · not fetched: the ${formatDuration(options.budgetMs ?? POLL_BUDGET_MS)} poll budget ran out; next poll retries`,
-        );
-        outcomes.push({ key: target.key, label, status: "skipped" });
-        continue;
-      }
-      const now = clock();
-      let error = "error" in f ? f.error : null;
-      let fields = "error" in f ? f.fields : {};
-      if ("result" in f) {
-        const ws = new WorkingSet(window);
-        try {
-          const stats = await db.transaction((tx) =>
-            processTarget({
-              tx,
-              ws,
-              registry,
-              settings,
-              companies: companyIndex,
-              target,
-              result: f.result,
-              filtersHash: hash,
-              now,
-            }),
-          );
-          window = ws.commit();
-          const outcome: TargetOutcome = {
-            key: target.key,
-            label,
-            status: f.result.status,
-            stats,
-            durationMs: f.ms,
-            listings: f.result.status === "ok" ? f.result.jobs.length : null,
-            details: f.details,
-          };
-          logTarget(log, outcome);
-          outcomes.push(outcome);
-          continue;
-        } catch (err) {
-          error = errorMessage(err);
-          fields = { err };
-          log.error(
-            { target: target.key, err },
-            `${label} · saving results failed; rolled back, next poll refetches in full`,
-          );
-        }
-      }
-      const message = error ?? "unknown error";
-      const health = await db
-        .transaction((tx) => recordFailure(tx, target, message, now))
-        .catch((err) => {
-          log.error({ target: target.key, err }, `${label} · could not record the failure`);
-          return null;
-        });
-      const company =
-        target.kind === "company"
-          ? { company: target.company.name, ats: target.company.ats, slug: target.company.slug }
-          : { source: target.adapter.id };
-      const inARow = health ? ` (${health.failures} in a row)` : "";
-      // The error itself was logged above when processing failed
-      log.warn(
-        // The message already carries the error text; keep the extra details (status)
-        {
-          target: target.key,
-          ...company,
-          ...("err" in fields ? {} : { ...fields, error: undefined }),
-        },
-        `${label} failed${inARow}: ${message}`,
-      );
-      if (health?.needsReview) {
-        log.warn(
-          { target: target.key, ...company },
-          `${label} · marked needs review after ${health.failures} failures in a row; check its slug on the Companies page`,
-        );
-      }
-      outcomes.push({
-        key: target.key,
-        label,
-        status: "failed",
-        error: message,
-        failures: health?.failures ?? null,
-      });
-    }
 
-    const summary = summarize(outcomes);
-    const ms = performance.now() - runStarted;
-    log[summary.failed > 0 ? "warn" : "info"](
-      { durationMs: Math.round(ms), targets: summary.targets, ...nonZero({ ...summary }) },
-      `poll finished in ${formatDuration(ms)} · ${describeSummary(summary)}`,
-    );
-    return { ran: true, startedAt, targets: outcomes } as const;
-  });
+      const summary = summarize(outcomes);
+      const ms = performance.now() - runStarted;
+      log[summary.failed > 0 ? "warn" : "info"](
+        { durationMs: Math.round(ms), targets: summary.targets, ...nonZero({ ...summary }) },
+        `poll finished in ${formatDuration(ms)} · ${describeSummary(summary)}`,
+      );
+      return { ran: true, startedAt, targets: outcomes } as const;
+    },
+    (err) =>
+      log.error(
+        { err },
+        "lost the poll lock's database connection (Postgres restarted?); this poll's writes will fail and the next poll retries",
+      ),
+  );
 
   if (!locked.acquired) log.info({}, "poll skipped: another poll holds the lock");
   return locked.acquired ? locked.value : { ran: false, reason: "locked" };
