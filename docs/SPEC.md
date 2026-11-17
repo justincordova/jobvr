@@ -142,7 +142,10 @@ interface SourceAdapter {
   concurrency: number; // max in-flight fetches for this source
   fetch(ctx: FetchCtx): Promise<FetchResult>; // ctx: { slug?, companyName?, etag?, signal, http }
   parseUrl?(url: string): { sourceJobId: string; slug?: string } | null; // ats only
-  probe?(slug: string, ctx: ProbeCtx): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
+  probe?(
+    slug: string,
+    ctx: ProbeCtx,
+  ): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
   // Sources whose list has no description (Greenhouse): one job's description and pay; null when gone
   fetchDetail?(
     slug: string,
@@ -153,7 +156,12 @@ interface SourceAdapter {
 
 type FetchResult =
   | { status: "not_modified" }
-  | { status: "ok"; etag: string | null; jobs: SourceJob[]; invalidCount: number };
+  | {
+      status: "ok";
+      etag: string | null;
+      jobs: SourceJob[];
+      invalidCount: number;
+    };
 
 interface SourceJob {
   source: SourceId;
@@ -316,7 +324,8 @@ A title passes the keyword rule for a source when:
   default plain "Software Engineer" counts, since boards rarely say "new grad".
 - **Without a role keyword**, a generic engineering title (`engineer`,
   `engineering`, `developer`, `programmer`) with no other discipline word
-  (electrical, mechanical, civil, sales, legal, compliance, field, support, services, ...)
+  (electrical, mechanical, civil, sales, legal, compliance, field, support, services,
+  verification, design, asic, fpga, physical, ...)
   passes when it's entry level on a board ("New Grad Engineer"), or in a
   SimplifyJobs "Trusted category" ("Engineer 2 New Grad - Multiple Teams").
   "AI Acceleration Specialist" and "Associate Application Consultant" never
@@ -339,7 +348,7 @@ A job passes when any of its location strings matches any enabled named location
   tokens contain any alias ("NYC Office", "San Francisco, Seattle, New York").
 - **Remote-US** (built-in rule, can be enabled/disabled but has no aliases): the
   string is exactly a US token sequence (`us`, `usa`, `u s`, `u s a`, `united
-  states`, `united states of america`), meaning anywhere in the US, OR it
+states`, `united states of america`), meaning anywhere in the US, OR it
   contains the token `remote` AND either contains a US sequence or is exactly
   "remote" after tokenization. "Remote", "Remote - US", "Remote in USA",
   "United States (Remote)", "United States" match; "Remote in UK", "Remote - Europe", "Remote (EMEA)", "Remote -
@@ -376,8 +385,14 @@ A listing is stored (inserted, or merged into an existing job) only if it passes
 the location rule AND the keyword rule for its source, AND (aggregators only)
 `meta.active` and `meta.visible` are true, AND its adjusted posted date (see
 Freshness) ≥ now − the store window ("Keep jobs posted within", default 30
-days). Older-but-open roles are kept so nothing still applicable is missed;
-pushes and "new" still only count jobs within max age.
+days). Exception: an entry-level title (level keyword or `I`/`1`) on a company
+board (ATS) is stored up to 180 days old (`ENTRY_LEVEL_STORE_DAYS`), whatever
+the window: firms post new-grad roles months ahead and keep them open (HRT's
+"Software Engineer – 2027 Grads" was 4 months old in Nov 2026), and board
+closures show when they're gone. SimplifyJobs listings don't get this, since
+their `active` flag is community-maintained. Older-but-open roles are kept so
+nothing still applicable is missed; pushes and "new" still only count jobs
+within max age.
 
 ### Visibility rules V (applied at read time with current settings)
 
@@ -420,7 +435,8 @@ A task is due when its last-run timestamp is null or `now − last ≥ interval 
 Order: take the poll lock → due check → set `last_poll_at = now` → steps below.
 
 1. **Load** into memory: settings, companies, all `source_state` rows, and all
-   jobs (with all their `job_sources` rows) where `effective_at ≥ now − store window`.
+   jobs (with all their `job_sources` rows) where `effective_at ≥ now − max(store
+window, 180 days)` (everything the poll filter can still store).
 2. **Targets**:
    - Each **company** with `track = true` AND tier in "Tiers to track" AND
      `status ≠ manual_only` AND `ats` is a registered ATS adapter AND `slug` is set
@@ -488,7 +504,7 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
      row previously belonged to a different job (the listing moved), it is
      re-pointed; a job left with no rows is deleted with a single guarded
      statement (`DELETE … WHERE id = $1 AND state IN ('new','hidden') AND NOT
-     EXISTS (SELECT 1 FROM job_sources WHERE job_id = $1)`), never based on the
+EXISTS (SELECT 1 FROM job_sources WHERE job_id = $1)`), never based on the
      in-memory state. If the listing is from an ATS source, overwrite the job's `title`,
      `locations`, `url`, salary, `company_id`, `company_name`, and set
      `primary_source` to that ATS. If the job's `company_id` is null, re-resolve
@@ -582,8 +598,8 @@ means no quiet hours.
 
 ### Cleanup (`runCleanup`)
 
-Delete jobs with `effective_at < now − (store window + 15 days)` and `state ∈
-{new, hidden}` (`job_sources` cascade). Retention must exceed the store window, or a deleted
+Delete jobs with `effective_at < now − (max(store window, 180 days) + 15 days)`
+and `state ∈ {new, hidden}` (`job_sources` cascade). Retention must exceed the store window, or a deleted
 job that is still listed would be re-inserted on the next poll. Saved and applied jobs are kept indefinitely.
 
 ## Settings (DB, all editable in the UI)
@@ -597,13 +613,13 @@ are replaced, not merged).
 | Tiers to track                            | S, A, Mid, Startup, Corporate, Unlisted (all)                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Subset of S/A/Mid/Startup/Corporate/Unlisted. Controls which companies are polled, which jobs push, and the feed's default tier filter. `Unlisted` (added to the original list so Simplify jobs from companies not in your list can push) only affects jobs with no company. |
 | Role keywords (any)                       | software, developer, swe, sde, programmer, full stack, fullstack, backend, back end, frontend, front end, web engineer, mobile engineer, ios, android, product engineer, platform engineer, infrastructure engineer, forward deployed engineer, devops, site reliability, sre, machine learning, ml engineer, ai engineer, applied ai, data engineer, research engineer, cloud engineer, automation engineer, founding engineer, member of technical staff, application development, applications development |
 | Level keywords (any)                      | new grad, new graduate, graduate, grad, entry, junior, jr, early career, early talent, emerging talent, university, college, campus, associate, rotational, apprentice, apprenticeship, residency, development program, 2026, 2027                                                                                                                                                                                                                                                                            |
-| Exclude keywords                          | senior, sr, staff, principal, lead, manager, director, head, vp, vice president, architect, distinguished, intern, internship, co op, postdoc, postdoctoral, scientist, researcher, mid level, intermediate, fellow, part time, temporary, seasonal, fixed term, contract to hire, recruiter, designer, educator, customer support, gtm, go to market, curriculum, instructional, business developer, business development, developer advocate, developer relations, content developer                        |
+| Exclude keywords                          | senior, sr, staff, principal, lead, manager, director, head, vp, vice president, architect, distinguished, intern, internship, co op, postdoc, postdoctoral, scientist, researcher, mid level, intermediate, fellow, part time, temporary, seasonal, fixed term, contract to hire, recruiter, designer, educator, phd, customer support, gtm, go to market, curriculum, instructional, business developer, business development, developer advocate, developer relations, content developer                   |
 | Require a level keyword on company boards | Off                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Apply level keywords to Simplify          | Off                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | —                                                                                                                                                                                                                                                                            |
 | Simplify trusted categories               | Software, Software Engineering (other categories need a role keyword)                                                                                                                                                                                                                                                                                                                                                                                                                                         | Matched case-insensitively against `category`                                                                                                                                                                                                                                |
 | Hide board jobs asking for N+ years       | 3                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 0–20; 0 = off. See [Experience rule](#experience-rule)                                                                                                                                                                                                                       |
 | Max job age (hours)                       | 24                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 1–168                                                                                                                                                                                                                                                                        |
-| Keep jobs posted within (store window)    | 30 days (presets 30 / 60, or custom)                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | 7–120 days. Cleanup keeps new/hidden jobs for the window + 15 days                                                                                                                                                                                                           |
+| Keep jobs posted within (store window)    | 30 days (presets 30 / 60, or custom)                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | 7–120 days. Entry-level board titles: 180 days. Cleanup keeps new/hidden jobs 15 days past that                                                                                                                                                                              |
 | Poll every (minutes)                      | 10                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 5–1440                                                                                                                                                                                                                                                                       |
 | Push summary every (minutes)              | 30                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 5–1440                                                                                                                                                                                                                                                                       |
 | Quiet hours (ET)                          | 23:00–07:00                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `HH:MM` each                                                                                                                                                                                                                                                                 |
@@ -696,20 +712,21 @@ the app shell only; API requests are network-only.
 
 ## Constants
 
-| Constant                                                           | Value                                                                                               |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| Scheduler tick / first tick after boot / due tolerance             | 5 min / 10 s / 60 s                                                                                 |
-| Poll store window (max effective age stored, in-memory dedupe set) | Setting "Keep jobs posted within" (default 30 days)                                                 |
-| Retention for new/hidden jobs                                      | store window + 15 days (cleanup every 24 h)                                                         |
-| Per-source concurrency (declared by each adapter)                  | Greenhouse 3, Lever 3, Ashby 3, SimplifyJobs 1                                                      |
-| `FILTER_VERSION`                                                   | integer in `core`; bump whenever matching/normalization code changes (forces unconditional refetch) |
-| Poll run budget                                                    | 5 min                                                                                               |
-| HTTP                                                               | 15 s timeout, 1 retry (1–3 s jitter, `Retry-After` ≤ 30 s), 50 MB cap                               |
-| Invalid-item threshold                                             | > 50% of a non-empty response → fetch failure                                                       |
-| Fuzzy dedupe                                                       | title token-set Jaccard ≥ 0.85                                                                      |
-| Failures before `needs_review`                                     | 3 consecutive                                                                                       |
-| Salary annualization                                               | hour × 2080, week × 52, month × 12                                                                  |
-| Backups                                                            | nightly `pg_dump` at 03:00 America/New_York, keep 14                                                |
+| Constant                                               | Value                                                                                               |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Scheduler tick / first tick after boot / due tolerance | 5 min / 10 s / 60 s                                                                                 |
+| Poll store window (max effective age stored)           | Setting "Keep jobs posted within" (default 30 days); entry-level board titles 180 days              |
+| In-memory dedupe/closure set                           | max(store window, 180 days)                                                                         |
+| Retention for new/hidden jobs                          | max(store window, 180 days) + 15 days (cleanup every 24 h)                                          |
+| Per-source concurrency (declared by each adapter)      | Greenhouse 3, Lever 3, Ashby 3, SimplifyJobs 1                                                      |
+| `FILTER_VERSION`                                       | integer in `core`; bump whenever matching/normalization code changes (forces unconditional refetch) |
+| Poll run budget                                        | 5 min                                                                                               |
+| HTTP                                                   | 15 s timeout, 1 retry (1–3 s jitter, `Retry-After` ≤ 30 s), 50 MB cap                               |
+| Invalid-item threshold                                 | > 50% of a non-empty response → fetch failure                                                       |
+| Fuzzy dedupe                                           | title token-set Jaccard ≥ 0.85                                                                      |
+| Failures before `needs_review`                         | 3 consecutive                                                                                       |
+| Salary annualization                                   | hour × 2080, week × 52, month × 12                                                                  |
+| Backups                                                | nightly `pg_dump` at 03:00 America/New_York, keep 14                                                |
 
 ## Key Decisions
 
@@ -797,7 +814,9 @@ Vitest everywhere.
 3. Adapter interface + Greenhouse, Lever, Ashby adapters with fixture tests.
 4. Matching, freshness, dedupe, baseline, closures (tests); `poller/data/companies.json`
    with the **Verified** tables of `docs/SEED.md` only, and the `seed` script (API-confirmed via `probe`, else
-   `needs_review`; insert-only, never overwrites existing companies), so
+   `needs_review`; insert-only, never overwrites existing companies, except
+   that a still-`manual_only` "other" company is moved to the supported board
+   its seed entry now names), so
    `pnpm poll` has real data from here on.
 5. SimplifyJobs adapter + cross-source dedupe + suggestions.
 6. API routes: jobs, companies, suggestions, settings.

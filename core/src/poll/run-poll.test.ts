@@ -171,7 +171,7 @@ describe("runPoll: baseline, filters, ETags", () => {
       ghJob("acme", "1", "Software Engineer, New Grad"),
       ghJob("acme", "2", "Senior Software Engineer"),
       ghJob("acme", "3", "Software Engineer, New Grad", { locations: ["San Francisco, CA"] }),
-      ghJob("acme", "4", "Software Engineer I", {
+      ghJob("acme", "4", "Software Engineer", {
         postedAt: new Date(T0.getTime() - 31 * 24 * HOUR),
       }),
     ]);

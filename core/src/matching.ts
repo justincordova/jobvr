@@ -1,7 +1,7 @@
 import { ANNUALIZE } from "./constants";
 import { adjustedPostedAt } from "./freshness";
 import { containsSequence, matchesAnyKeyword, tokenize } from "./normalize";
-import { type Settings, storeWindowMs } from "./settings";
+import { maxStoreWindowMs, type Settings, storeWindowMs } from "./settings";
 import type { Salary } from "./sources/types";
 import { stateCode, stateName } from "./us-states";
 
@@ -41,6 +41,11 @@ const NON_SOFTWARE = [
   "customer",
   "network",
   "services",
+  "verification",
+  "design",
+  "asic",
+  "fpga",
+  "physical",
 ];
 
 /**
@@ -253,7 +258,12 @@ export const passesPollFilter = (
   if (kind === "aggregator" && (listing.meta?.active !== true || listing.meta?.visible !== true))
     return false;
   const posted = adjustedPostedAt(listing.postedAt, listing.postedAtPrecision);
-  return posted.getTime() >= now.getTime() - storeWindowMs(settings);
+  // Explicit new-grad roles on company boards stay open for months
+  const window =
+    kind === "ats" && isEntryLevelTitle(listing.title, settings)
+      ? maxStoreWindowMs(settings)
+      : storeWindowMs(settings);
+  return posted.getTime() >= now.getTime() - window;
 };
 
 export interface VisibilityInput {

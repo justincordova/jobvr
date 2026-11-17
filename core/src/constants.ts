@@ -1,5 +1,5 @@
 /** Bump whenever matching or normalization code changes; forces unconditional refetches. */
-export const FILTER_VERSION = 5;
+export const FILTER_VERSION = 7;
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -16,6 +16,12 @@ export const DAY_MS = DAY;
  * still listed would be re-inserted on the next poll.
  */
 export const RETENTION_MARGIN_DAYS = 15;
+/**
+ * Explicit entry-level roles on company boards ("Software Engineer, New Grad")
+ * are stored up to this old, whatever the store window: firms post them months
+ * ahead and keep them open (HRT's 2027 Grads role was 4 months old in Nov 2026).
+ */
+export const ENTRY_LEVEL_STORE_DAYS = 180;
 export const CLEANUP_INTERVAL_MS = DAY;
 
 export const POLL_BUDGET_MS = 5 * MINUTE;

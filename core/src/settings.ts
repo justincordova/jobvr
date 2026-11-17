@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DAY_MS, RETENTION_MARGIN_DAYS, TIER_FILTERS } from "./constants";
+import { DAY_MS, ENTRY_LEVEL_STORE_DAYS, RETENTION_MARGIN_DAYS, TIER_FILTERS } from "./constants";
 
 export const REMOTE_US_LABEL = "Remote-US";
 
@@ -180,6 +180,7 @@ export const DEFAULT_SETTINGS: Settings = {
     "recruiter",
     "designer",
     "educator",
+    "phd",
     "customer support",
     "gtm",
     "go to market",
@@ -228,9 +229,17 @@ export const parseStoredSettings = (data: unknown): Settings => {
   return out as Settings;
 };
 
-/** How far back the poller stores jobs (and the in-memory dedupe window). */
+/** How far back the poller stores jobs. */
 export const storeWindowMs = (s: Pick<Settings, "storeWindowDays">) => s.storeWindowDays * DAY_MS;
 
-/** new/hidden jobs older than this are deleted by cleanup. */
+/**
+ * The oldest job the poller can store: the store window, or the longer
+ * window for explicit entry-level board roles. Also the in-memory dedupe and
+ * closure window.
+ */
+export const maxStoreWindowMs = (s: Pick<Settings, "storeWindowDays">) =>
+  Math.max(s.storeWindowDays, ENTRY_LEVEL_STORE_DAYS) * DAY_MS;
+
+/** new/hidden jobs older than this are deleted by cleanup (past anything still storable). */
 export const retentionMs = (s: Pick<Settings, "storeWindowDays">) =>
-  (s.storeWindowDays + RETENTION_MARGIN_DAYS) * DAY_MS;
+  maxStoreWindowMs(s) + RETENTION_MARGIN_DAYS * DAY_MS;

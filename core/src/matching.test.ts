@@ -71,6 +71,10 @@ describe("keyword rule", () => {
       "Customer Support Developer (Databases)",
       "Associate GTM Engineer",
       "Lifecycle Services Engineer I",
+      // Explicit new-grad board roles that aren't software (Nov 2026)
+      "Design Verification (DV) Engineer - 2027 Grads",
+      "Algorithm Developer (Quant Research & Trading) – 2027 PhDs",
+      "AI Research Engineer, New PhD Graduate",
     ]) {
       expect(ats(t), t).toBe(false);
     }
@@ -345,5 +349,21 @@ describe("poll filter and visibility", () => {
     const old = { ...listing, postedAt: new Date("2026-09-20T00:00:00Z") };
     expect(passesPollFilter(old, "ats", S, now)).toBe(false);
     expect(passesPollFilter(old, "ats", { ...S, storeWindowDays: 60 }, now)).toBe(true);
+  });
+
+  it("keeps explicit new-grad roles on company boards for 180 days", () => {
+    // HRT posted its 2027 Grads role in July; it was still open in November
+    const hrt = {
+      ...listing,
+      title: "Software Engineer (C++ or Python) – 2027 Grads",
+      postedAt: new Date("2026-07-13T00:00:00Z"),
+    };
+    expect(passesPollFilter(hrt, "ats", S, now)).toBe(true);
+    // Not SimplifyJobs (no closure check to trust), not plain titles, not past 180 days
+    expect(passesPollFilter(hrt, "aggregator", S, now)).toBe(false);
+    expect(passesPollFilter({ ...hrt, title: "Software Engineer" }, "ats", S, now)).toBe(false);
+    expect(
+      passesPollFilter({ ...hrt, postedAt: new Date("2026-05-01T00:00:00Z") }, "ats", S, now),
+    ).toBe(false);
   });
 });

@@ -2,8 +2,10 @@ import {
   adjustedPostedAt,
   createHttpClient,
   getSettings,
+  isEntryLevelTitle,
   listCompanies,
   matchesAnyKeyword,
+  maxStoreWindowMs,
   passesExperienceRule,
   passesKeywordRule,
   passesLocationRule,
@@ -59,7 +61,11 @@ const classify = (j: SourceJob, kind: "ats" | "aggregator") => {
     !passesExperienceRule({ title: j.title, requiredYears: years }, settings)
   )
     reason = "experience";
-  const old = posted < now - storeWindowMs(settings);
+  const window =
+    kind === "ats" && isEntryLevelTitle(j.title, settings)
+      ? maxStoreWindowMs(settings)
+      : storeWindowMs(settings);
+  const old = posted < now - window;
   return {
     reason: old ? ("old" as const) : reason,
     oldMatch: old && reason === "pass",

@@ -10,7 +10,7 @@ import { passesPollFilter } from "../matching";
 import { companyStateKey } from "../repos/companies";
 import { getSettingsState, setSettingsTimestamp } from "../repos/settings";
 import { isDue } from "../schedule";
-import { type Settings, storeWindowMs } from "../settings";
+import { maxStoreWindowMs, type Settings } from "../settings";
 import { getAdapter } from "../sources/registry";
 import type { FetchResult, Registry } from "../sources/types";
 import { processTarget, recordFailure, type Target, type TargetStats } from "./process";
@@ -256,7 +256,7 @@ const fetchAll = async (
 
 const loadWindow = async (database: Database, now: Date, settings: Settings): Promise<JobMap> => {
   const { db } = database;
-  const since = new Date(now.getTime() - storeWindowMs(settings));
+  const since = new Date(now.getTime() - maxStoreWindowMs(settings));
   const jobRows = await db.select().from(jobs).where(gte(jobs.effectiveAt, since));
   const map: JobMap = new Map(jobRows.map((j) => [j.id, { job: j, sources: [] }]));
   const ids = [...map.keys()];

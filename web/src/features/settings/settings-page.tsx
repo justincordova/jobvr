@@ -200,8 +200,9 @@ function StoreWindowField({ value, onChange }: { value: number; onChange: (n: nu
         )}
       </div>
       <p className="mt-1.5 text-xs text-dim">
-        Older roles that are still open show up further down the feed. Pushes only cover jobs within
-        max job age.
+        Older roles that are still open show up further down the feed. New-grad roles on company
+        boards are kept for up to 180 days, since firms post them months ahead. Pushes only cover
+        jobs within max job age.
       </p>
     </div>
   )
