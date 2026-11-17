@@ -32,6 +32,8 @@ export const startScheduler = (options: SchedulerOptions) => {
   const http = createHttpClient();
   const notifier = options.ntfyUrl ? createNtfyNotifier(options.ntfyUrl) : null;
   let running: number | null = null;
+  let current: Promise<void> = Promise.resolve();
+  const stopping = new AbortController();
 
   const step = async (name: string, fn: () => Promise<unknown>) => {
     try {
@@ -41,7 +43,8 @@ export const startScheduler = (options: SchedulerOptions) => {
     }
   };
 
-  const tick = async () => {
+  const runTick = async () => {
+    if (stopping.signal.aborted) return;
     if (running !== null) {
       log.warn(
         { runningForMs: Math.round(performance.now() - running) },
@@ -51,10 +54,15 @@ export const startScheduler = (options: SchedulerOptions) => {
     }
     running = performance.now();
     try {
-      await step("poll", () => runPoll({ database, registry, http, logger }));
+      await step("poll", () =>
+        runPoll({ database, registry, http, logger, signal: stopping.signal }),
+      );
+      // After a stop, nothing new starts (a push mid-send still finishes and is marked)
+      if (stopping.signal.aborted) return;
       await step("notify", () =>
         runNotify({ database, registry, notifier, publicUrl: options.publicUrl, logger }),
       );
+      if (stopping.signal.aborted) return;
       await step("cleanup", () => runCleanup({ database, logger }));
       log.debug({}, `tick done in ${formatDuration(performance.now() - running)}`);
     } finally {
@@ -66,13 +74,22 @@ export const startScheduler = (options: SchedulerOptions) => {
     `scheduler started: first tick in ${formatDuration(SCHEDULER_FIRST_TICK_MS)}, then every ${formatDuration(SCHEDULER_TICK_MS)}${notifier ? "" : " (NTFY_URL unset: no pushes)"}`,
   );
 
+  const tick = () => {
+    // A skipped tick returns at once; only a tick that runs is what stop() waits for
+    if (running !== null || stopping.signal.aborted) return runTick();
+    current = runTick();
+    return current;
+  };
   const first = setTimeout(() => void tick(), SCHEDULER_FIRST_TICK_MS);
   const interval = setInterval(() => void tick(), SCHEDULER_TICK_MS);
   return {
     tick,
-    stop: () => {
+    /** Stops ticking, aborts a running poll, and resolves when the running tick is done. */
+    stop: async () => {
       clearTimeout(first);
       clearInterval(interval);
+      stopping.abort();
+      await current;
     },
   };
 };

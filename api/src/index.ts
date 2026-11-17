@@ -90,7 +90,6 @@ const shutdown = (signal: NodeJS.Signals): void => {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info({ signal }, `${signal} received, shutting down`);
-  scheduler?.stop();
 
   // Hard stop if in-flight requests (or anything else) outlive the grace period
   setTimeout(() => {
@@ -101,9 +100,12 @@ const shutdown = (signal: NodeJS.Signals): void => {
 
   // Stop accepting connections and close idle keep-alive sockets; the callback
   // fires once in-flight requests finish
-  server.close((err) => {
+  // The running tick (if any) stops fetching and finishes what it's writing first
+  const closed = new Promise<Error | undefined>((resolve) => server.close(resolve));
+  void Promise.all([closed, scheduler?.stop()]).then(async ([err]) => {
     if (err) log.error({ err }, "error while closing the server");
-    void database.close().finally(() => exit(err ? 1 : 0));
+    await database.close().catch(() => {});
+    exit(err ? 1 : 0);
   });
 };
 

@@ -32,6 +32,8 @@ export interface RunPollOptions {
   now?: () => Date;
   logger?: Logger;
   budgetMs?: number;
+  /** Aborting (shutdown) stops fetching; nothing fetched is written and the next poll redoes it. */
+  signal?: AbortSignal;
 }
 
 export type TargetOutcome = { key: string; label: string } & (
@@ -182,7 +184,7 @@ const targetLabel = (t: Target) =>
   t.kind === "company" ? `${t.company.name} (${t.adapter.label})` : t.adapter.label;
 
 export type PollSummary =
-  | { ran: false; reason: "locked" | "not_due" }
+  | { ran: false; reason: "locked" | "not_due" | "aborted" }
   | { ran: true; startedAt: Date; targets: TargetOutcome[] };
 
 /** Hash of everything that decides what a fetch stores; a change bypasses ETags. */
@@ -251,10 +253,13 @@ const fetchAll = async (
   http: HttpClient,
   budgetMs: number,
   enrich: Enrich,
+  stop?: AbortSignal,
 ): Promise<Map<string, Fetched>> => {
   const out = new Map<string, Fetched>();
   const budget = new AbortController();
   const timer = setTimeout(() => budget.abort(new Error("Poll fetch budget exceeded")), budgetMs);
+  const onStop = () => budget.abort(new Error("Shutting down"));
+  stop?.addEventListener("abort", onStop, { once: true });
   const bySource = new Map<string, Target[]>();
   for (const t of targets) {
     const list = bySource.get(t.adapter.id) ?? [];
@@ -316,6 +321,7 @@ const fetchAll = async (
   }
   await Promise.all(workers);
   clearTimeout(timer);
+  stop?.removeEventListener("abort", onStop);
   return out;
 };
 
@@ -428,7 +434,14 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
       http,
       options.budgetMs ?? POLL_BUDGET_MS,
       enrich,
+      options.signal,
     );
+    if (options.signal?.aborted) {
+      // Half a poll would mark unfetched boards failed; the next start polls again
+      await setSettingsTimestamp(db, "lastPollAt", state.lastPollAt);
+      log.info({}, "poll stopped for shutdown before writing anything; the next start polls again");
+      return { ran: false, reason: "aborted" } as const;
+    }
 
     // ATS targets first so their data is in place before aggregators merge into it
     const ordered = [

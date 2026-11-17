@@ -93,7 +93,11 @@ the api client before the web app.
   boot. Each tick calls runPoll, runNotify, and runCleanup in sequence; each checks
   whether it is due and returns immediately if not. Disabled with
   `SCHEDULER_ENABLED=false`. (On AWS this becomes an EventBridge Scheduler rule
-  invoking the same functions.)
+  invoking the same functions.) On SIGTERM the scheduler stops ticking, aborts
+  a running poll's fetches (an aborted poll writes nothing and restores
+  `last_poll_at`, so the next start polls again), skips the remaining tasks,
+  and shutdown waits for the tick to end; a push being sent finishes and is
+  marked (ntfy timeout 5 s, under the 8 s grace), so it's never sent twice.
 - **Locks**: runPoll and runNotify each take their own Postgres
   `pg_try_advisory_lock` (distinct keys) on a dedicated connection held for the
   run; if not acquired, they return immediately. The lock is released when the run

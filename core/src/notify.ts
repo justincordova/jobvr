@@ -60,7 +60,8 @@ export const createNtfyNotifier = (
           actions: message.actions.map((a) => ({ action: "view", label: a.label, url: a.url })),
         }),
       }),
-      signal: AbortSignal.timeout(deps.timeoutMs ?? 15_000),
+      // Under the 8 s shutdown grace, so a send is never cut off after ntfy took it
+      signal: AbortSignal.timeout(deps.timeoutMs ?? 5_000),
     });
     // The topic URL is the secret, so it's never part of the error
     if (!res.ok) throw new HttpError(`ntfy responded ${res.status}`, res.status);
