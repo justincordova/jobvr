@@ -22,6 +22,9 @@ export function useJobActions() {
 
   const setState = useMutation({
     mutationKey: JOB_STATE_KEY,
+    // One request at a time, in order: a quick Save then Undo can't land reversed.
+    // The optimistic update still shows at once (onMutate isn't queued)
+    scope: { id: 'job-state' },
     // `also`: reposts of the same role shown on this row; they move together
     mutationFn: ({
       id,
@@ -41,9 +44,14 @@ export function useJobActions() {
     // Moves the job in every cached list, animating rows in or out of the current view
     onMutate: async ({ id, state, also = [] }) => {
       await qc.cancelQueries({ queryKey: queryKeys.allJobs })
-      const snapshot = qc.getQueriesData<JobList>({ queryKey: queryKeys.allJobs })
-      const prev =
-        snapshot.flatMap(([, list]) => list?.jobs ?? []).find((j) => j.id === id)?.state ?? 'new'
+      const cached = qc
+        .getQueriesData<JobList>({ queryKey: queryKeys.allJobs })
+        .flatMap(([, list]) => list?.jobs ?? [])
+      const ids = [id, ...also]
+      // Only these jobs are put back on error, so other quick actions aren't undone too
+      const before = new Map<string, JobState>()
+      for (const j of cached) if (ids.includes(j.id) && !before.has(j.id)) before.set(j.id, j.state)
+      const prev = before.get(id) ?? 'new'
       await withViewTransition(() =>
         qc.setQueriesData<JobList>({ queryKey: queryKeys.allJobs }, (list) =>
           list
@@ -56,10 +64,23 @@ export function useJobActions() {
             : list,
         ),
       )
-      return { snapshot, prev }
+      return { before, prev }
     },
     onError: (err, _vars, ctx) => {
-      for (const [key, data] of ctx?.snapshot ?? []) qc.setQueryData(key, data)
+      const before = ctx?.before
+      if (before) {
+        qc.setQueriesData<JobList>({ queryKey: queryKeys.allJobs }, (list) =>
+          list
+            ? {
+                ...list,
+                jobs: list.jobs.map((j) => {
+                  const state = before.get(j.id)
+                  return state ? { ...j, state } : j
+                }),
+              }
+            : list,
+        )
+      }
       toast.error(err.message)
     },
     onSuccess: (_d, { id, state, also, silent }, ctx) => {
