@@ -111,6 +111,73 @@ docker compose exec postgres psql -U jobvr -d jobvr -c "ALTER USER jobvr PASSWOR
 docker compose up -d
 ```
 
+### Keep it running unattended
+
+- **Windows Update reboots**: Docker Desktop only starts once you sign in, so
+  after an overnight reboot nothing runs until you log in. Use Sysinternals
+  [Autologon](https://learn.microsoft.com/sysinternals/downloads/autologon)
+  (it stores the password encrypted) so the PC signs in by itself, and set
+  Windows Update "active hours" around when you use the PC.
+- **Tailscale key expiry**: node keys expire after about 180 days, and then the
+  app drops off the tailnet. In the admin console, open Machines → `jobvr` →
+  "Disable key expiry", or use a tagged auth key (tagged nodes don't expire;
+  see the ACL below).
+
+### Check health
+
+- `docker compose ps`: the app shows `healthy` or `unhealthy`. Unhealthy means
+  the database is unreachable, or no poll has run for 3 poll intervals (30 min).
+- `curl -s https://jobvr.<your-tailnet>.ts.net/health` gives the same answer
+  with `lastPollAt`.
+- In the app, Settings shows the last poll, push and backup; Companies shows
+  boards that need review.
+
+### Roll back an update
+
+```sh
+docker compose run --rm backup --once   # before updating, if you can
+git log --oneline -10                   # pick the last good commit
+git checkout <commit> && docker compose up -d --build
+```
+
+If the update added a migration (a new file in `core/drizzle/`) and the older
+version misbehaves on the newer schema, restore the dump taken before the
+update (below). Go back to the latest with
+`git checkout main && docker compose up -d --build`.
+
+### Rotate secrets
+
+- **ntfy topic** (if it leaked): pick a new one (`openssl rand -hex 24`),
+  subscribe to it in the ntfy app, set `NTFY_URL` in `.env`, run
+  `docker compose up -d`, then unsubscribe from the old topic.
+- **Tailscale auth key**: only used the first time the node logs in (its state
+  lives in the `tsstate` volume). Revoke it in the admin console once `jobvr`
+  is up.
+- **Database password**: see the steps under Update above.
+
+### Limit Postgres to the Mac
+
+Port 5432 is forwarded to the tailnet so the Mac can seed, and Postgres trusts
+the `jobvr` superuser, so by default every device on your tailnet can reach it.
+A Tailscale access policy can allow 443 to all your devices and 5432 only to
+the Mac. Tag the node (create the auth key with `tag:jobvr`, which also turns
+off key expiry). Then merge rules like these into the policy file in the admin
+console. Merge, don't replace: replacing the default "allow all" removes access
+to your other devices.
+
+```json
+{
+  "tagOwners": { "tag:jobvr": ["autogroup:admin"] },
+  "hosts": { "mac": "100.x.y.z" },
+  "grants": [
+    { "src": ["autogroup:member"], "dst": ["tag:jobvr"], "ip": ["tcp:443"] },
+    { "src": ["mac"], "dst": ["tag:jobvr"], "ip": ["tcp:5432"] }
+  ]
+}
+```
+
+`100.x.y.z` is the Mac's Tailscale address (`tailscale ip -4` on the Mac).
+
 ### Logs
 
 The app logs one line per event, tagged with the part that wrote it
@@ -161,7 +228,8 @@ older version is fine: the app applies any newer migrations when it starts.
 
 ```sh
 docker compose stop app
-docker compose exec -T postgres pg_restore -U jobvr -d jobvr --clean --if-exists < backups/jobvr-2026-11-13-0300.dump
+# The dumps are in BACKUP_DIR (./backups unless .env sets it), e.g. C:/Users/<you>/OneDrive/jobvr-backups
+docker compose exec -T postgres pg_restore -U jobvr -d jobvr --clean --if-exists < "<BACKUP_DIR>/jobvr-2026-11-13-0300.dump"
 docker compose start app
 ```
 
