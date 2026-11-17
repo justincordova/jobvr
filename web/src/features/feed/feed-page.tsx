@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
-import { Bookmark, EyeOff, LoaderCircle, Radar, Send, Sparkle, X } from 'lucide-react'
+import { Bookmark, EyeOff, Keyboard, LoaderCircle, Radar, Send, Sparkle, X } from 'lucide-react'
 import { type ComponentType, useEffect, useState } from 'react'
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,8 @@ import {
   toJobQuery,
   type View,
 } from './search'
+import { ShortcutsDialog } from './shortcuts-dialog'
+import { useFeedKeys } from './use-feed-keys'
 import { useJobActions } from './use-job-actions'
 import { captureFirstResponse, isSessionNew, sessionNewCount } from './visit-session'
 
@@ -77,6 +79,7 @@ export function FeedPage() {
   const search = useSearch({ from: '/' })
   const navigate = useNavigate({ from: '/' })
   const [bannerOpen, setBannerOpen] = useState(true)
+  const [helpOpen, setHelpOpen] = useState(false)
   const query = toJobQuery(search)
   const view = search.view ?? 'feed'
 
@@ -117,6 +120,14 @@ export function FeedPage() {
     // Optimistic state changes remove rows that no longer belong to this view
     view === 'feed' ? j.state === 'new' || j.state === 'saved' : j.state === view,
   )
+  const act = (job: (typeof list)[number], state: (typeof list)[number]['state']) =>
+    setState.mutate({ id: job.id, state, also: job.duplicateIds })
+  const keys = useFeedKeys({
+    list,
+    onState: act,
+    onView: (v) => update({ view: v === 'feed' ? undefined : v }),
+    onHelp: () => setHelpOpen(true),
+  })
   const empty = EMPTY_COPY[view]
   const filtered = activeFilterCount(search) > 0
   const narrowAge = (search.age ?? DEFAULT_AGE) !== 'all'
@@ -140,7 +151,19 @@ export function FeedPage() {
             </span>
           )
         }
+        actions={
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="hidden items-center gap-1.5 rounded-md px-2 py-1 font-mono text-xs text-faint transition-colors hover:bg-raised hover:text-paper pointer-fine:inline-flex"
+          >
+            <Keyboard className="size-3.5" />
+            Shortcuts
+            <kbd className="rounded border border-line px-1 text-[0.65rem]">?</kbd>
+          </button>
+        }
       />
+      <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
 
       {newCount > 0 && bannerOpen && view === 'feed' && (
         <div
@@ -237,7 +260,9 @@ export function FeedPage() {
               highlighted={isSessionNew(job.id, job.isNew)}
               sourceLabel={sourceLabel}
               busy={setState.isPending && setState.variables?.id === job.id}
-              onState={(state) => setState.mutate({ id: job.id, state, also: job.duplicateIds })}
+              selected={keys.selected === job.id}
+              onFocusRow={() => keys.focusRow(job.id)}
+              onState={(state) => act(job, state)}
             />
           ))}
         </ul>

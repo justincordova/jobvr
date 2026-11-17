@@ -142,7 +142,10 @@ interface SourceAdapter {
   concurrency: number; // max in-flight fetches for this source
   fetch(ctx: FetchCtx): Promise<FetchResult>; // ctx: { slug?, companyName?, etag?, signal, http }
   parseUrl?(url: string): { sourceJobId: string; slug?: string } | null; // ats only
-  probe?(slug: string, ctx: ProbeCtx): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
+  probe?(
+    slug: string,
+    ctx: ProbeCtx,
+  ): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
   // Sources whose list has no description (Greenhouse): one job's description and pay; null when gone
   fetchDetail?(
     slug: string,
@@ -727,12 +730,19 @@ Pages are built with the frontend-design skill:
   on touch screens buttons, toggles, and filter chips are at least 40 to 44 px.
   A role posted several times shows "N postings"; Save, Hide, and Applied (and
   Undo) apply to every copy.
+- **Keyboard triage** (feed, any view): `j`/`k` (or arrows) move a selection
+  that follows focus (Tab into a row selects it too); `o`/Enter opens the
+  posting; `a` applied, `s` save/unsave, `h` hide/unhide (each acting on all
+  reposts); `u` presses the newest Undo; `1`–`4` switch views; Esc clears; `?`
+  lists them (also a "Shortcuts" button on pointer-fine screens). After a row
+  leaves the list, the row that takes its place is selected and focused.
 - **Companies**: table with tier, Track toggle, ATS, slug, status, health (last
   successful poll, consecutive failures, last error); add / edit / delete.
 - **Suggested**: Add (with tier picker) / Dismiss.
 - **Settings**: all settings; Simplify source health; last poll / push times.
 
-PWA installable on the phone (over Tailscale HTTPS). The service worker caches
+PWA installable on the phone (over Tailscale HTTPS); manifest `id`/`scope` `/`,
+standalone, maskable icon, and home-screen shortcuts to Saved and Applied. The service worker caches
 the app shell only; API requests are network-only.
 
 ## Constants

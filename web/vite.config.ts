@@ -20,7 +20,22 @@ export default defineConfig({
         theme_color: '#0e1115',
         background_color: '#0e1115',
         display: 'standalone',
+        id: '/',
+        scope: '/',
         start_url: '/',
+        // Long-press the home-screen icon
+        shortcuts: [
+          {
+            name: 'Saved',
+            url: '/?view=saved',
+            icons: [{ src: '/pwa-192.png', sizes: '192x192' }],
+          },
+          {
+            name: 'Applied',
+            url: '/?view=applied',
+            icons: [{ src: '/pwa-192.png', sizes: '192x192' }],
+          },
+        ],
         icons: [
           { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/pwa-512.png', sizes: '512x512', type: 'image/png' },

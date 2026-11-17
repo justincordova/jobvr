@@ -59,6 +59,14 @@ export const toast = Object.assign(show, {
   /** Shows "message · Undo". `commit` runs only if Undo isn't pressed in time. */
   undoable: (message: string, handlers: { undo: () => void; commit?: () => void }) =>
     show(message, { action: { label: 'Undo', onClick: handlers.undo }, onCommit: handlers.commit }),
+  /** Presses Undo on the newest open undoable toast (keyboard "u"); false if there is none. */
+  undoLatest: () => {
+    const t = [...items].reverse().find((i) => i.open && i.action?.label === 'Undo')
+    if (!t?.action) return false
+    t.action.onClick()
+    close(t.id, false)
+    return true
+  },
 })
 
 // Leaving the page shouldn't drop a deferred delete on the floor

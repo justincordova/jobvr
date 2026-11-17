@@ -15,6 +15,9 @@ interface JobRowProps {
   sourceLabel: (id: string) => string
   onState: (state: Job['state']) => void
   busy: boolean
+  /** The keyboard selection (j/k). */
+  selected?: boolean
+  onFocusRow?: () => void
 }
 
 /** Matching places first ("King of Prussia, PA" before "Farmington Hills, MI"), then a count. */
@@ -28,7 +31,15 @@ function placeSummary(job: Job, shown: number) {
   return `${ordered.slice(0, shown).join(' · ')}${extra > 0 ? ` +${extra}` : ''}`
 }
 
-export function JobRow({ job, highlighted, sourceLabel, onState, busy }: JobRowProps) {
+export function JobRow({
+  job,
+  highlighted,
+  sourceLabel,
+  onState,
+  busy,
+  selected = false,
+  onFocusRow,
+}: JobRowProps) {
   const salary = salaryRange(job.salaryMinUsd, job.salaryMaxUsd)
   const sources = [...new Set(job.sources.map((s) => sourceLabel(s.source)))].join(' · ')
   const years = Math.max(0, ...job.sources.map((s) => s.requiredYears ?? 0))
@@ -37,13 +48,23 @@ export function JobRow({ job, highlighted, sourceLabel, onState, busy }: JobRowP
 
   return (
     <li
+      data-job-id={job.id}
+      aria-current={selected || undefined}
+      onFocus={onFocusRow}
       style={{ viewTransitionName: vtName('job', job.id) }}
       className={cn(
         FEED_GRID,
-        'group relative border-b border-line/70 py-3 pr-1 transition-colors duration-150 hover:bg-panel/60 lg:items-center lg:py-2.5',
+        'group relative scroll-my-24 border-b border-line/70 py-3 pr-1 transition-colors duration-150 hover:bg-panel/60 lg:items-center lg:py-2.5',
         highlighted && 'bg-signal-soft/40 hover:bg-signal-soft/60',
+        selected && 'bg-raised/70 hover:bg-raised/70',
       )}
     >
+      {selected && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-1 right-0 left-0 animate-fade-in rounded-md ring-1 ring-line-strong ring-inset"
+        />
+      )}
       {highlighted && (
         <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-signal" />
       )}

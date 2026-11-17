@@ -36,7 +36,7 @@ export function useJobActions() {
         ),
       ),
     // Moves the job in every cached list, animating rows in or out of the current view
-    onMutate: async ({ id, state }) => {
+    onMutate: async ({ id, state, also = [] }) => {
       await qc.cancelQueries({ queryKey: queryKeys.allJobs })
       const snapshot = qc.getQueriesData<JobList>({ queryKey: queryKeys.allJobs })
       const prev =
@@ -44,7 +44,12 @@ export function useJobActions() {
       await withViewTransition(() =>
         qc.setQueriesData<JobList>({ queryKey: queryKeys.allJobs }, (list) =>
           list
-            ? { ...list, jobs: list.jobs.map((j) => (j.id === id ? { ...j, state } : j)) }
+            ? {
+                ...list,
+                jobs: list.jobs.map((j) =>
+                  j.id === id || also.includes(j.id) ? { ...j, state } : j,
+                ),
+              }
             : list,
         ),
       )
