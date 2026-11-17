@@ -769,7 +769,7 @@ the app shell only; API requests are network-only.
 | Fuzzy dedupe                                           | title token-set Jaccard ≥ 0.85                                                                      |
 | Failures before `needs_review`                         | 3 consecutive                                                                                       |
 | Salary annualization                                   | hour × 2080, week × 52, month × 12                                                                  |
-| Backups                                                | nightly `pg_dump` at 03:00 America/New_York, keep 14                                                |
+| Backups                                                | nightly `pg_dump` at 03:00 America/New_York, keep 14; `backup --once` on demand                     |
 
 ## Key Decisions
 
