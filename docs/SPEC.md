@@ -268,6 +268,11 @@ All timestamps are `timestamptz`. Migrations run automatically on app start.
 Indexes: `jobs(effective_at desc)`; partial `jobs(effective_at) where notified_at
 is null`; `jobs(company_id)`.
 
+Enum-like text columns carry CHECK constraints built from the code's
+constant lists (`jobs.state`, `companies.tier`/`status`, `suggestions.state`,
+`job_sources.posted_at_precision`; `required_years` ≥ 0), so a manual edit
+can't store a value the code doesn't know.
+
 ### Company invariants (enforced by the API and seed script)
 
 - `ats = other` ⇒ `status = manual_only` and `track = false`.

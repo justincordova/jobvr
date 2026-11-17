@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -12,8 +13,13 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { COMPANY_STATUSES, JOB_STATES, SUGGESTION_STATES, TIERS } from "../constants";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
+
+/** `col IN ('a', 'b')` from a constant list, so a hand edit can't store a value the code doesn't know. */
+const oneOf = (col: AnyPgColumn, values: readonly string[]) =>
+  sql`${col} in (${sql.raw(values.map((v) => `'${v}'`).join(", "))})`;
 
 export const settings = pgTable(
   "settings",
@@ -53,6 +59,8 @@ export const companies = pgTable(
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
   (t) => [
+    check("companies_tier_check", oneOf(t.tier, TIERS)),
+    check("companies_status_check", oneOf(t.status, COMPANY_STATUSES)),
     uniqueIndex("companies_normalized_name_key").on(t.normalizedName),
     uniqueIndex("companies_ats_slug_key")
       .on(t.ats, sql`lower(${t.slug})`)
@@ -98,6 +106,7 @@ export const jobs = pgTable(
     index("jobs_effective_at_idx").on(t.effectiveAt.desc()),
     index("jobs_unnotified_idx").on(t.effectiveAt).where(sql`${t.notifiedAt} is null`),
     index("jobs_company_id_idx").on(t.companyId),
+    check("jobs_state_check", oneOf(t.state, JOB_STATES)),
   ],
 );
 
@@ -123,19 +132,25 @@ export const jobSources = pgTable(
     primaryKey({ columns: [t.source, t.sourceJobId] }),
     index("job_sources_job_id_idx").on(t.jobId),
     index("job_sources_url_key_idx").on(t.urlKey),
+    check("job_sources_precision_check", oneOf(t.postedAtPrecision, ["instant", "day"])),
+    check("job_sources_years_check", sql`${t.requiredYears} is null or ${t.requiredYears} >= 0`),
   ],
 );
 
-export const suggestions = pgTable("suggestions", {
-  id: text("id").primaryKey(),
-  displayName: text("display_name").notNull(),
-  ats: text("ats").notNull(),
-  slug: text("slug"),
-  listingCount: integer("listing_count").notNull().default(0),
-  sampleTitles: text("sample_titles").array().notNull().default(sql`'{}'::text[]`),
-  lastSeenAt: ts("last_seen_at").notNull().defaultNow(),
-  state: text("state").notNull().default("open"),
-});
+export const suggestions = pgTable(
+  "suggestions",
+  {
+    id: text("id").primaryKey(),
+    displayName: text("display_name").notNull(),
+    ats: text("ats").notNull(),
+    slug: text("slug"),
+    listingCount: integer("listing_count").notNull().default(0),
+    sampleTitles: text("sample_titles").array().notNull().default(sql`'{}'::text[]`),
+    lastSeenAt: ts("last_seen_at").notNull().defaultNow(),
+    state: text("state").notNull().default("open"),
+  },
+  (t) => [check("suggestions_state_check", oneOf(t.state, SUGGESTION_STATES))],
+);
 
 export type CompanyRow = typeof companies.$inferSelect;
 export type SourceStateRow = typeof sourceState.$inferSelect;

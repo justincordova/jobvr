@@ -29,6 +29,13 @@
       "when": 1794934429435,
       "tag": "0003_backup_status",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794935840332,
+      "tag": "0004_enum_checks",
+      "breakpoints": true
     }
   ]
 }
