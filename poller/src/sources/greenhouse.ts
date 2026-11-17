@@ -1,6 +1,13 @@
-import { type ParsedUrl, parseDate, type SourceAdapter, validateItems } from "@jobvr/core";
+import {
+  HttpError,
+  type JobDetail,
+  type ParsedUrl,
+  parseDate,
+  type SourceAdapter,
+  validateItems,
+} from "@jobvr/core";
 import { z } from "zod";
-import { probeBoard } from "./shared";
+import { htmlToText, probeBoard } from "./shared";
 
 const HOSTS = new Set([
   "boards.greenhouse.io",
@@ -18,6 +25,35 @@ const RawJob = z.object({
 });
 
 const Response = z.object({ jobs: z.array(z.unknown()) });
+
+const Detail = z.object({
+  content: z.string().nullish(),
+  pay_input_ranges: z
+    .array(
+      z.object({
+        min_cents: z.number().nullish(),
+        max_cents: z.number().nullish(),
+        currency_type: z.string().nullish(),
+        title: z.string().nullish(),
+      }),
+    )
+    .nullish(),
+});
+
+const detailUrl = (slug: string, id: string) =>
+  `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(id)}?pay_transparency=true`;
+
+/** The first pay range; its title says when it's hourly ("The hourly pay range ..."). */
+const toSalary = (ranges: z.output<typeof Detail>["pay_input_ranges"]): JobDetail["salary"] => {
+  const r = ranges?.find((x) => x.currency_type && (x.min_cents || x.max_cents));
+  if (!r?.currency_type) return undefined;
+  return {
+    currency: r.currency_type,
+    interval: /\bhour/i.test(r.title ?? "") ? "hour" : "year",
+    ...(r.min_cents ? { min: r.min_cents / 100 } : {}),
+    ...(r.max_cents ? { max: r.max_cents / 100 } : {}),
+  };
+};
 
 const boardUrl = (slug: string) =>
   `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}/jobs`;
@@ -73,6 +109,21 @@ export const greenhouse: SourceAdapter = {
       postedAtPrecision: "instant",
     }));
     return { status: "ok", etag: res.etag, jobs, invalidCount };
+  },
+
+  // The board list has no description or pay (`content=true` is ~50x larger
+  // and uncompressed), so they're fetched per job, only for matching listings
+  async fetchDetail(slug, sourceJobId, ctx) {
+    try {
+      const res = await ctx.http.getJson(detailUrl(slug, sourceJobId), { signal: ctx.signal });
+      if (res.status !== "ok") return null;
+      const d = Detail.parse(res.data);
+      const salary = toSalary(d.pay_input_ranges);
+      return { description: htmlToText(d.content ?? ""), ...(salary && { salary }) };
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 404) return null;
+      throw err;
+    }
   },
 
   parseUrl: parseGreenhouseUrl,

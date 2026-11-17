@@ -4,8 +4,16 @@ import type { Database } from "../db/client";
 import { companies, jobSources, jobs, sourceState, suggestions } from "../db/schema";
 import { HttpError } from "../http";
 import { companyStateKey, createCompany, updateCompany } from "../repos/companies";
+import { listJobs } from "../repos/jobs";
 import { getSettingsState, updateSettings } from "../repos/settings";
-import type { FetchCtx, FetchResult, Registry, SourceAdapter, SourceJob } from "../sources/types";
+import type {
+  FetchCtx,
+  FetchResult,
+  JobDetail,
+  Registry,
+  SourceAdapter,
+  SourceJob,
+} from "../sources/types";
 import { createTestDatabase } from "../testing/db";
 import { runPoll } from "./run-poll";
 
@@ -18,6 +26,8 @@ const makeEnv = () => {
   const etags = new Map<string, string>();
   const failing = new Set<string>();
   const calls: { slug?: string; etag?: string | null }[] = [];
+  const details = new Map<string, JobDetail>();
+  const detailCalls: string[] = [];
   let simplify: SourceJob[] = [];
   let onFetch: ((ctx: FetchCtx) => Promise<void>) | null = null;
 
@@ -43,6 +53,10 @@ const makeEnv = () => {
         invalidCount: 0,
       };
     },
+    async fetchDetail(_slug, id) {
+      detailCalls.push(id);
+      return details.get(id) ?? { description: "" };
+    },
     parseUrl(url) {
       const m = /^https:\/\/boards\.test\/([^/]+)\/jobs\/(\d+)$/.exec(url);
       return m?.[1] && m[2] ? { slug: m[1], sourceJobId: m[2] } : null;
@@ -64,6 +78,8 @@ const makeEnv = () => {
     boards,
     failing,
     calls,
+    details,
+    detailCalls,
     setSimplify: (l: SourceJob[]) => {
       simplify = l;
     },
@@ -204,6 +220,64 @@ describe("runPoll: baseline, filters, ETags", () => {
     env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
     await poll();
     expect(env.calls).toHaveLength(0);
+  });
+});
+
+describe("runPoll: job details and the experience rule", () => {
+  it("fetches details once for matching listings, stores years and pay, and hides 3+ years", async () => {
+    await addAcme();
+    env.boards.set("acme", [
+      ghJob("acme", "1", "Software Engineer, Frontend"),
+      ghJob("acme", "2", "Software Engineer, New Grad"),
+      ghJob("acme", "3", "Senior Software Engineer"),
+      ghJob("acme", "4", "Software Engineer, Backend"),
+    ]);
+    env.details.set("1", {
+      description: "What you need: 5 years of frontend engineering experience",
+      salary: { currency: "USD", interval: "year", min: 150_000, max: 200_000 },
+    });
+    env.details.set("2", { description: "3+ years of experience is a plus" });
+    env.details.set("4", { description: "2+ years of backend engineering experience" });
+    await poll();
+    // Only listings that pass the poll filter (not the Senior one)
+    expect(env.detailCalls.sort()).toEqual(["1", "2", "4"]);
+    expect((await rowsOf("gh:1"))[0]?.requiredYears).toBe(5);
+    expect((await rowsOf("gh:4"))[0]?.requiredYears).toBe(2);
+    expect((await allJobs()).find((j) => j.id === "gh:1")).toMatchObject({
+      salaryMinUsd: 150_000,
+      salaryMaxUsd: 200_000,
+    });
+
+    // Already checked: no new detail requests, years and pay are kept
+    clock = new Date(T0.getTime() + HOUR);
+    env.boards.get("acme")?.push(ghJob("acme", "5", "Software Engineer"));
+    env.detailCalls.length = 0;
+    await poll();
+    expect(env.detailCalls).toEqual(["5"]);
+    expect((await rowsOf("gh:1"))[0]?.requiredYears).toBe(5);
+    expect((await rowsOf("gh:5"))[0]?.requiredYears).toBe(0);
+    expect((await allJobs()).find((j) => j.id === "gh:1")?.salaryMaxUsd).toBe(200_000);
+
+    // 5 years is hidden; the new-grad title stays despite "3+ years"
+    const feed = await listJobs(database.db, env.registry, {}, clock);
+    expect(feed.jobs.map((j) => j.id).sort()).toEqual(["gh:2", "gh:4", "gh:5"]);
+    await updateSettings(database.db, { experienceCutoffYears: 0 });
+    const all = await listJobs(database.db, env.registry, {}, clock);
+    expect(all.jobs.map((j) => j.id)).toContain("gh:1");
+  });
+
+  it("stores older jobs after the store window is widened (bypassing the ETag)", async () => {
+    await addAcme();
+    const old = ghJob("acme", "1", "Software Engineer", {
+      postedAt: new Date(T0.getTime() - 45 * 24 * HOUR),
+    });
+    env.boards.set("acme", [old]);
+    await poll();
+    expect(await allJobs()).toEqual([]);
+    await updateSettings(database.db, { storeWindowDays: 60 });
+    await poll();
+    expect(env.calls[1]?.etag).toBeNull();
+    expect((await allJobs()).map((j) => j.id)).toEqual(["gh:1"]);
   });
 });
 

@@ -9,10 +9,13 @@ export const SCHEDULER_TICK_MS = 5 * MINUTE;
 export const SCHEDULER_FIRST_TICK_MS = 10_000;
 export const DUE_TOLERANCE_MS = 60_000;
 
-/** Max effective age stored by the poller; also the in-memory dedupe window. */
-export const STORE_WINDOW_MS = 30 * DAY;
-/** new/hidden jobs older than this are deleted by cleanup; must exceed the store window. */
-export const RETENTION_MS = 45 * DAY;
+export const DAY_MS = DAY;
+/**
+ * Cleanup deletes new/hidden jobs this long past the store window ("Keep jobs
+ * posted within"). Retention must exceed the window, or a deleted job that is
+ * still listed would be re-inserted on the next poll.
+ */
+export const RETENTION_MARGIN_DAYS = 15;
 export const CLEANUP_INTERVAL_MS = DAY;
 
 export const POLL_BUDGET_MS = 5 * MINUTE;

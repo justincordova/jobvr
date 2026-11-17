@@ -69,6 +69,44 @@ describe("greenhouse adapter", () => {
     expect(await greenhouse.probe?.("nope", { http })).toEqual({ found: false, jobCount: 0 });
   });
 
+  it("fetches one job's description (HTML escaped twice) and pay range", async () => {
+    const url = "https://boards-api.greenhouse.io/v1/boards/nyt/jobs/42?pay_transparency=true";
+    const { http } = fakeHttp({
+      [url]: ok({
+        content:
+          "&lt;h2&gt;About&lt;/h2&gt;&lt;p&gt;You&amp;rsquo;ll need 2+ years of experience &amp;amp; curiosity.&lt;/p&gt;",
+        pay_input_ranges: [
+          {
+            min_cents: 8_900_000,
+            max_cents: 12_000_000,
+            currency_type: "USD",
+            title: "The annual base pay range for this role is between:",
+          },
+        ],
+      }),
+    });
+    expect(await greenhouse.fetchDetail?.("nyt", "42", { http })).toEqual({
+      description: "About\nYou'll need 2+ years of experience & curiosity.",
+      salary: { currency: "USD", interval: "year", min: 89_000, max: 120_000 },
+    });
+    const hourly = fakeHttp({
+      [url]: ok({
+        content: "",
+        pay_input_ranges: [
+          { min_cents: 2500, max_cents: 3000, currency_type: "USD", title: "Hourly pay" },
+        ],
+      }),
+    });
+    expect((await greenhouse.fetchDetail?.("nyt", "42", { http: hourly.http }))?.salary).toEqual({
+      currency: "USD",
+      interval: "hour",
+      min: 25,
+      max: 30,
+    });
+    // A job that's gone is null, not an error
+    expect(await greenhouse.fetchDetail?.("nyt", "43", { http })).toBeNull();
+  });
+
   it("parses every Greenhouse URL form", () => {
     for (const host of [
       "boards.greenhouse.io",
@@ -110,6 +148,11 @@ describe("lever adapter", () => {
     expect(remote?.postedAt).toEqual(new Date(leverFixture[0]?.createdAt ?? 0));
     expect(remote?.url).toBe(leverFixture[0]?.hostedUrl);
     expect(remote?.companyName).toBe("Gopuff");
+    // Description = intro + lists (HTML to text) + closing
+    expect(remote?.description).toBe(
+      "Gopuff is building the future of instant commerce.\nWhat you'll need\n5+ years managing engineering teams\nExperience with Kotlin & Swift\nGopuff is an equal opportunity employer.",
+    );
+    expect(hybrid?.description).toBeUndefined();
   });
 
   it("sends the slug with its original case", async () => {
@@ -149,6 +192,8 @@ describe("ashby adapter", () => {
     expect(hybrid?.locations).not.toContain("Remote - US");
     expect(usRemote?.locations).toEqual(["Remote", "Remote - US"]);
     expect(usRemote?.salary).toEqual({ currency: "USD", interval: "hour", min: 50, max: 60 });
+    expect(namer?.description).toContain("3+ years of experience");
+    expect(hybrid?.description).toBeUndefined();
     expect(res.jobs.map((j) => j.sourceJobId)).not.toContain(
       "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb",
     );

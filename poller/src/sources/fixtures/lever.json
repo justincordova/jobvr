@@ -15,7 +15,15 @@
     "country": "US",
     "workplaceType": "remote",
     "hostedUrl": "https://jobs.lever.co/gopuff/5174b499-908f-4419-9fb1-219446349694",
-    "applyUrl": "https://jobs.lever.co/gopuff/5174b499-908f-4419-9fb1-219446349694/apply"
+    "applyUrl": "https://jobs.lever.co/gopuff/5174b499-908f-4419-9fb1-219446349694/apply",
+    "descriptionPlain": "Gopuff is building the future of instant commerce.",
+    "lists": [
+      {
+        "text": "What you'll need",
+        "content": "<li>5+ years managing engineering teams</li><li>Experience with Kotlin &amp; Swift</li>"
+      }
+    ],
+    "additionalPlain": "Gopuff is an equal opportunity employer."
   },
   {
     "id": "bfa7bc15-793e-486c-a3f5-b27d84c53025",

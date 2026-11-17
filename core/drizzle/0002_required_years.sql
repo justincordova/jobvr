@@ -1,0 +1,1 @@
+ALTER TABLE "job_sources" ADD COLUMN "required_years" integer;

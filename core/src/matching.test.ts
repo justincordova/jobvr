@@ -286,4 +286,56 @@ describe("poll filter and visibility", () => {
       false,
     );
   });
+  it("hides board jobs asking for 3+ years unless the title says entry level", () => {
+    const kindOf = (s: string) => (s === "simplify" ? "aggregator" : "ats");
+    type Row = {
+      source: string;
+      title: string;
+      category: string | null;
+      requiredYears?: number | null;
+    };
+    const row = (title: string, requiredYears: number | null): Row => ({
+      source: "ashby",
+      title,
+      category: null,
+      requiredYears,
+    });
+    const job = (...sources: Row[]) => ({
+      locations: ["New York, NY"],
+      salaryMinUsd: null,
+      salaryMaxUsd: null,
+      closedAt: null,
+      sources,
+    });
+    // Ramp "Software Engineer, Frontend": "5 years of frontend engineering experience"
+    expect(isVisible(job(row("Software Engineer, Frontend", 5)), S, kindOf)).toBe(false);
+    expect(isVisible(job(row("Software Engineer, Backend, Credit", 2)), S, kindOf)).toBe(true);
+    expect(isVisible(job(row("Software Engineer", 0)), S, kindOf)).toBe(true);
+    // Not checked yet (Greenhouse detail pending): shown
+    expect(isVisible(job(row("Software Engineer", null)), S, kindOf)).toBe(true);
+    expect(isVisible(job(row("Software Engineer, New Grad", 3)), S, kindOf)).toBe(true);
+    expect(
+      isVisible(
+        job(row("Software Engineer, Frontend", 5)),
+        { ...S, experienceCutoffYears: 0 },
+        kindOf,
+      ),
+    ).toBe(true);
+    expect(
+      isVisible(
+        job(row("Software Engineer, Frontend", 5)),
+        { ...S, experienceCutoffYears: 6 },
+        kindOf,
+      ),
+    ).toBe(true);
+    // A SimplifyJobs row (curated new grad, no description) keeps a merged job visible
+    const sj = { source: "simplify", title: "Software Engineer", category: "Software" };
+    expect(isVisible(job(row("Software Engineer", 5), sj), S, kindOf)).toBe(true);
+  });
+
+  it("the store window follows the setting", () => {
+    const old = { ...listing, postedAt: new Date("2026-09-20T00:00:00Z") };
+    expect(passesPollFilter(old, "ats", S, now)).toBe(false);
+    expect(passesPollFilter(old, "ats", { ...S, storeWindowDays: 60 }, now)).toBe(true);
+  });
 });

@@ -1,7 +1,7 @@
-import { ANNUALIZE, STORE_WINDOW_MS } from "./constants";
+import { ANNUALIZE } from "./constants";
 import { adjustedPostedAt } from "./freshness";
 import { containsSequence, matchesAnyKeyword, tokenize } from "./normalize";
-import type { Settings } from "./settings";
+import { type Settings, storeWindowMs } from "./settings";
 import type { Salary } from "./sources/types";
 import { stateCode, stateName } from "./us-states";
 
@@ -244,7 +244,7 @@ export const passesPollFilter = (
   if (kind === "aggregator" && (listing.meta?.active !== true || listing.meta?.visible !== true))
     return false;
   const posted = adjustedPostedAt(listing.postedAt, listing.postedAtPrecision);
-  return posted.getTime() >= now.getTime() - STORE_WINDOW_MS;
+  return posted.getTime() >= now.getTime() - storeWindowMs(settings);
 };
 
 export interface VisibilityInput {
@@ -252,8 +252,27 @@ export interface VisibilityInput {
   salaryMinUsd: number | null;
   salaryMaxUsd: number | null;
   closedAt: Date | null;
-  sources: readonly { source: string; title: string; category: string | null }[];
+  sources: readonly {
+    source: string;
+    title: string;
+    category: string | null;
+    requiredYears?: number | null;
+  }[];
 }
+
+/**
+ * A source row's description doesn't ask for too much experience: off when
+ * the cutoff is 0, unknown (null) passes, and a title that says it's entry
+ * level ("Software Engineer, New Grad") always passes.
+ */
+export const passesExperienceRule = (
+  row: { title: string; requiredYears?: number | null },
+  settings: Pick<Settings, "experienceCutoffYears" | "levelKeywords">,
+): boolean =>
+  settings.experienceCutoffYears === 0 ||
+  row.requiredYears == null ||
+  row.requiredYears < settings.experienceCutoffYears ||
+  isEntryLevelTitle(row.title, settings);
 
 /** Visibility rules V, applied at read time with current settings. */
 export const isVisible = (
@@ -266,7 +285,9 @@ export const isVisible = (
   const keywordOk = job.sources.some((s) => {
     const kind = kindOf(s.source);
     if (!kind) return false;
-    return passesKeywordRule(s.title, kind, settings, s.category);
+    return (
+      passesKeywordRule(s.title, kind, settings, s.category) && passesExperienceRule(s, settings)
+    );
   });
   if (!keywordOk) return false;
   if (!passesSalaryRule(job.salaryMinUsd, job.salaryMaxUsd, settings)) return false;

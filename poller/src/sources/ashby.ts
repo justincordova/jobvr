@@ -22,6 +22,7 @@ const RawJob = z.object({
   workplaceType: z.string().nullish(),
   address: Address,
   jobUrl: z.string(),
+  descriptionPlain: z.string().nullish(),
   compensation: z
     .object({
       summaryComponents: z
@@ -119,6 +120,7 @@ export const ashby: SourceAdapter = {
         postedAt: parseDate(j.publishedAt),
         postedAtPrecision: "instant",
         ...(salary && { salary }),
+        ...(j.descriptionPlain && { description: j.descriptionPlain }),
       };
     });
     return { status: "ok", etag: res.etag, jobs, invalidCount };

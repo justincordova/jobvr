@@ -23,8 +23,15 @@ const job = (extra: Partial<Job> = {}): Job => ({
   isNew: false,
   entryLevel: true,
   sources: [
-    { source: 'greenhouse', url: '', title: '', category: null, removedAt: null },
-    { source: 'simplify', url: '', title: '', category: 'Software', removedAt: null },
+    { source: 'greenhouse', url: '', title: '', category: null, removedAt: null, requiredYears: 0 },
+    {
+      source: 'simplify',
+      url: '',
+      title: '',
+      category: 'Software',
+      removedAt: null,
+      requiredYears: null,
+    },
   ],
   ...extra,
 })

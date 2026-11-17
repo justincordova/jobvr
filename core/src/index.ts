@@ -9,6 +9,7 @@ export type {
 } from "./db/schema";
 export * as schema from "./db/schema";
 export * from "./errors";
+export * from "./experience";
 export * from "./freshness";
 export * from "./http";
 export * from "./lock";

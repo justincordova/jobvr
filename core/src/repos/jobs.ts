@@ -33,6 +33,7 @@ export interface JobSourceView {
   title: string;
   category: string | null;
   removedAt: Date | null;
+  requiredYears: number | null;
 }
 
 export interface JobRecord {
@@ -94,6 +95,7 @@ export const loadJobViews = async (db: DbOrTx, where: SQL | undefined): Promise<
         title: s.title,
         category: s.category,
         removedAt: s.removedAt,
+        requiredYears: s.requiredYears,
       });
       sourcesByJob.set(s.jobId, list);
     }

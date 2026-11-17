@@ -8,6 +8,8 @@ export const JobSourceSchema = z.object({
   title: z.string(),
   category: z.string().nullable(),
   removedAt: isoNullable,
+  /** Years of experience the description asks for: null = not checked, 0 = none named. */
+  requiredYears: z.number().int().nullable(),
 });
 
 export const JobSchema = z

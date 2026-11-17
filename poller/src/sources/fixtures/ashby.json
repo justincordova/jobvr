@@ -31,12 +31,12 @@
       "jobUrl": "https://jobs.ashbyhq.com/livekit/1757f49e-7e19-4c45-85f7-e4637dff66fb",
       "applyUrl": "https://jobs.ashbyhq.com/livekit/1757f49e-7e19-4c45-85f7-e4637dff66fb/application",
       "compensation": {
-        "compensationTierSummary": "$135K – $300K • Offers Equity",
+        "compensationTierSummary": "$135K \u2013 $300K \u2022 Offers Equity",
         "scrapeableCompensationSalarySummary": "$135K - $300K",
         "compensationTiers": [
           {
             "id": "03c75459-456a-45a7-b4f6-8a3caa329275",
-            "tierSummary": "$135K – $300K • Offers Equity",
+            "tierSummary": "$135K \u2013 $300K \u2022 Offers Equity",
             "title": null,
             "additionalInformation": null,
             "components": [
@@ -51,7 +51,7 @@
               },
               {
                 "id": "6c6e8015-f828-44e4-8fc6-73bc8413f300",
-                "summary": "$135K – $300K",
+                "summary": "$135K \u2013 $300K",
                 "compensationType": "Salary",
                 "interval": "1 YEAR",
                 "currencyCode": "USD",
@@ -77,7 +77,8 @@
             "maxValue": 300000
           }
         ]
-      }
+      },
+      "descriptionPlain": "About LiveKit\n\nWhat you need\n- 3+ years of experience building realtime systems"
     },
     {
       "id": "8ce9b064-e20b-4c71-8c53-385ea89299ae",
@@ -102,18 +103,18 @@
       "jobUrl": "https://jobs.ashbyhq.com/livekit/8ce9b064-e20b-4c71-8c53-385ea89299ae",
       "applyUrl": "https://jobs.ashbyhq.com/livekit/8ce9b064-e20b-4c71-8c53-385ea89299ae/application",
       "compensation": {
-        "compensationTierSummary": "$210K – $284K • Offers Equity",
+        "compensationTierSummary": "$210K \u2013 $284K \u2022 Offers Equity",
         "scrapeableCompensationSalarySummary": "$210K - $284K",
         "compensationTiers": [
           {
             "id": "a2484fef-c2e9-4c7d-b60c-e6099c391ca8",
-            "tierSummary": "$210K – $284K • Offers Equity",
+            "tierSummary": "$210K \u2013 $284K \u2022 Offers Equity",
             "title": null,
             "additionalInformation": null,
             "components": [
               {
                 "id": "644b8ee7-9169-45cd-b308-3d4712f6e464",
-                "summary": "$210K – $284K",
+                "summary": "$210K \u2013 $284K",
                 "compensationType": "Salary",
                 "interval": "1 YEAR",
                 "currencyCode": "USD",

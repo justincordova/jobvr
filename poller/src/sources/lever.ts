@@ -6,7 +6,7 @@ import {
   validateItems,
 } from "@jobvr/core";
 import { z } from "zod";
-import { probeBoard, REMOTE_US } from "./shared";
+import { htmlToText, probeBoard, REMOTE_US } from "./shared";
 
 const RawPosting = z.object({
   id: z.string(),
@@ -15,6 +15,10 @@ const RawPosting = z.object({
   createdAt: z.number(),
   country: z.string().nullish(),
   workplaceType: z.string().nullish(),
+  descriptionPlain: z.string().nullish(),
+  // Requirements usually live in these ("What you'll need"), as HTML
+  lists: z.array(z.object({ text: z.string().nullish(), content: z.string().nullish() })).nullish(),
+  additionalPlain: z.string().nullish(),
   categories: z
     .object({
       location: z.string().nullish(),
@@ -98,6 +102,13 @@ export const lever: SourceAdapter = {
         locations.push(REMOTE_US);
       }
       const salary = toSalary(p.salaryRange);
+      const description = [
+        p.descriptionPlain,
+        ...(p.lists ?? []).flatMap((l) => [l.text, l.content && htmlToText(l.content)]),
+        p.additionalPlain,
+      ]
+        .filter(Boolean)
+        .join("\n");
       return {
         source: "lever",
         sourceJobId: p.id.toLowerCase(),
@@ -109,6 +120,7 @@ export const lever: SourceAdapter = {
         postedAt: parseDate(p.createdAt),
         postedAtPrecision: "instant",
         ...(salary && { salary }),
+        ...(description && { description }),
       };
     });
     return { status: "ok", etag: res.etag, jobs, invalidCount };

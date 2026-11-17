@@ -124,7 +124,7 @@ Verified 2026-11-12: all four respond, return ETags, and return 304 on a matchin
 
 | Source       | Endpoint                                                                                      | Posted date                                                                                         | Notes                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------ | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Greenhouse   | `boards-api.greenhouse.io/v1/boards/{slug}/jobs` (no `content`)                               | `first_published`                                                                                   | Never use `updated_at` as a posted date. No salary without `content`.                                                                                                                                                                                                                                                                                                                  |
+| Greenhouse   | `boards-api.greenhouse.io/v1/boards/{slug}/jobs` (no `content`)                               | `first_published`                                                                                   | Never use `updated_at` as a posted date. The list has no description or pay (`content=true` is ~50x larger and uncompressed), so they come from `/jobs/{id}?pay_transparency=true` per matching job (see Poll step 3).                                                                                                                                                             |
 | Lever        | `api.lever.co/v0/postings/{slug}?mode=json`                                                   | `createdAt` (epoch ms)                                                                              | Large uncompressed payloads (Gopuff 7.8 MB) → 304s matter. `salaryRange` exists but is rare.                                                                                                                                                                                                                                                                                           |
 | Ashby        | `api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true`                       | `publishedAt`                                                                                       | Structured compensation. Only `isListed` jobs are kept.                                                                                                                                                                                                                                                                                                                                |
 | SimplifyJobs | `raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json` | `date_posted` (epoch s; ~30–50% are exact midnight UTC = day precision, the rest are real instants) | ~12 MB (~2 MB gzip), ~19k listings, committed ~every 30 min. Fields: `id, company_name, title, url, locations[], category, active, is_visible, date_posted, date_updated, sponsorship, degrees, source, company_url`. Categories are inconsistent ("Software", "Software Engineering"). Locations look like `NYC`, `New York, NY`, `Jersey City, NJ`, `Remote in USA`, `Remote in UK`. |
@@ -143,6 +143,8 @@ interface SourceAdapter {
   fetch(ctx: FetchCtx): Promise<FetchResult>; // ctx: { slug?, companyName?, etag?, signal, http }
   parseUrl?(url: string): { sourceJobId: string; slug?: string } | null; // ats only
   probe?(slug: string, ctx: ProbeCtx): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
+  // Sources whose list has no description (Greenhouse): one job's description and pay; null when gone
+  fetchDetail?(slug: string, sourceJobId: string, ctx: ProbeCtx): Promise<{ description: string; salary?: Salary } | null>;
 }
 
 type FetchResult =
@@ -165,6 +167,7 @@ interface SourceJob {
     currency: string;
     interval: "hour" | "week" | "month" | "year";
   };
+  description?: string; // plain text, when the list endpoint includes one
   meta?: { active?: boolean; visible?: boolean; category?: string }; // aggregators only
 }
 ```
@@ -185,6 +188,12 @@ only aggregator today.
 | Lever        | `text`                           | `categories.allLocations`, else [`categories.location`]; + `Remote - US` when `workplaceType = "remote"` and `country = "US"`                                                                                                                              | `hostedUrl`    | `createdAt` (instant)                                          | `salaryRange` {min, max, currency, interval: `per-hour-wage` → hour, `per-week-salary` → week, `per-month-salary` → month, `per-year-salary` → year; any other interval or a missing `salaryRange` → none} |
 | Ashby        | `title` (only `isListed = true`) | [`location`, ...`secondaryLocations[].location`]; + `Remote - US` when `workplaceType = "Remote"` and `address.postalAddress.addressCountry` ∈ {USA, US, United States, United States of America} (`isRemote` is not used: it is true for Hybrid jobs too) | `jobUrl`       | `publishedAt` (instant)                                        | first `compensation.summaryComponents` item with `compensationType = "Salary"`; interval `1 HOUR`/`1 WEEK`/`1 MONTH`/`1 YEAR` → hour/week/month/year; other intervals → none                               |
 | SimplifyJobs | `title`                          | `locations`                                                                                                                                                                                                                                                | `url`          | `date_posted` (day if `date_posted % 86400 = 0`, else instant) | none                                                                                                                                                                                                       |
+
+Descriptions: Ashby `descriptionPlain`; Lever `descriptionPlain` + each
+`lists[]` heading and content (HTML to text) + `additionalPlain`; Greenhouse via
+`fetchDetail` (`content`, HTML escaped twice, to text; pay from the first
+`pay_input_ranges` item, cents / 100, `hour` when its title says hourly, else
+`year`); SimplifyJobs none.
 
 For ATS adapters `companyName` = `ctx.companyName` (the company record's name;
 Lever/Ashby responses don't include one). For SimplifyJobs it is
@@ -237,7 +246,7 @@ All timestamps are `timestamptz`. Migrations run automatically on app start.
 | `companies`    | `id` uuid, `name`, `normalized_name` (unique; see Normalization helpers — so "Regal" and "Regal Inc" can't coexist), `city`, `state` (free text, e.g. city "Pittsburgh/NYC", state "PA/NY"), `tier` (S/A/Mid/Startup/Corporate), `track` bool, `ats` (text: a registered ATS adapter id or `other`), `slug` (nullable, case preserved; unique per `ats`, case-insensitive), `careers_url`, `notes`, `status` (ok/needs_review/manual_only), `created_at`, `updated_at` |
 | `source_state` | `key` text PK (`<aggregator id>` or `company:<uuid>`), `source`, `company_id` (FK, cascade delete, nullable), `slug` (the slug this state belongs to; null for aggregators), `etag`, `filters_hash`, `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error`, `baselined_at`                                                                                                                                                                        |
 | `jobs`         | `id` text PK (canonical ID), `company_id` (FK, set null), `company_name`, `title`, `locations` text[], `url`, `primary_source`, `first_seen_at`, `effective_at`, `salary_min_usd`, `salary_max_usd` (annual), `state` (new/saved/hidden/applied), `baseline` bool, `notified_at`, `closed_at`, `updated_at`                                                                                                                                                            |
-| `job_sources`  | PK (`source`, `source_job_id`); `job_id` (FK, cascade delete; indexed); `url`, `url_key` (normalized URL or null; indexed), `title`, `category` (aggregators; else null), `posted_at`, `posted_at_precision` (instant/day), `removed_at`. A job can have several rows, including several from the same source (SimplifyJobs has duplicate listings).                                                                                                                   |
+| `job_sources`  | PK (`source`, `source_job_id`); `job_id` (FK, cascade delete; indexed); `url`, `url_key` (normalized URL or null; indexed), `title`, `category` (aggregators; else null), `posted_at`, `posted_at_precision` (instant/day), `removed_at`, `required_years` (years of experience the description asks for: null = not checked, 0 = none named; see Experience rule). A job can have several rows, including several from the same source (SimplifyJobs has duplicate listings).                                                                                                                   |
 | `suggestions`  | `id` text PK (normalized company name), `display_name`, `ats` (registered ATS id or `other`), `slug` (nullable, case preserved), `listing_count`, `sample_titles` text[] (≤ 3), `last_seen_at`, `state` (open/dismissed/added)                                                                                                                                                                                                                                         |
 
 Indexes: `jobs(effective_at desc)`; partial `jobs(effective_at) where notified_at
@@ -276,8 +285,8 @@ fuzzy merge can attach an ATS listing to an `sj:` job, lookups go through
   its token sequence appears contiguously in the title's tokens. So `sr.` matches
   "Sr." and "Sr"; `full stack` matches "Full-Stack"; `software engineer i`
   doesn't match "Software Engineer II"; `lead` doesn't match "Leadership". A
-  keyword's last word also matches its plural (`intern` matches "2027
-  Interns", `new grad` matches "New Grads").
+  keyword's last word also matches its plural (`intern` matches "2027 Interns",
+  `new grad` matches "New Grads").
 - **Company for a job**: ATS jobs → the polled company. Simplify jobs → the
   company with the same `ats` + `slug` (case-insensitive, when `parseUrl` returned
   a slug), else the company with the same normalized name, else none (tier
@@ -331,6 +340,24 @@ A job passes when any of its location strings matches any enabled named location
   "United States (Remote)", "United States" match; "Remote in UK", "Remote - Europe", "Remote (EMEA)", "Remote -
   Latin America", "New York, NY (Remote)" don't (the last one matches NYC instead).
 
+### Experience rule
+
+`requiredYears(description)`: the first experience requirement in a job's
+description ("5+ years of experience", "2-5 years of professional software
+experience", "five (5) years of experience", "3+ years working with", "6+ years
+in ..."), or null when it names none. The first one is the headline
+requirement ("Minimum of 5 years building software; minimum of 2 years focused
+on security" is 5; "3+ required, 5+ preferred" is 3). Ignored: degree
+alternatives ("BS or 4 years of experience"), "equivalent experience", and the
+company talking about itself ("our founders have 10+ years of experience").
+Stored per source row as `required_years` at poll time (0 when the description
+names none, null without a description).
+
+A source row passes when "Hide board jobs asking for N+ years" is 0 (off), or
+its `required_years` is null or below N, or its title is entry level (a level
+keyword or `I`/`1`: "Software Engineer, New Grad" stays even if it says "3+
+years"). Applied at read time, so changing N needs no refetch.
+
 ### Salary rule
 
 Only applies when a salary is listed in USD (other currencies are treated as
@@ -343,8 +370,9 @@ Unlisted salary always passes.
 A listing is stored (inserted, or merged into an existing job) only if it passes
 the location rule AND the keyword rule for its source, AND (aggregators only)
 `meta.active` and `meta.visible` are true, AND its adjusted posted date (see
-Freshness) ≥ now − 30 days. Older-but-open roles are kept so nothing still
-applicable is missed; pushes and "new" still only count jobs within max age.
+Freshness) ≥ now − the store window ("Keep jobs posted within", default 30
+days). Older-but-open roles are kept so nothing still applicable is missed;
+pushes and "new" still only count jobs within max age.
 
 ### Visibility rules V (applied at read time with current settings)
 
@@ -353,8 +381,8 @@ A stored job is visible when:
 1. It passes the location rule (on `jobs.locations`), and at least one of its
    `job_sources` rows passes the keyword rule for that row's source using the
    row's `title` (and, for aggregator rows, has a `category` in "Simplify
-   categories") — so a Simplify job later merged with an ATS listing doesn't
-   disappear because the ATS rule is stricter.
+   categories") and the Experience rule — so a Simplify job later merged with
+   an ATS listing doesn't disappear because the ATS rule is stricter.
 2. It passes the salary rule.
 3. It has at least one non-aggregator source, or "Show SimplifyJobs jobs" is on.
 4. `closed_at` is null.
@@ -387,7 +415,7 @@ A task is due when its last-run timestamp is null or `now − last ≥ interval 
 Order: take the poll lock → due check → set `last_poll_at = now` → steps below.
 
 1. **Load** into memory: settings, companies, all `source_state` rows, and all
-   jobs (with all their `job_sources` rows) where `effective_at ≥ now − 30 days`.
+   jobs (with all their `job_sources` rows) where `effective_at ≥ now − store window`.
 2. **Targets**:
    - Each **company** with `track = true` AND tier in "Tiers to track" AND
      `status ≠ manual_only` AND `ats` is a registered ATS adapter AND `slug` is set
@@ -401,8 +429,17 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
    Send `If-None-Match` only if the target's `source_state` row exists, its
    `slug` equals the company's current slug, and its `filters_hash` equals the
    current hash of (`FILTER_VERSION` code constant + locations + role/level/exclude
-   keywords + Simplify categories + Apply-level-to-Simplify). Otherwise fetch
-   unconditionally, so changed filters or matching code re-evaluate unchanged sources.
+   keywords + Simplify categories + Apply-level-to-Simplify + Require-level-on-boards
+   + store window). Otherwise fetch unconditionally, so changed filters or
+   matching code re-evaluate unchanged sources.
+   **Details**: right after an `ok` fetch from an adapter with `fetchDetail`,
+   each listing without a description that passes the poll filter gets its
+   detail (description, and pay when the listing has none), one request at a
+   time per target, within the same budget. Listings whose source row already
+   has a non-null `required_years` are skipped and keep their stored pay
+   (copied onto the listing as USD/year). A failed or aborted detail request
+   leaves the listing unchecked (retried next poll); a null detail (job gone)
+   is skipped.
 4. **Process** results one target at a time: all ATS targets first, then
    aggregators (so ATS data is in place before Simplify merges into it). Each
    target's processing (steps 5–10) runs in **one DB transaction** and works on a
@@ -440,7 +477,9 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
       highest Jaccard, then the newest `effective_at`. Listings whose URLs
       identify different ATS postings are never fuzzy-merged.
    - **Match** → upsert the listing's `job_sources` row (`job_id`, `url`,
-     `url_key`, `title`, `category`, `posted_at`, `posted_at_precision`). If that
+     `url_key`, `title`, `category`, `posted_at`, `posted_at_precision`,
+     `required_years`; a listing without a description keeps the row's existing
+     `required_years`). If that
      row previously belonged to a different job (the listing moved), it is
      re-pointed; a job left with no rows is deleted with a single guarded
      statement (`DELETE … WHERE id = $1 AND state IN ('new','hidden') AND NOT
@@ -472,7 +511,7 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
    newly removed rows and `removed_at = null` on live rows. Then for each affected
    job: all rows removed → `closed_at = now` (if not already set); any row live →
    `closed_at = null`. Rows of targets that are not polled (untracked company,
-   disabled source) and jobs outside the 30-day window are not re-evaluated;
+   disabled source) and jobs outside the store window are not re-evaluated;
    their open/closed status stays as last computed.
 9. **Suggestions** (aggregator targets with an `ok` result, when "Suggest
    companies from SimplifyJobs" is on): take the listings that passed the
@@ -538,8 +577,8 @@ means no quiet hours.
 
 ### Cleanup (`runCleanup`)
 
-Delete jobs with `effective_at < now − 45 days` and `state ∈ {new, hidden}`
-(`job_sources` cascade). Retention must exceed the store window, or a deleted
+Delete jobs with `effective_at < now − (store window + 15 days)` and `state ∈
+{new, hidden}` (`job_sources` cascade). Retention must exceed the store window, or a deleted
 job that is still listed would be re-inserted on the next poll. Saved and applied jobs are kept indefinitely.
 
 ## Settings (DB, all editable in the UI)
@@ -557,7 +596,9 @@ are replaced, not merged).
 | Require a level keyword on company boards | Off                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Apply level keywords to Simplify          | Off                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                                                                                                                            |
 | Simplify trusted categories               | Software, Software Engineering (other categories need a role keyword)                                                                                                                                                                                                                                                                                                                                                                                                                                | Matched case-insensitively against `category`                                                                                                                                                                                                                                |
+| Hide board jobs asking for N+ years       | 3 | 0–20; 0 = off. See [Experience rule](#experience-rule) |
 | Max job age (hours)                       | 24                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 1–168                                                                                                                                                                                                                                                                        |
+| Keep jobs posted within (store window)    | 30 days (presets 30 / 60, or custom) | 7–120 days. Cleanup keeps new/hidden jobs for the window + 15 days |
 | Poll every (minutes)                      | 10                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 5–1440                                                                                                                                                                                                                                                                       |
 | Push summary every (minutes)              | 30                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 5–1440                                                                                                                                                                                                                                                                       |
 | Quiet hours (ET)                          | 23:00–07:00                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `HH:MM` each                                                                                                                                                                                                                                                                 |
@@ -625,8 +666,8 @@ the app shell only; API requests are network-only.
 | Constant                                                           | Value                                                                                               |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
 | Scheduler tick / first tick after boot / due tolerance             | 5 min / 10 s / 60 s                                                                                 |
-| Poll store window (max effective age stored, in-memory dedupe set) | 30 days                                                                                             |
-| Retention for new/hidden jobs                                      | 45 days (cleanup every 24 h)                                                                        |
+| Poll store window (max effective age stored, in-memory dedupe set) | Setting "Keep jobs posted within" (default 30 days)                                                 |
+| Retention for new/hidden jobs                                      | store window + 15 days (cleanup every 24 h)                                                         |
 | Per-source concurrency (declared by each adapter)                  | Greenhouse 3, Lever 3, Ashby 3, SimplifyJobs 1                                                      |
 | `FILTER_VERSION`                                                   | integer in `core`; bump whenever matching/normalization code changes (forces unconditional refetch) |
 | Poll run budget                                                    | 5 min                                                                                               |
@@ -648,8 +689,9 @@ the app shell only; API requests are network-only.
 | Push                    | ntfy.sh, long random topic (env secret)                                                                                               | Native push, click-through URL, free                                                                                                                                       |
 | Monorepo tooling        | pnpm workspace; core/poller/api use Biome; web keeps ESLint + Prettier; root husky + commitlint; lint-staged runs each package's tool | Keeps each template's conventions                                                                                                                                          |
 | Package boundaries      | `core` ← `poller` ← `api`; adapters injected into runPoll                                                                             | No dependency cycle; core stays runtime-agnostic                                                                                                                           |
-| Max job age             | Governs pushes and "new" counts; poller stores up to 30 days                                                                          | Older-but-open roles stay findable; feed defaults to all ages, newest first                                                                                                |
+| Max job age             | Governs pushes and "new" counts; poller stores up to the store window (30 days by default)                                              | Older-but-open roles stay findable; feed defaults to all ages, newest first                                                                                                |
 | Filtering               | Poll-time (keeps DB small) + read-time V (current settings)                                                                           | Tightening applies instantly; loosening applies on the next poll (ETag bypassed via `filters_hash`)                                                                        |
+| Experience              | Parse "N+ years" from descriptions; hide 3+ (setting) unless the title is entry level; Greenhouse details fetched only for matching jobs, once | Unleveled board titles hid most of the noise: a Nov 2026 audit found ~15 of 42 board jobs asking for 3 to 10 years |
 | Title rules             | Role AND NOT senior (level optional on boards); Simplify: trusted category or role; token-based                                       | Boards rarely say "new grad" (a live audit found 0 board matches with level required); role keywords are specific so "engineer" alone can't let in Sales/Civil/Legal roles |
 | Canonical IDs           | `gh:<id>` / `lv:<uuid>` / `ab:<uuid>` / `sj:<id>`                                                                                     | ATS IDs are globally unique; `gh_jid` career-page URLs have no slug                                                                                                        |
 | Day-precision dates     | End of UTC day, capped at first seen                                                                                                  | Prevents fresh Simplify jobs looking ~24 h old                                                                                                                             |
@@ -659,7 +701,7 @@ the app shell only; API requests are network-only.
 | Source extensibility    | Registry-derived ids, prefixes, ATS values, concurrency; `text` columns                                                               | Adding a source = one adapter file + one registry entry, no migration                                                                                                      |
 | Per-target transactions | Merge/closures/suggestions per target in one transaction; ETag saved only on commit                                                   | A failed write can't be hidden behind a 304 forever                                                                                                                        |
 | Closed jobs             | Tracked per source for polled targets; hidden from feed when all sources gone                                                         | Removes dead links from the feed and pushes for everything still being polled                                                                                              |
-| Posted date required    | Adapters must supply `postedAt` (items without one are invalid)                                                                       | All four sources always do; keeps the 7-day window and 30-day cleanup from resurrecting deleted jobs                                                                       |
+| Posted date required    | Adapters must supply `postedAt` (items without one are invalid)                                                                       | All four sources always do; keeps the store window and cleanup from resurrecting deleted jobs                                                                       |
 | Email digest            | Not built in MVP                                                                                                                      | No SES/SMTP needed yet                                                                                                                                                     |
 | CI / deploy             | GitHub Actions: lint, typecheck, test, build, Docker build. Deploy on PC: `git pull && docker compose up -d --build`                  | No cloud deploy target yet                                                                                                                                                 |
 
@@ -675,9 +717,10 @@ the app shell only; API requests are network-only.
 - A new company's first successful poll is a baseline even if some of its jobs
   are minutes old (per requirements).
 - Unleveled board titles ("Software Engineer") include some roles that want a
-  few years of experience; the feed's "Entry level" badge marks the ones that
-  explicitly say so (or come from SimplifyJobs), and "Require a level keyword
-  on company boards" drops the rest if that's noisy.
+  few years of experience; the Experience rule hides those asking for 3+, the
+  feed's "Entry level" badge marks the ones that explicitly say so (or come
+  from SimplifyJobs), and "Require a level keyword on company boards" drops the
+  rest if that's noisy.
   `pnpm match-report` shows what passes and why the rest is rejected.
 - `needs_review` seeds whose slug 404s keep being polled (cheap 404s) until
   fixed or set to `manual_only`.
@@ -701,7 +744,8 @@ Vitest everywhere.
   (Ashby Hybrid with `isRemote = true` must not get it), Simplify date precision
   detection, `parseUrl` (all Greenhouse hosts, `embed/job_app?token=`, `gh_jid`,
   Lever `/apply`, `jobs.eu.lever.co` rejected, Ashby `/application?embed=true`).
-- **Core units**: tokenization and keyword rule (incl. plurals), location rule (Remote-US vs
+- **Core units**: tokenization and keyword rule (incl. plurals), experience
+  parsing (real posting phrases, degree alternatives, company history), location rule (Remote-US vs
   "Remote in UK"), salary annualization and currency, freshness (day precision),
   canonical ID, identity keys and company resolution (incl. re-resolution),
   exact dedupe across polls after a fuzzy merge, fuzzy dedupe (including never

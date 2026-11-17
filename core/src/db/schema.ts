@@ -110,6 +110,8 @@ export const jobSources = pgTable(
     postedAt: ts("posted_at").notNull(),
     postedAtPrecision: text("posted_at_precision").notNull(),
     removedAt: ts("removed_at"),
+    /** Years of experience the description asks for: null = not checked, 0 = none named. */
+    requiredYears: integer("required_years"),
   },
   (t) => [
     primaryKey({ columns: [t.source, t.sourceJobId] }),

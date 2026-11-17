@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Input, Label } from '@/components/ui/input'
+import { Segmented } from '@/components/ui/segmented'
 import { Switch } from '@/components/ui/switch'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
@@ -156,6 +157,56 @@ function NumberField({
   )
 }
 
+const WINDOW_PRESETS = [30, 60] as const
+
+/** 30 / 60 days in one tap, or any number of days. */
+function StoreWindowField({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const preset = WINDOW_PRESETS.find((d) => d === value)
+  const [custom, setCustom] = useState(preset === undefined)
+  const mode = custom || preset === undefined ? 'custom' : String(preset)
+  return (
+    <div>
+      <p className="mb-1.5 text-sm font-medium" id="storeWindowLabel">
+        Keep jobs posted within
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Segmented
+          label="Keep jobs posted within"
+          value={mode}
+          options={[
+            ...WINDOW_PRESETS.map((d) => ({ id: String(d), label: `${d} days` })),
+            { id: 'custom', label: 'Custom' },
+          ]}
+          onChange={(v) => {
+            setCustom(v === 'custom')
+            if (v !== 'custom') onChange(Number(v))
+          }}
+        />
+        {mode === 'custom' && (
+          <div className="flex animate-fade-in items-center gap-2">
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={7}
+              max={120}
+              value={Number.isFinite(value) ? value : ''}
+              onChange={(e) => onChange(e.target.valueAsNumber)}
+              aria-labelledby="storeWindowLabel"
+              aria-invalid={!Number.isFinite(value)}
+              className="w-20 font-mono aria-invalid:border-stop/60"
+            />
+            <span className="text-sm text-dim">days (7 to 120)</span>
+          </div>
+        )}
+      </div>
+      <p className="mt-1.5 text-xs text-dim">
+        Older roles that are still open show up further down the feed. Pushes only cover jobs within
+        max job age.
+      </p>
+    </div>
+  )
+}
+
 function MatchingSection({ settings }: { settings: Settings }) {
   const { draft, set, dirty, valid, reset } = useDraft('Matching', settings, [
     'locations',
@@ -164,6 +215,7 @@ function MatchingSection({ settings }: { settings: Settings }) {
     'excludeKeywords',
     'minSalaryUsd',
     'requireLevelOnBoards',
+    'experienceCutoffYears',
   ] as const)
   const { save, pending, error } = useSave('Matching')
   const [newLabel, setNewLabel] = useState('')
@@ -302,6 +354,20 @@ function MatchingSection({ settings }: { settings: Settings }) {
           aria-label="Require a level keyword on company boards"
         />
       </Row>
+      <div>
+        <NumberField
+          id="experienceCutoff"
+          label="Hide board jobs asking for"
+          value={draft.experienceCutoffYears}
+          onChange={(n) => set('experienceCutoffYears', n)}
+          min={0}
+          max={20}
+          suffix="+ years of experience (0 = off)"
+        />
+        <p className="mt-1.5 text-xs text-dim">
+          Read from the job description. Titles that say new grad, junior, and so on always stay.
+        </p>
+      </div>
       <NumberField
         id="minSalary"
         label="Min salary (when listed)"
@@ -440,6 +506,7 @@ function ScheduleSection({ payload }: { payload: SettingsPayload }) {
     'pushEveryMinutes',
     'quietHours',
     'emailDigest',
+    'storeWindowDays',
   ] as const)
   const { save, pending, error } = useSave('Schedule')
   return (
@@ -487,6 +554,7 @@ function ScheduleSection({ payload }: { payload: SettingsPayload }) {
           suffix="hours"
         />
       </div>
+      <StoreWindowField value={draft.storeWindowDays} onChange={(n) => set('storeWindowDays', n)} />
       <div>
         <p className="mb-1.5 font-mono text-[0.7rem] tracking-wider text-dim uppercase">
           Quiet hours (Eastern)

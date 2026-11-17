@@ -1,5 +1,5 @@
 import { and, eq, gte, inArray, isNull, lt } from "drizzle-orm";
-import { CLEANUP_INTERVAL_MS, NOTIFY_LOCK_KEY, RETENTION_MS } from "./constants";
+import { CLEANUP_INTERVAL_MS, NOTIFY_LOCK_KEY } from "./constants";
 import type { Database } from "./db/client";
 import { jobs } from "./db/schema";
 import { withAdvisoryLock } from "./lock";
@@ -7,7 +7,7 @@ import { type Logger, silentLogger } from "./logger";
 import { isFreshMatch, type JobRecord, kindLookup, loadJobViews } from "./repos/jobs";
 import { getSettingsState, setSettingsTimestamp } from "./repos/settings";
 import { inQuietHours, isDue } from "./schedule";
-import type { Settings } from "./settings";
+import { retentionMs, type Settings } from "./settings";
 import type { Registry } from "./sources/types";
 
 export interface PushMessage {
@@ -151,7 +151,7 @@ export const runCleanup = async (options: {
     return { ran: false, deleted: 0 };
   }
   await setSettingsTimestamp(db, "lastCleanupAt", now);
-  const cutoff = new Date(now.getTime() - RETENTION_MS);
+  const cutoff = new Date(now.getTime() - retentionMs(state.settings));
   const deleted = await db
     .delete(jobs)
     .where(and(inArray(jobs.state, ["new", "hidden"]), lt(jobs.effectiveAt, cutoff)))

@@ -4,10 +4,12 @@ import {
   getSettings,
   listCompanies,
   matchesAnyKeyword,
+  passesExperienceRule,
   passesKeywordRule,
   passesLocationRule,
+  requiredYears,
   type SourceJob,
-  STORE_WINDOW_MS,
+  storeWindowMs,
   tokenize,
 } from "@jobvr/core";
 import { adapters } from "../src/sources";
@@ -23,10 +25,15 @@ const companies = (await listCompanies(database.db)).filter((c) => c.slug && c.a
 const http = createHttpClient();
 const now = Date.now();
 
-type Reason = "pass" | "old" | "inactive" | "location" | "keyword";
+// "experience": the description asks for too many years (Ashby/Lever only;
+// Greenhouse descriptions need a request per job, which the poller makes)
+type Reason = "pass" | "old" | "inactive" | "location" | "keyword" | "experience";
 type Row = {
   reason: Reason;
   oldMatch: boolean;
+  /** Passes the keyword rule (whatever the final reason). */
+  titleOk: boolean;
+  years: number | null;
   ageDays: number;
   source: string;
   company: string;
@@ -45,8 +52,21 @@ const classify = (j: SourceJob, kind: "ats" | "aggregator") => {
     reason = "inactive";
   else if (!passesLocationRule(j.locations, settings)) reason = "location";
   else if (!passesKeywordRule(j.title, kind, settings, j.meta?.category)) reason = "keyword";
-  const old = posted < now - STORE_WINDOW_MS;
-  return { reason: old ? ("old" as const) : reason, oldMatch: old && reason === "pass", ageDays };
+  const titleOk = passesKeywordRule(j.title, kind, settings, j.meta?.category);
+  const years = j.description === undefined ? null : requiredYears(j.description);
+  if (
+    reason === "pass" &&
+    !passesExperienceRule({ title: j.title, requiredYears: years }, settings)
+  )
+    reason = "experience";
+  const old = posted < now - storeWindowMs(settings);
+  return {
+    reason: old ? ("old" as const) : reason,
+    oldMatch: old && reason === "pass",
+    titleOk,
+    years,
+    ageDays,
+  };
 };
 
 const byId = new Map(adapters.map((a) => [a.id, a]));
@@ -96,7 +116,7 @@ const count = (r: Reason, src?: "ats" | "simplify") =>
       x.reason === r &&
       (!src || (src === "ats" ? x.source !== "simplify" : x.source === "simplify")),
   ).length;
-const reasons: Reason[] = ["pass", "old", "inactive", "location", "keyword"];
+const reasons: Reason[] = ["pass", "old", "inactive", "location", "keyword", "experience"];
 console.log(
   `boards fetched: ${companies.length - failed}/${companies.length}, listings: ${rows.length}`,
 );
@@ -109,9 +129,9 @@ const tracked = new Set(settings.tiersToTrack);
 const isAts = (x: Row) => x.source !== "simplify";
 const pass = rows.filter((x) => x.reason === "pass");
 console.log(
-  `\npassing (<=7d): ats ${pass.filter(isAts).length} (in tracked tiers ${pass.filter((x) => isAts(x) && tracked.has(x.tier as never)).length}), simplify ${pass.filter((x) => !isAts(x)).length}`,
+  `\npassing (in the store window): ats ${pass.filter(isAts).length} (in tracked tiers ${pass.filter((x) => isAts(x) && tracked.has(x.tier as never)).length}), simplify ${pass.filter((x) => !isAts(x)).length}`,
 );
-for (const d of [14, 30, 60]) {
+for (const d of [45, 60, 90]) {
   const old = rows.filter((x) => x.oldMatch && x.ageDays <= d);
   console.log(
     `older matches within ${d}d: ats ${old.filter(isAts).length}, simplify ${old.filter((x) => !isAts(x)).length}`,
@@ -136,6 +156,21 @@ show(
   rows.filter((x) => x.reason === "keyword" && matchesAnyKeyword(tokenize(x.title), SWE)),
   80,
 );
+show(
+  `asks for ${settings.experienceCutoffYears}+ years (hidden)`,
+  rows
+    .filter((x) => x.reason === "experience")
+    .map((x) => ({ ...x, title: `${x.title} [${x.years}+ yrs]` })),
+  80,
+);
+// Location strings of title-matching listings that the location rule dropped,
+// most common first: a quick way to spot an unparsed "New York" variant
+const locCounts = new Map<string, number>();
+for (const x of rows.filter((r) => r.reason === "location" && r.titleOk))
+  for (const l of x.locations) locCounts.set(l, (locCounts.get(l) ?? 0) + 1);
+const topLocs = [...locCounts].sort((a, b) => b[1] - a[1]);
+console.log(`\n== locations of title matches rejected by location (${topLocs.length}) ==`);
+for (const [l, n] of topLocs.slice(0, 150)) console.log(`  ${String(n).padStart(4)}  ${l}`);
 show(
   "older matches (ATS, <=30d)",
   rows.filter((x) => x.oldMatch && isAts(x) && x.ageDays <= 30),

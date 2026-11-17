@@ -10,6 +10,7 @@ import {
   jobs,
   sourceState,
 } from "../db/schema";
+import { requiredYears } from "../experience";
 import { adjustedPostedAt, initialEffectiveAt, mergedEffectiveAt } from "../freshness";
 import { annualUsd, matchedLocationLabels, passesPollFilter } from "../matching";
 import { normalizeCompanyName, titleJaccard } from "../normalize";
@@ -178,6 +179,10 @@ const existsInDb = async (p: PreparedListing, ctx: ProcessContext): Promise<bool
   );
 };
 
+/** 0 when the description names no requirement; null when there's no description. */
+const yearsOf = (p: PreparedListing): number | null =>
+  p.listing.description === undefined ? null : (requiredYears(p.listing.description) ?? 0);
+
 const sourceRowFor = (p: PreparedListing, jobId: string, removedAt: Date | null): JobSourceRow => ({
   source: p.listing.source,
   sourceJobId: p.listing.sourceJobId,
@@ -189,6 +194,7 @@ const sourceRowFor = (p: PreparedListing, jobId: string, removedAt: Date | null)
   postedAt: p.listing.postedAt,
   postedAtPrecision: p.listing.postedAtPrecision,
   removedAt,
+  requiredYears: yearsOf(p),
 });
 
 const upsertSourceRow = (tx: Tx, row: JobSourceRow) =>
@@ -205,6 +211,7 @@ const upsertSourceRow = (tx: Tx, row: JobSourceRow) =>
         category: row.category,
         postedAt: row.postedAt,
         postedAtPrecision: row.postedAtPrecision,
+        requiredYears: row.requiredYears,
       },
     });
 
@@ -215,24 +222,34 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
 
   // Where the row lives now: in the window (indexed) or, rarely, on an older job
   let removedAt: Date | null = null;
+  let knownYears: number | null = null;
   let outsideJobId: string | undefined;
   const inWindowId = ws.jobIdForSource(source, sourceJobId);
   if (inWindowId) {
-    removedAt =
-      ws.get(inWindowId)?.sources.find((s) => s.source === source && s.sourceJobId === sourceJobId)
-        ?.removedAt ?? null;
+    const existing = ws
+      .get(inWindowId)
+      ?.sources.find((s) => s.source === source && s.sourceJobId === sourceJobId);
+    removedAt = existing?.removedAt ?? null;
+    knownYears = existing?.requiredYears ?? null;
   } else {
     const [existing] = await tx
-      .select({ jobId: jobSources.jobId, removedAt: jobSources.removedAt })
+      .select({
+        jobId: jobSources.jobId,
+        removedAt: jobSources.removedAt,
+        requiredYears: jobSources.requiredYears,
+      })
       .from(jobSources)
       .where(and(eq(jobSources.source, source), eq(jobSources.sourceJobId, sourceJobId)));
     if (existing) {
       removedAt = existing.removedAt;
+      knownYears = existing.requiredYears;
       if (existing.jobId !== jobId) outsideJobId = existing.jobId;
     }
   }
 
   const row = sourceRowFor(p, jobId, removedAt);
+  // A listing without a description (detail not refetched) keeps what's known
+  row.requiredYears ??= knownYears;
   await upsertSourceRow(tx, row);
   const movedFrom = ws.upsertRow(jobId, row) ?? outsideJobId;
   if (movedFrom) {

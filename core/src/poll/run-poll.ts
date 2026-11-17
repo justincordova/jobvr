@@ -1,26 +1,21 @@
 import { createHash } from "node:crypto";
 import { gte, inArray } from "drizzle-orm";
-import {
-  FILTER_VERSION,
-  POLL_BUDGET_MS,
-  POLL_LOCK_KEY,
-  STORE_WINDOW_MS,
-  type TierFilter,
-} from "../constants";
+import { FILTER_VERSION, POLL_BUDGET_MS, POLL_LOCK_KEY, type TierFilter } from "../constants";
 import type { Database } from "../db/client";
 import { type CompanyRow, companies, jobSources, jobs, sourceState } from "../db/schema";
 import type { HttpClient } from "../http";
 import { withAdvisoryLock } from "../lock";
 import { type Logger, silentLogger } from "../logger";
+import { passesPollFilter } from "../matching";
 import { companyStateKey } from "../repos/companies";
 import { getSettingsState, setSettingsTimestamp } from "../repos/settings";
 import { isDue } from "../schedule";
-import type { Settings } from "../settings";
+import { type Settings, storeWindowMs } from "../settings";
 import { getAdapter } from "../sources/registry";
 import type { FetchResult, Registry } from "../sources/types";
 import { processTarget, recordFailure, type Target, type TargetStats } from "./process";
 import { indexCompanies } from "./resolve";
-import { type JobMap, WorkingSet } from "./store";
+import { type JobMap, type MemJob, WorkingSet } from "./store";
 
 export interface RunPollOptions {
   database: Database;
@@ -59,6 +54,7 @@ export const filtersHash = (s: Settings): string =>
         categories: s.simplifyCategories,
         applyLevel: s.applyLevelToSimplify,
         requireLevel: s.requireLevelOnBoards,
+        window: s.storeWindowDays,
       }),
     )
     .digest("hex");
@@ -88,6 +84,9 @@ export const pollTargets = (
 
 type Fetched = { result: FetchResult } | { error: string } | { skipped: true };
 
+/** Adds detail (description, pay) to an ok result's listings; never throws. */
+type Enrich = (target: Target, result: FetchResult, signal: AbortSignal) => Promise<void>;
+
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** Parallel fetch with per-source concurrency and one overall time budget. */
@@ -96,6 +95,7 @@ const fetchAll = async (
   etagFor: (t: Target) => string | null,
   http: HttpClient,
   budgetMs: number,
+  enrich: Enrich,
 ): Promise<Map<string, Fetched>> => {
   const out = new Map<string, Fetched>();
   const budget = new AbortController();
@@ -125,6 +125,7 @@ const fetchAll = async (
                 signal: budget.signal,
                 http,
               });
+              await enrich(t, result, budget.signal);
               out.set(t.key, { result });
             } catch (err) {
               out.set(t.key, {
@@ -141,9 +142,9 @@ const fetchAll = async (
   return out;
 };
 
-const loadWindow = async (database: Database, now: Date): Promise<JobMap> => {
+const loadWindow = async (database: Database, now: Date, settings: Settings): Promise<JobMap> => {
   const { db } = database;
-  const since = new Date(now.getTime() - STORE_WINDOW_MS);
+  const since = new Date(now.getTime() - storeWindowMs(settings));
   const jobRows = await db.select().from(jobs).where(gte(jobs.effectiveAt, since));
   const map: JobMap = new Map(jobRows.map((j) => [j.id, { job: j, sources: [] }]));
   const ids = [...map.keys()];
@@ -173,7 +174,7 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
     const companyRows = await db.select().from(companies);
     const companyIndex = indexCompanies(companyRows);
     const states = new Map((await db.select().from(sourceState)).map((s) => [s.key, s]));
-    let window = await loadWindow(database, startedAt);
+    let window = await loadWindow(database, startedAt, settings);
 
     const targets = pollTargets(registry, settings, companyRows);
     const hash = filtersHash(settings);
@@ -184,8 +185,55 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
       return s.slug === slug && s.filtersHash === hash ? s.etag : null;
     };
 
+    // Source rows already checked for experience, so their detail isn't refetched
+    const checked = new Map<string, MemJob>();
+    for (const m of window.values()) {
+      for (const s of m.sources) {
+        if (s.requiredYears !== null) checked.set(`${s.source}:${s.sourceJobId}`, m);
+      }
+    }
+    const enrich: Enrich = async (t, result, signal) => {
+      const { adapter } = t;
+      const slug = t.kind === "company" ? t.company.slug : null;
+      if (result.status !== "ok" || !adapter.fetchDetail || !slug) return;
+      for (const listing of result.jobs) {
+        if (signal.aborted) return;
+        if (listing.description !== undefined) continue;
+        if (!passesPollFilter(listing, adapter.kind, settings, startedAt)) continue;
+        const known = checked.get(`${listing.source}:${listing.sourceJobId}`);
+        if (known) {
+          // Keep the pay found by the earlier detail request (the list has none)
+          const { salaryMinUsd: min, salaryMaxUsd: max } = known.job;
+          if (!listing.salary && (min !== null || max !== null)) {
+            listing.salary = {
+              currency: "USD",
+              interval: "year",
+              ...(min !== null && { min }),
+              ...(max !== null && { max }),
+            };
+          }
+          continue;
+        }
+        try {
+          const detail = await adapter.fetchDetail(slug, listing.sourceJobId, { http, signal });
+          if (!detail) continue;
+          listing.description = detail.description;
+          if (detail.salary && !listing.salary) listing.salary = detail.salary;
+        } catch (err) {
+          // Left unchecked: retried on the next poll
+          log.warn({ target: t.key, job: listing.sourceJobId, err }, "job detail fetch failed");
+        }
+      }
+    };
+
     log.info({ targets: targets.length }, "poll started");
-    const fetched = await fetchAll(targets, etagFor, http, options.budgetMs ?? POLL_BUDGET_MS);
+    const fetched = await fetchAll(
+      targets,
+      etagFor,
+      http,
+      options.budgetMs ?? POLL_BUDGET_MS,
+      enrich,
+    );
 
     // ATS targets first so their data is in place before aggregators merge into it
     const ordered = [

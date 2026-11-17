@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TIER_FILTERS } from "./constants";
+import { DAY_MS, RETENTION_MARGIN_DAYS, TIER_FILTERS } from "./constants";
 
 export const REMOTE_US_LABEL = "Remote-US";
 
@@ -47,6 +47,10 @@ const fields = {
   /** Off: plain titles like "Software Engineer" count; only seniority is excluded. */
   requireLevelOnBoards: z.boolean(),
   simplifyCategories: z.array(keyword).max(50),
+  /** Hide board jobs whose description asks for this many years or more; 0 = off. */
+  experienceCutoffYears: z.number().int().min(0).max(20),
+  /** The poller stores jobs posted within this many days (the store window). */
+  storeWindowDays: z.number().int().min(7).max(120),
   maxJobAgeHours: z.number().int().min(1).max(168),
   pollEveryMinutes: z.number().int().min(5).max(1440),
   pushEveryMinutes: z.number().int().min(5).max(1440),
@@ -188,6 +192,8 @@ export const DEFAULT_SETTINGS: Settings = {
   applyLevelToSimplify: false,
   requireLevelOnBoards: false,
   simplifyCategories: ["Software", "Software Engineering"],
+  experienceCutoffYears: 3,
+  storeWindowDays: 30,
   maxJobAgeHours: 24,
   // A full poll takes seconds; 10 min is ~390 requests/h across all boards, polite for public APIs
   pollEveryMinutes: 10,
@@ -218,3 +224,10 @@ export const parseStoredSettings = (data: unknown): Settings => {
   }
   return out as Settings;
 };
+
+/** How far back the poller stores jobs (and the in-memory dedupe window). */
+export const storeWindowMs = (s: Pick<Settings, "storeWindowDays">) => s.storeWindowDays * DAY_MS;
+
+/** new/hidden jobs older than this are deleted by cleanup. */
+export const retentionMs = (s: Pick<Settings, "storeWindowDays">) =>
+  (s.storeWindowDays + RETENTION_MARGIN_DAYS) * DAY_MS;

@@ -22,6 +22,8 @@ export const SourceJobSchema = z.object({
   postedAt: z.date(),
   postedAtPrecision: z.enum(["instant", "day"]),
   salary: SalarySchema.optional(),
+  /** Plain-text description, when the listing endpoint includes one. */
+  description: z.string().optional(),
   meta: z
     .object({
       active: z.boolean().optional(),
@@ -51,6 +53,12 @@ export type FetchResult =
   | { status: "not_modified" }
   | { status: "ok"; etag: string | null; jobs: SourceJob[]; invalidCount: number };
 
+/** What `fetchDetail` adds to a listing. */
+export interface JobDetail {
+  description: string;
+  salary?: Salary;
+}
+
 export interface ParsedUrl {
   sourceJobId: string;
   slug?: string;
@@ -67,6 +75,12 @@ export interface SourceAdapter {
   /** Max in-flight fetches for this source. */
   concurrency: number;
   fetch(ctx: FetchCtx): Promise<FetchResult>;
+  /**
+   * For sources whose listing endpoint has no description (Greenhouse): one
+   * job's description and pay. runPoll calls it only for listings that pass the
+   * poll filter and haven't been checked yet. Null when the job is gone.
+   */
+  fetchDetail?(slug: string, sourceJobId: string, ctx: ProbeCtx): Promise<JobDetail | null>;
   /** ATS adapters only. */
   parseUrl?(url: string): ParsedUrl | null;
   /** ATS adapters only; used by `discover` and `seed`. */
