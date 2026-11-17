@@ -94,6 +94,10 @@ port 5432 of the `jobvr` node):
 DATABASE_URL=postgres://jobvr:<password>@jobvr.<your-tailnet>.ts.net:5432/jobvr pnpm seed
 ```
 
+Scripts only apply migrations to a local database. Against the PC they first
+check its schema matches your checkout and stop if not ("deploy first"), so
+an undeployed migration never reaches production from the Mac.
+
 Update: `git pull && docker compose up -d --build`.
 
 ### Logs
