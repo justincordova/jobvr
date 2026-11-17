@@ -44,7 +44,7 @@ export function DialogContent({
             )}
           </div>
           <DialogPrimitive.Close
-            className="-m-1 rounded-md p-1.5 text-dim transition-colors hover:bg-raised hover:text-paper"
+            className="relative -m-1 rounded-md p-1.5 text-dim after:absolute after:-inset-1.5 transition-colors hover:bg-raised hover:text-paper"
             aria-label="Close"
           >
             <X className="size-4" />

@@ -149,7 +149,7 @@ function Toast({ toast: t }: { toast: ToastItem }) {
                 action.onClick()
                 close(id, false)
               }}
-              className="rounded-md px-2 py-1 font-medium text-signal transition-colors hover:bg-signal-soft"
+              className="-my-1 self-stretch rounded-lg px-3 font-medium text-signal transition-colors hover:bg-signal-soft"
             >
               {action.label}
             </button>
@@ -158,7 +158,7 @@ function Toast({ toast: t }: { toast: ToastItem }) {
             type="button"
             onClick={() => close(id)}
             aria-label="Dismiss notification"
-            className="rounded-md p-1.5 text-faint transition-colors hover:bg-line hover:text-paper"
+            className="-my-1 grid w-9 place-items-center self-stretch rounded-lg text-faint transition-colors hover:bg-line hover:text-paper"
           >
             <X className="size-3.5" />
           </button>

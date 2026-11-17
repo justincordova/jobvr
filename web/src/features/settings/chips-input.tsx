@@ -63,7 +63,7 @@ export function ChipsInput({
               type="button"
               onClick={() => onChange(value.filter((x) => x !== v))}
               aria-label={`Remove ${v}`}
-              className="-mr-0.5 rounded-sm p-0.5 text-faint transition-colors hover:text-paper"
+              className="relative -mr-0.5 rounded-sm p-0.5 text-faint transition-colors after:absolute after:-inset-2 hover:text-paper"
             >
               <X className="size-3" />
             </button>
@@ -76,7 +76,7 @@ export function ChipsInput({
           onKeyDown={onKeyDown}
           onBlur={() => text && add(text)}
           placeholder={value.length ? '' : placeholder}
-          className="min-w-32 flex-1 bg-transparent px-1.5 py-0.5 text-sm placeholder:text-faint focus:outline-none"
+          className="min-w-32 flex-1 bg-transparent px-1.5 py-0.5 text-base placeholder:text-faint sm:text-sm focus:outline-none"
         />
       </div>
     </div>
