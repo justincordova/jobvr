@@ -159,7 +159,7 @@ export function SuggestedPage() {
         }
         description="Companies hiring new grads on SimplifyJobs that aren’t in your list yet."
       />
-      {suggestions.isError ? (
+      {suggestions.isError && !suggestions.data ? (
         <ErrorState
           error={suggestions.error}
           onRetry={() => suggestions.refetch()}

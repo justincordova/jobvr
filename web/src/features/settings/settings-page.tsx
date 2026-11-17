@@ -681,7 +681,7 @@ export function SettingsPage() {
           title="Settings"
           description="Changes apply from the next poll. Each section saves on its own."
         />
-        {settings.isError ? (
+        {settings.isError && !settings.data ? (
           <ErrorState
             error={settings.error}
             onRetry={() => settings.refetch()}

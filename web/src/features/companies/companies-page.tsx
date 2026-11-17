@@ -24,6 +24,7 @@ import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { Switch } from '@/components/ui/switch'
 import { api, queryKeys, unwrap } from '@/lib/api'
+import { companiesQuery, pendingDeletes } from '@/lib/companies-query'
 import { relative } from '@/lib/format'
 import { type Company, TIERS, type Tier } from '@/lib/types'
 
@@ -84,7 +85,10 @@ function useCompanyMutations() {
   const remove = useMutation({
     mutationFn: (id: string) => unwrap(api.api.companies[':id'].$delete({ param: { id } })),
     onError: (err) => toast.error(err.message),
-    onSettled: invalidate,
+    onSettled: (_d, _e, id) => {
+      pendingDeletes.delete(id)
+      invalidate()
+    },
   })
 
   /** Hides the row now; the delete only runs if Undo isn't pressed. */
@@ -92,16 +96,19 @@ function useCompanyMutations() {
     await qc.cancelQueries({ queryKey: queryKeys.companies })
     const prev = qc.getQueryData<Company[]>(queryKeys.companies) ?? []
     const index = prev.findIndex((c) => c.id === company.id)
+    pendingDeletes.add(company.id)
     qc.setQueryData<Company[]>(queryKeys.companies, (list) =>
       list?.filter((c) => c.id !== company.id),
     )
     toast.undoable(`Deleted ${company.name}`, {
-      undo: () =>
+      undo: () => {
+        pendingDeletes.delete(company.id)
         qc.setQueryData<Company[]>(queryKeys.companies, (list) =>
           !list || list.some((c) => c.id === company.id)
             ? list
             : [...list.slice(0, index), company, ...list.slice(index)],
-        ),
+        )
+      },
       commit: () => remove.mutate(company.id),
     })
   }
@@ -298,10 +305,7 @@ function SkeletonTable() {
 }
 
 export function CompaniesPage() {
-  const companies = useQuery({
-    queryKey: queryKeys.companies,
-    queryFn: () => unwrap(api.api.companies.$get()),
-  })
+  const companies = useQuery(companiesQuery)
   const settings = useQuery({
     queryKey: queryKeys.settings,
     queryFn: () => unwrap(api.api.settings.$get()),
@@ -404,7 +408,7 @@ export function CompaniesPage() {
         />
       </div>
 
-      {companies.isError ? (
+      {companies.isError && !companies.data ? (
         <ErrorState
           error={companies.error}
           onRetry={() => companies.refetch()}

@@ -5,6 +5,7 @@ import { type ComponentType, useEffect, useState } from 'react'
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys, unwrap } from '@/lib/api'
+import { companiesQuery } from '@/lib/companies-query'
 import { cn } from '@/lib/cn'
 import { FEED_GRID } from './columns'
 import { FilterBar } from './filter-bar'
@@ -94,10 +95,7 @@ export function FeedPage() {
     queryKey: queryKeys.settings,
     queryFn: () => unwrap(api.api.settings.$get()),
   })
-  const companies = useQuery({
-    queryKey: queryKeys.companies,
-    queryFn: () => unwrap(api.api.companies.$get()),
-  })
+  const companies = useQuery(companiesQuery)
   const { mutate: recordVisit } = useMutation({
     mutationFn: () => unwrap(api.api.jobs.visit.$post()),
   })
