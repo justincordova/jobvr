@@ -18,7 +18,7 @@ import type { Settings } from "../settings";
 import { isAts, parseAtsUrl } from "../sources/registry";
 import type { FetchResult, Registry, SourceAdapter } from "../sources/types";
 import { type CompanyIndex, type PreparedListing, prepareListing, sameCompany } from "./resolve";
-import type { MemJob, WorkingSet } from "./store";
+import { descriptionMd5, type MemJob, type MemSourceRow, type WorkingSet } from "./store";
 import { updateSuggestions } from "./suggestions";
 
 export type Target =
@@ -179,10 +179,6 @@ const existsInDb = async (p: PreparedListing, ctx: ProcessContext): Promise<bool
   );
 };
 
-/** 0 when the description names no requirement; null when there's no description. */
-const yearsOf = (p: PreparedListing): number | null =>
-  !p.listing.description?.trim() ? null : (requiredYears(p.listing.description) ?? 0);
-
 /** Long enough for any real posting; a runaway one can't bloat the table. */
 const DESCRIPTION_MAX = 20_000;
 const storedDescription = (p: PreparedListing): string | null => {
@@ -190,20 +186,48 @@ const storedDescription = (p: PreparedListing): string | null => {
   return text ? text.slice(0, DESCRIPTION_MAX) : null;
 };
 
-const sourceRowFor = (p: PreparedListing, jobId: string, removedAt: Date | null): JobSourceRow => ({
-  source: p.listing.source,
-  sourceJobId: p.listing.sourceJobId,
-  jobId,
-  url: p.listing.url,
-  urlKey: p.urlKey,
-  title: p.listing.title,
-  category: p.adapter.kind === "aggregator" ? (p.listing.meta?.category ?? null) : null,
-  postedAt: p.listing.postedAt,
-  postedAtPrecision: p.listing.postedAtPrecision,
-  removedAt,
-  requiredYears: yearsOf(p),
-  description: storedDescription(p),
-});
+/** What's stored for a source row already, so an unchanged description isn't re-read. */
+interface KnownRow {
+  requiredYears: number | null;
+  descriptionMd5: string | null;
+}
+
+/**
+ * The row to write (`db`; `description` null means "keep the stored one") and
+ * its in-memory form. Experience is read from the description only when it's
+ * new or changed: 0 when it names no requirement, null when there's none.
+ */
+const sourceRowFor = (
+  p: PreparedListing,
+  jobId: string,
+  removedAt: Date | null,
+  known?: KnownRow,
+): { db: JobSourceRow; mem: MemSourceRow } => {
+  const description = storedDescription(p);
+  const md5 = descriptionMd5(description);
+  let years: number | null;
+  if (description === null) years = known?.requiredYears ?? null;
+  else if (known && known.descriptionMd5 === md5 && known.requiredYears !== null) {
+    years = known.requiredYears;
+  } else years = requiredYears(p.listing.description ?? "") ?? 0;
+  const base = {
+    source: p.listing.source,
+    sourceJobId: p.listing.sourceJobId,
+    jobId,
+    url: p.listing.url,
+    urlKey: p.urlKey,
+    title: p.listing.title,
+    category: p.adapter.kind === "aggregator" ? (p.listing.meta?.category ?? null) : null,
+    postedAt: p.listing.postedAt,
+    postedAtPrecision: p.listing.postedAtPrecision,
+    removedAt,
+    requiredYears: years,
+  };
+  return {
+    db: { ...base, description },
+    mem: { ...base, descriptionMd5: md5 ?? known?.descriptionMd5 ?? null },
+  };
+};
 
 const upsertSourceRow = (tx: Tx, row: JobSourceRow) =>
   tx
@@ -220,7 +244,8 @@ const upsertSourceRow = (tx: Tx, row: JobSourceRow) =>
         postedAt: row.postedAt,
         postedAtPrecision: row.postedAtPrecision,
         requiredYears: row.requiredYears,
-        description: row.description,
+        // A listing without one (detail not refetched) keeps the stored description
+        description: sql`COALESCE(excluded.description, ${jobSources.description})`,
       },
     });
 
@@ -272,43 +297,39 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
 
   // Where the row lives now: in the window (indexed) or, rarely, on an older job
   let removedAt: Date | null = null;
-  let knownYears: number | null = null;
+  let known: KnownRow | undefined;
   let outsideJobId: string | undefined;
-  let knownDescription: string | null = null;
-  let stored: JobSourceRow | undefined;
+  let stored: MemSourceRow | undefined;
   const inWindowId = ws.jobIdForSource(source, sourceJobId);
   if (inWindowId) {
     stored = ws
       .get(inWindowId)
       ?.sources.find((s) => s.source === source && s.sourceJobId === sourceJobId);
     removedAt = stored?.removedAt ?? null;
-    knownYears = stored?.requiredYears ?? null;
-    knownDescription = stored?.description ?? null;
+    known = stored;
   } else {
     const [existing] = await tx
       .select({
         jobId: jobSources.jobId,
         removedAt: jobSources.removedAt,
         requiredYears: jobSources.requiredYears,
-        description: jobSources.description,
+        descriptionMd5: sql<string | null>`md5(${jobSources.description})`,
       })
       .from(jobSources)
       .where(and(eq(jobSources.source, source), eq(jobSources.sourceJobId, sourceJobId)));
     if (existing) {
       removedAt = existing.removedAt;
-      knownYears = existing.requiredYears;
-      knownDescription = existing.description;
+      known = existing;
       if (existing.jobId !== jobId) outsideJobId = existing.jobId;
     }
   }
 
-  const row = sourceRowFor(p, jobId, removedAt);
-  // A listing without a description (detail not refetched) keeps what's known
-  row.requiredYears ??= knownYears;
-  row.description ??= knownDescription;
+  const row = sourceRowFor(p, jobId, removedAt, known);
   // Most polls change nothing: skip the write (no table bloat, no row locks against Save/Hide)
-  if (!stored || Object.keys(changes(stored, row)).length > 0) await upsertSourceRow(tx, row);
-  const movedFrom = ws.upsertRow(jobId, row) ?? outsideJobId;
+  if (!stored || Object.keys(changes(stored, row.mem)).length > 0) {
+    await upsertSourceRow(tx, row.db);
+  }
+  const movedFrom = ws.upsertRow(jobId, row.mem) ?? outsideJobId;
   if (movedFrom) {
     // Guarded in SQL: never based on the in-memory state (the user may have just saved it)
     const deleted = await tx.execute(sql`
@@ -369,8 +390,8 @@ const insert = async (p: PreparedListing, ctx: ProcessContext, baseline: boolean
   };
   const row = sourceRowFor(p, job.id, null);
   await tx.insert(jobs).values(job);
-  await tx.insert(jobSources).values(row);
-  ws.add(job, row);
+  await tx.insert(jobSources).values(row.db);
+  ws.add(job, row.mem);
 };
 
 /** Step 8: per-source open/closed status for the target's rows. */

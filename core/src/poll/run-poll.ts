@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { gte, inArray } from "drizzle-orm";
+import { getTableColumns, gte, inArray, sql } from "drizzle-orm";
 import {
   FILTER_VERSION,
   POLL_BUDGET_MS,
@@ -340,7 +340,11 @@ const loadWindow = async (database: Database, now: Date, settings: Settings): Pr
   const ids = [...map.keys()];
   for (let i = 0; i < ids.length; i += 5000) {
     const chunk = ids.slice(i, i + 5000);
-    const rows = await db.select().from(jobSources).where(inArray(jobSources.jobId, chunk));
+    const { description, ...columns } = getTableColumns(jobSources);
+    const rows = await db
+      .select({ ...columns, descriptionMd5: sql<string | null>`md5(${description})` })
+      .from(jobSources)
+      .where(inArray(jobSources.jobId, chunk));
     for (const r of rows) map.get(r.jobId)?.sources.push(r);
   }
   return map;
@@ -388,7 +392,7 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
       for (const m of window.values()) {
         for (const s of m.sources) {
           // Description too: rows from before descriptions were stored get one detail request
-          if (s.requiredYears !== null && s.description !== null) {
+          if (s.requiredYears !== null && s.descriptionMd5 !== null) {
             checked.set(`${s.source}:${s.sourceJobId}`, m);
           }
         }

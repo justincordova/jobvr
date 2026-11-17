@@ -1,8 +1,19 @@
+import { createHash } from "node:crypto";
 import type { JobRow, JobSourceRow } from "../db/schema";
+
+/**
+ * A source row as the poll keeps it in memory: the description (up to 20k
+ * chars) only as its MD5, enough to tell whether it changed. Matches
+ * Postgres's `md5(description)`.
+ */
+export type MemSourceRow = Omit<JobSourceRow, "description"> & { descriptionMd5: string | null };
+
+export const descriptionMd5 = (text: string | null): string | null =>
+  text === null ? null : createHash("md5").update(text, "utf8").digest("hex");
 
 export interface MemJob {
   job: JobRow;
-  sources: JobSourceRow[];
+  sources: MemSourceRow[];
 }
 
 export type JobMap = Map<string, MemJob>;
@@ -32,7 +43,7 @@ export class WorkingSet {
     }
   }
 
-  private indexRow(jobId: string, row: JobSourceRow) {
+  private indexRow(jobId: string, row: MemSourceRow) {
     this.bySource.set(sourceKey(row.source, row.sourceJobId), jobId);
     if (row.urlKey) {
       let set = this.byUrlKey.get(row.urlKey);
@@ -44,7 +55,7 @@ export class WorkingSet {
     }
   }
 
-  private unindexRow(jobId: string, row: JobSourceRow) {
+  private unindexRow(jobId: string, row: MemSourceRow) {
     const key = sourceKey(row.source, row.sourceJobId);
     if (this.bySource.get(key) === jobId) this.bySource.delete(key);
     if (row.urlKey) {
@@ -76,7 +87,7 @@ export class WorkingSet {
     return copy;
   }
 
-  add(job: JobRow, row: JobSourceRow): void {
+  add(job: JobRow, row: MemSourceRow): void {
     this.jobs.set(job.id, { job, sources: [row] });
     this.touched.add(job.id);
     this.indexRow(job.id, row);
@@ -101,7 +112,7 @@ export class WorkingSet {
    * Upserts a source row onto `jobId`. Returns the id of the job the row was
    * moved from (if it previously belonged to a different job).
    */
-  upsertRow(jobId: string, row: JobSourceRow): string | undefined {
+  upsertRow(jobId: string, row: MemSourceRow): string | undefined {
     const previous = this.jobIdForSource(row.source, row.sourceJobId);
     if (previous && previous !== jobId && this.jobs.has(previous)) {
       const old = this.touch(previous);

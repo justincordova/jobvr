@@ -156,7 +156,19 @@ export const loadJobViews = async (db: DbOrTx, where: SQL | undefined): Promise<
   const ids = rows.map((r) => r.job.id);
   for (let i = 0; i < ids.length; i += 5000) {
     const chunk = ids.slice(i, i + 5000);
-    const srcRows = await db.select().from(jobSources).where(inArray(jobSources.jobId, chunk));
+    // Never the description: up to 20k chars per row, and only the detail panel shows it
+    const srcRows = await db
+      .select({
+        jobId: jobSources.jobId,
+        source: jobSources.source,
+        url: jobSources.url,
+        title: jobSources.title,
+        category: jobSources.category,
+        removedAt: jobSources.removedAt,
+        requiredYears: jobSources.requiredYears,
+      })
+      .from(jobSources)
+      .where(inArray(jobSources.jobId, chunk));
     for (const s of srcRows) {
       const list = sourcesByJob.get(s.jobId) ?? [];
       list.push({

@@ -300,6 +300,23 @@ describe("runPoll: job details and the experience rule", () => {
     expect((await rowsOf("gh:1"))[0]?.requiredYears).toBeNull();
   });
 
+  it("keeps the stored description when a refetch has none, without loading it", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer")]);
+    env.details.set("1", { description: "3+ years of experience required" });
+    await poll();
+    // A changed list (new title) without a detail request: the stored text stays
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer I")]);
+    env.detailCalls.length = 0;
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    expect(env.detailCalls).toEqual([]);
+    const [row] = await rowsOf("gh:1");
+    expect(row?.title).toBe("Software Engineer I");
+    expect(row?.description).toBe("3+ years of experience required");
+    expect(row?.requiredYears).toBe(3);
+  });
+
   it("stores older jobs after the store window is widened (bypassing the ETag)", async () => {
     await addAcme();
     const old = ghJob("acme", "1", "Software Engineer", {
