@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from '@/components/toast'
+import { safeHref } from '@/lib/format'
 import type { Job } from '@/lib/types'
 import type { View } from './search'
 
@@ -93,7 +94,8 @@ export function useFeedKeys({
       } else if (job && (key === 'o' || key === 'Enter')) {
         // Enter on the focused title link already opens it
         if (key === 'o' || document.activeElement !== rowLink(job.id)) {
-          window.open(job.url, '_blank', 'noopener,noreferrer')
+          const href = safeHref(job.url)
+          if (href) window.open(href, '_blank', 'noopener,noreferrer')
         } else handled = false
       } else if (job && key === 'a') onState(job, job.state === 'applied' ? 'new' : 'applied')
       else if (job && key === 's') onState(job, job.state === 'saved' ? 'new' : 'saved')

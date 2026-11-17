@@ -156,6 +156,8 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
     app.get("*", serveStatic({ root: path.relative(process.cwd(), webDist) || "." }));
     app.get("*", async (c, next) => {
       if (c.req.path.startsWith("/api/") || c.req.path === "/api") return next();
+      // A hashed file from an older build: a 404, never index.html cached for a year
+      if (c.req.path.startsWith("/assets/")) return next();
       c.header("Cache-Control", "no-cache");
       return serveStatic({
         root: path.relative(process.cwd(), webDist) || ".",

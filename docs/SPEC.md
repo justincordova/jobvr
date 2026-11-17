@@ -142,7 +142,10 @@ interface SourceAdapter {
   concurrency: number; // max in-flight fetches for this source
   fetch(ctx: FetchCtx): Promise<FetchResult>; // ctx: { slug?, companyName?, etag?, signal, http }
   parseUrl?(url: string): { sourceJobId: string; slug?: string } | null; // ats only
-  probe?(slug: string, ctx: ProbeCtx): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
+  probe?(
+    slug: string,
+    ctx: ProbeCtx,
+  ): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
   // Sources whose list has no description (Greenhouse): one job's description and pay; null when gone
   fetchDetail?(
     slug: string,
@@ -827,6 +830,12 @@ the app shell only; API requests are network-only.
   (OneDrive/Dropbox) for off-machine copies.
 - ntfy.sh topics are readable by anyone who knows the name → long random topic;
   push bodies carry public job titles and company names only (nothing personal); the click URL is reachable only on the tailnet.
+- Job links come from third-party data (SimplifyJobs is community-edited) →
+  listing and careers URLs must be http(s) (others are invalid items), the
+  feed renders only http(s) links, and every response except `/reference` sends
+  a Content-Security-Policy allowing only the app's own scripts.
+- A deploy replaces the hashed assets → `/assets/*` that no longer exist return
+  404 (never `index.html`, which would be cached for a year as immutable).
 
 ## Testing
 

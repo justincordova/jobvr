@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "@/app";
 import { BODY_LIMIT_BYTES } from "@/constants";
@@ -33,6 +36,7 @@ describe("App", () => {
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
     expect(res.headers.get("x-request-id")).toBe("test-id-123");
+    expect(res.headers.get("content-security-policy")).toContain("script-src 'self'");
   });
 
   it("allows CORS only for configured origins", async () => {
@@ -106,5 +110,29 @@ describe("App", () => {
     expect(Object.keys(doc.paths)).toEqual(
       expect.arrayContaining(["/api/jobs", "/api/jobs/{id}", "/api/companies", "/api/settings"]),
     );
+  });
+});
+
+describe("App serving the web build", () => {
+  const ctx = setupTestDeps(beforeAll, afterAll);
+  let app: ReturnType<typeof createApp>;
+  beforeAll(() => {
+    const dir = mkdtempSync(path.join(tmpdir(), "jobvr-web-"));
+    mkdirSync(path.join(dir, "assets"));
+    writeFileSync(path.join(dir, "index.html"), "<!doctype html><title>jobvr</title>");
+    writeFileSync(path.join(dir, "assets", "app-abc.js"), "console.log(1)");
+    app = createApp(ctx.deps, { webDistDir: dir });
+  });
+
+  it("caches hashed assets, revalidates the shell, and 404s a missing asset", async () => {
+    const asset = await app.request("/assets/app-abc.js");
+    expect(asset.headers.get("cache-control")).toContain("immutable");
+    const route = await app.request("/companies");
+    expect(route.status).toBe(200);
+    expect(route.headers.get("cache-control")).toBe("no-cache");
+    // An asset from an older build must not become index.html cached for a year
+    const gone = await app.request("/assets/app-old.js");
+    expect(gone.status).toBe(404);
+    expect(gone.headers.get("cache-control") ?? "").not.toContain("immutable");
   });
 });

@@ -18,7 +18,8 @@ export const SourceJobSchema = z.object({
   companySlug: z.string().min(1).optional(),
   title: z.string().trim().min(1),
   locations: z.array(z.string()),
-  url: z.url(),
+  // http(s) only: the URL becomes a link in the feed and the push
+  url: z.url({ protocol: /^https?$/ }),
   postedAt: z.date(),
   postedAtPrecision: z.enum(["instant", "day"]),
   salary: SalarySchema.optional(),

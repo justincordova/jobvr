@@ -1,3 +1,8 @@
+/** The URL when it's http(s), else undefined: a stored "javascript:" link never becomes clickable. */
+export function safeHref(url: string): string | undefined {
+  return /^https?:\/\//i.test(url) ? url : undefined
+}
+
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR

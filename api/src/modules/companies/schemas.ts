@@ -44,7 +44,10 @@ export const CreateCompanyBody = z
     /** A registered ATS adapter id, or "other". */
     ats: z.string().min(1).openapi({ example: "greenhouse" }),
     slug: text(200),
-    careersUrl: z.url().max(2000).nullish(),
+    careersUrl: z
+      .url({ protocol: /^https?$/ })
+      .max(2000)
+      .nullish(),
     notes: text(5000),
     /** Defaults to manual_only for "other", else ok. */
     status: z.enum(COMPANY_STATUSES).optional(),
@@ -60,7 +63,10 @@ export const UpdateCompanyBody = z
     track: z.boolean().optional(),
     ats: z.string().min(1).optional(),
     slug: text(200),
-    careersUrl: z.url().max(2000).nullish(),
+    careersUrl: z
+      .url({ protocol: /^https?$/ })
+      .max(2000)
+      .nullish(),
     notes: text(5000),
     status: z.enum(COMPANY_STATUSES).optional(),
   })

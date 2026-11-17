@@ -13,8 +13,35 @@ import { fail } from "@/utils/response";
  * Response headers: secure headers and CORS. Applied before rate limiting so
  * every response (including 429s) is readable by allowed browser origins.
  */
+/**
+ * The web app loads only its own files; job links are plain navigations. Inline
+ * styles are allowed (Radix injects a scroll-lock <style>). /reference is left
+ * out: the Scalar API docs load from a CDN.
+ */
+export const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+const contentSecurityPolicy: MiddlewareHandler = async (c, next) => {
+  await next();
+  if (c.req.path === "/reference" || c.req.path === "/docs") return;
+  c.header("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+};
+
 export const securityHeaders = (): MiddlewareHandler[] => [
   secureHeaders(),
+  contentSecurityPolicy,
   cors({
     // Explicit allowlist in every environment (credentials + reflected origins is unsafe)
     origin: env.ALLOWED_ORIGINS,

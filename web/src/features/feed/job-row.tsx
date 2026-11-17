@@ -2,7 +2,7 @@ import { Bookmark, BookmarkCheck, Check, EyeOff, Eye, ExternalLink, Undo2 } from
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
-import { salaryRange, shortAge } from '@/lib/format'
+import { safeHref, salaryRange, shortAge } from '@/lib/format'
 import { vtName } from '@/lib/motion'
 import type { Job } from '@/lib/types'
 import { FEED_GRID } from './columns'
@@ -90,7 +90,7 @@ export function JobRow({
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-dim lg:contents">
         <div className="min-w-0 basis-full">
           <a
-            href={job.url}
+            href={safeHref(job.url)}
             target="_blank"
             rel="noreferrer"
             className={cn(
