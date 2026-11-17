@@ -1,4 +1,5 @@
 import { createClient } from '@jobvr/api/client'
+import { noteResponse } from './use-online'
 
 export const api = createClient(window.location.origin)
 
@@ -25,6 +26,8 @@ export async function unwrap<R extends { json(): Promise<unknown>; status: numbe
   } catch {
     throw new ApiError(0, 'Can’t reach jobvr. Check your connection or Tailscale.')
   }
+  const headers = (res as unknown as { headers?: Headers }).headers
+  noteResponse(headers?.get('X-Jobvr-Offline') === '1')
   let body: unknown
   try {
     body = await res.json()

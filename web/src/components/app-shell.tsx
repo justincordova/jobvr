@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { Building2, Radar, Settings2, Sparkles } from 'lucide-react'
+import { Building2, CloudOff, Radar, Settings2, Sparkles } from 'lucide-react'
 import { type ComponentType, useEffect } from 'react'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { relative } from '@/lib/format'
 import { useIndicator } from '@/lib/use-indicator'
+import { useOnline } from '@/lib/use-online'
 
 const NAV: { to: string; label: string; icon: ComponentType<{ className?: string }> }[] = [
   { to: '/', label: 'Feed', icon: Radar },
@@ -29,11 +30,23 @@ function Wordmark() {
 }
 
 function PollStatus() {
+  const online = useOnline()
   const { data, dataUpdatedAt } = useQuery({
     queryKey: queryKeys.settings,
     queryFn: () => unwrap(api.api.settings.$get()),
     refetchInterval: 60_000,
   })
+  if (!online) {
+    return (
+      <span
+        role="status"
+        title="No connection: showing what was last loaded. Changes need a connection."
+        className="flex items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[0.7rem] text-signal"
+      >
+        <CloudOff className="size-3.5" /> offline · saved data
+      </span>
+    )
+  }
   if (!data) return <span className="w-24" />
   const last = data.lastPollAt ? new Date(data.lastPollAt).getTime() : 0
   // Healthy if a poll landed within roughly two intervals of the last refresh

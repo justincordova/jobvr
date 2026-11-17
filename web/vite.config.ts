@@ -45,10 +45,38 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // App shell only: API calls always go to the network
+        // The app shell is precached; API reads fall back to their last response offline
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//, /^\/health/, /^\/reference/, /^\/openapi\.json/],
-        runtimeCaching: [],
+        runtimeCaching: [
+          {
+            // Readable offline (subway): always the network first; the last
+            // response only when the request fails. Writes are never cached.
+            urlPattern: ({ url, request }) =>
+              request.method === 'GET' &&
+              /^\/api\/(jobs|settings|companies|suggestions)(\/|$)/.test(url.pathname),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'jobvr-api',
+              expiration: { maxEntries: 60, maxAgeSeconds: 7 * 24 * 60 * 60 },
+              cacheableResponse: { statuses: [200] },
+              plugins: [
+                {
+                  // Marks a fallback copy so the app can say it's showing saved data
+                  cachedResponseWillBeUsed: async ({ cachedResponse }) => {
+                    if (!cachedResponse) return cachedResponse
+                    const headers = new Headers(cachedResponse.headers)
+                    headers.set('X-Jobvr-Offline', '1')
+                    return new Response(await cachedResponse.blob(), {
+                      status: cachedResponse.status,
+                      headers,
+                    })
+                  },
+                },
+              ],
+            },
+          },
+        ],
       },
     }),
   ],

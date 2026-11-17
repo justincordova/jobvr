@@ -792,8 +792,12 @@ PWA installable on the phone (over Tailscale HTTPS); manifest `id`/`scope` `/`,
 standalone, maskable icon, and home-screen shortcuts to Saved and Applied. Updates: the
 service worker is checked whenever the app comes to the front (and hourly); a
 waiting version shows a "Reload" toast instead of swapping code under unsaved
-edits, and applies on the next cold launch if ignored. The service worker caches
-the app shell only; API requests are network-only.
+edits, and applies on the next cold launch if ignored. The service worker
+precaches the app shell; API reads (`GET /api/{jobs,settings,companies,
+suggestions}`) are network-first, falling back to their last response (7 days,
+60 entries) only when the request fails, marked `X-Jobvr-Offline: 1`. Then (or
+when the browser reports no connection) the header shows "offline · saved
+data"; writes fail with "Can't reach jobvr".
 
 ## Constants
 
