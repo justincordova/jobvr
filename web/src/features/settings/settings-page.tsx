@@ -588,10 +588,10 @@ function ScheduleSection({ payload }: { payload: SettingsPayload }) {
 
 function SourcesSection({ payload }: { payload: SettingsPayload }) {
   const { draft, set, dirty, reset } = useDraft('Sources', payload.settings, [
-    'enabledSources',
+    'disabledSources',
   ] as const)
   const { save, pending, error } = useSave('Sources')
-  const on = new Set(draft.enabledSources)
+  const off = new Set(draft.disabledSources)
   return (
     <Section
       title="Sources"
@@ -614,14 +614,14 @@ function SourcesSection({ payload }: { payload: SettingsPayload }) {
           hint={s.kind === 'ats' ? 'Company job boards' : 'Aggregated list'}
         >
           <Switch
-            checked={on.has(s.id)}
+            checked={!off.has(s.id)}
             aria-label={`Poll ${s.label}`}
             onCheckedChange={(v) =>
               set(
-                'enabledSources',
+                'disabledSources',
                 v
-                  ? [...draft.enabledSources, s.id]
-                  : draft.enabledSources.filter((x) => x !== s.id),
+                  ? draft.disabledSources.filter((x) => x !== s.id)
+                  : [...draft.disabledSources, s.id],
               )
             }
           />

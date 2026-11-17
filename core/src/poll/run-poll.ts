@@ -208,18 +208,18 @@ export const pollTargets = (
   settings: Settings,
   rows: readonly CompanyRow[],
 ): Target[] => {
-  const enabled = new Set(settings.enabledSources);
+  const disabled = new Set(settings.disabledSources);
   const tiers = new Set<TierFilter>(settings.tiersToTrack);
   const targets: Target[] = [];
   for (const company of rows) {
     const adapter = getAdapter(registry, company.ats);
     if (adapter?.kind !== "ats") continue;
     if (!company.track || !company.slug || company.status === "manual_only") continue;
-    if (!tiers.has(company.tier as TierFilter) || !enabled.has(adapter.id)) continue;
+    if (!tiers.has(company.tier as TierFilter) || disabled.has(adapter.id)) continue;
     targets.push({ kind: "company", key: companyStateKey(company.id), adapter, company });
   }
   for (const adapter of registry) {
-    if (adapter.kind === "aggregator" && enabled.has(adapter.id)) {
+    if (adapter.kind === "aggregator" && !disabled.has(adapter.id)) {
       targets.push({ kind: "aggregator", key: adapter.id, adapter });
     }
   }

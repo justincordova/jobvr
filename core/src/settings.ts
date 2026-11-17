@@ -58,7 +58,8 @@ const fields = {
   minSalaryUsd: z.number().int().min(0),
   emailDigest: z.boolean(),
   /** Validated against the source registry by the API. */
-  enabledSources: z.array(z.string().min(1)).transform((s) => [...new Set(s)]),
+  /** Sources turned off. Stored as the off list so a source added later starts on. */
+  disabledSources: z.array(z.string().min(1)).transform((s) => [...new Set(s)]),
   showSimplifyJobs: z.boolean(),
   suggestCompanies: z.boolean(),
 };
@@ -205,7 +206,7 @@ export const DEFAULT_SETTINGS: Settings = {
   quietHours: { start: "23:00", end: "07:00" },
   minSalaryUsd: 0,
   emailDigest: false,
-  enabledSources: ["greenhouse", "lever", "ashby", "simplify"],
+  disabledSources: [],
   showSimplifyJobs: true,
   suggestCompanies: true,
 };
@@ -214,6 +215,8 @@ export const DEFAULT_SETTINGS: Settings = {
 export const SettingsPatchSchema = z.object(fields).partial();
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
 
+const LEGACY_SOURCES = ["greenhouse", "lever", "ashby", "simplify"];
+
 /**
  * Parse stored settings JSON. Missing or invalid fields fall back to their
  * defaults, so adding a setting never needs a migration.
@@ -221,6 +224,11 @@ export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
 export const parseStoredSettings = (data: unknown): Settings => {
   const raw = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
   const out = structuredClone(DEFAULT_SETTINGS) as Record<string, unknown>;
+  // Before Nov 2026 the on list was stored; every source then was one of these four
+  if (!("disabledSources" in raw) && Array.isArray(raw.enabledSources)) {
+    const on = new Set(raw.enabledSources);
+    out.disabledSources = LEGACY_SOURCES.filter((s) => !on.has(s));
+  }
   for (const [key, schema] of Object.entries(fields)) {
     if (!(key in raw)) continue;
     const parsed = schema.safeParse(raw[key]);

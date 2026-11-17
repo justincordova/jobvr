@@ -324,14 +324,14 @@ describe("settings routes", () => {
     ]);
 
     const patched = await client.api.settings.$patch({
-      json: { maxJobAgeHours: 48, enabledSources: ["simplify"] },
+      json: { maxJobAgeHours: 48, disabledSources: ["lever"] },
     });
     expect(await patched.json()).toMatchObject({
-      data: { settings: { maxJobAgeHours: 48, enabledSources: ["simplify"] } },
+      data: { settings: { maxJobAgeHours: 48, disabledSources: ["lever"] } },
     });
 
     expect(
-      (await client.api.settings.$patch({ json: { enabledSources: ["workday"] } })).status,
+      (await client.api.settings.$patch({ json: { disabledSources: ["workday"] } })).status,
     ).toBe(400);
     expect((await client.api.settings.$patch({ json: { maxJobAgeHours: 0 } })).status).toBe(400);
     expect((await client.api.settings.$patch({ json: {} })).status).toBe(400);

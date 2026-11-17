@@ -44,6 +44,6 @@ export const loadSettingsPayload = async (
 
 export const assertKnownSources = (registry: Registry, patch: SettingsPatch) => {
   const known = new Set(registry.map((a) => a.id));
-  const unknown = patch.enabledSources?.filter((s) => !known.has(s)) ?? [];
+  const unknown = patch.disabledSources?.filter((s) => !known.has(s)) ?? [];
   if (unknown.length > 0) throw new InvalidError(`Unknown sources: ${unknown.join(", ")}`);
 };

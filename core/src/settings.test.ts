@@ -19,6 +19,15 @@ describe("settings", () => {
     expect(parseStoredSettings(null)).toEqual(DEFAULT_SETTINGS);
   });
 
+  it("converts the old enabled-sources list, so a source added later starts on", () => {
+    expect(
+      parseStoredSettings({ enabledSources: ["greenhouse", "ashby", "simplify"] }).disabledSources,
+    ).toEqual(["lever"]);
+    expect(
+      parseStoredSettings({ enabledSources: ["greenhouse"], disabledSources: [] }).disabledSources,
+    ).toEqual([]);
+  });
+
   it("rejects duplicate labels, no enabled location, and a removed Remote-US entry", () => {
     const base = DEFAULT_SETTINGS.locations;
     const dup = [...base, { label: "nj", aliases: ["x"], enabled: true }];
