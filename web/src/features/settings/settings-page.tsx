@@ -506,7 +506,6 @@ function ScheduleSection({ payload }: { payload: SettingsPayload }) {
     'pollEveryMinutes',
     'pushEveryMinutes',
     'quietHours',
-    'emailDigest',
     'storeWindowDays',
   ] as const)
   const { save, pending, error } = useSave('Schedule')
@@ -589,9 +588,6 @@ function ScheduleSection({ payload }: { payload: SettingsPayload }) {
           <span className="text-xs text-faint">same time = off</span>
         </div>
       </div>
-      <Row label="Email digest" hint="Not built yet.">
-        <Switch checked={draft.emailDigest} disabled aria-label="Email digest" />
-      </Row>
     </Section>
   )
 }

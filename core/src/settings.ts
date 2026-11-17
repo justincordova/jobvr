@@ -56,7 +56,6 @@ const fields = {
   pushEveryMinutes: z.number().int().min(5).max(1440),
   quietHours: z.object({ start: hhmm, end: hhmm }),
   minSalaryUsd: z.number().int().min(0),
-  emailDigest: z.boolean(),
   /** Validated against the source registry by the API. */
   /** Sources turned off. Stored as the off list so a source added later starts on. */
   disabledSources: z.array(z.string().min(1)).transform((s) => [...new Set(s)]),
@@ -205,7 +204,6 @@ export const DEFAULT_SETTINGS: Settings = {
   pushEveryMinutes: 30,
   quietHours: { start: "23:00", end: "07:00" },
   minSalaryUsd: 0,
-  emailDigest: false,
   disabledSources: [],
   showSimplifyJobs: true,
   suggestCompanies: true,
