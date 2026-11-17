@@ -157,7 +157,7 @@ export function SuggestedPage() {
             </span>
           )
         }
-        description="Companies hiring new grads on SimplifyJobs that aren’t in your list yet."
+        description="Companies hiring new grads on the lists (SimplifyJobs, SpeedyApply) that aren’t in your list yet."
       />
       {suggestions.isError && !suggestions.data ? (
         <ErrorState
@@ -181,7 +181,7 @@ export function SuggestedPage() {
           body={
             suggestionsOff
               ? 'Turn on “Suggest companies” in Settings to see companies you might be missing.'
-              : 'When SimplifyJobs lists matching roles at companies you don’t track, they show up here.'
+              : 'When the new-grad lists have matching roles at companies you don’t track, they show up here.'
           }
           action={
             suggestionsOff && (

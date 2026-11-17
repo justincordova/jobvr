@@ -134,10 +134,7 @@ export function JobRow({
 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {job.entryLevel && (
-            <Badge
-              tone="go"
-              title="The title says it’s entry level, or SimplifyJobs (new grad only) lists it"
-            >
+            <Badge tone="go" title="The title says it’s entry level, or a new-grad list has it">
               Entry level
             </Badge>
           )}

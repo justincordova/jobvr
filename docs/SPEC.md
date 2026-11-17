@@ -26,7 +26,8 @@ and is structured so it can later move to AWS serverless with minimal change.
 ## Non-Goals
 
 - Multi-user, signup, or public internet access.
-- Sources beyond the four MVP sources: no Workday, Amazon Jobs, iCIMS, Avature,
+- Sources beyond the three ATS APIs and the public new-grad lists (SimplifyJobs,
+  SpeedyApply): no Workday, Amazon Jobs, iCIMS, Avature,
   custom career sites, other ATS platforms, HN, headless scraping, or anything
   requiring login or forbidden by terms (LinkedIn, Indeed, Glassdoor, Handshake).
 - SMS and email digests (push covers alerts; the unbuilt setting was removed in Nov 2026).
@@ -122,10 +123,14 @@ tick (5 min) ─┬─> runPoll ─> adapters (HTTP, ETag) ─> filter ─> dedu
 phone/Mac ── Tailscale HTTPS ──> Hono (API + SPA) ──> Postgres
 ```
 
-## Sources (MVP: exactly four)
+## Sources
 
-Verified 2026-11-12: all four respond, return ETags, and return 304 on a matching
-`If-None-Match`. The three ATS APIs return 404 for unknown slugs.
+Verified 2026-11-12: the first four respond, return ETags, and return 304 on a matching
+`If-None-Match`. The three ATS APIs return 404 for unknown slugs. The GitHub
+lists (SimplifyJobs, then SpeedyApply in Nov 2026) are "aggregators": the ATS
+APIs can't read most mid-size and large companies (Workday, Oracle, iCIMS), and
+the lists name many of them. SpeedyApply is a markdown README fetched with
+`getText` (same retries, ETag and size cap).
 
 | Source       | Endpoint                                                                                      | Posted date                                                                                         | Notes                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------ | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -196,12 +201,13 @@ only aggregator today.
 
 ### Field mapping per adapter
 
-| Adapter      | title                            | locations                                                                                                                                                                                                                                                  | url            | postedAt (precision)                                           | salary                                                                                                                                                                                                     |
-| ------------ | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Greenhouse   | `title`                          | [`location.name`]                                                                                                                                                                                                                                          | `absolute_url` | `first_published` (instant)                                    | none                                                                                                                                                                                                       |
-| Lever        | `text`                           | `categories.allLocations`, else [`categories.location`]; + `Remote - US` when `workplaceType = "remote"` and `country = "US"`                                                                                                                              | `hostedUrl`    | `createdAt` (instant)                                          | `salaryRange` {min, max, currency, interval: `per-hour-wage` → hour, `per-week-salary` → week, `per-month-salary` → month, `per-year-salary` → year; any other interval or a missing `salaryRange` → none} |
-| Ashby        | `title` (only `isListed = true`) | [`location`, ...`secondaryLocations[].location`]; + `Remote - US` when `workplaceType = "Remote"` and `address.postalAddress.addressCountry` ∈ {USA, US, United States, United States of America} (`isRemote` is not used: it is true for Hybrid jobs too) | `jobUrl`       | `publishedAt` (instant)                                        | first `compensation.summaryComponents` item with `compensationType = "Salary"`; interval `1 HOUR`/`1 WEEK`/`1 MONTH`/`1 YEAR` → hour/week/month/year; other intervals → none                               |
-| SimplifyJobs | `title`                          | `locations`                                                                                                                                                                                                                                                | `url`          | `date_posted` (day if `date_posted % 86400 = 0`, else instant) | none                                                                                                                                                                                                       |
+| Adapter      | title                            | locations                                                                                                                                                                                                                                                  | url                                                            | postedAt (precision)                                           | salary                                                                                                                                                                                                     |
+| ------------ | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Greenhouse   | `title`                          | [`location.name`]                                                                                                                                                                                                                                          | `absolute_url`                                                 | `first_published` (instant)                                    | none                                                                                                                                                                                                       |
+| Lever        | `text`                           | `categories.allLocations`, else [`categories.location`]; + `Remote - US` when `workplaceType = "remote"` and `country = "US"`                                                                                                                              | `hostedUrl`                                                    | `createdAt` (instant)                                          | `salaryRange` {min, max, currency, interval: `per-hour-wage` → hour, `per-week-salary` → week, `per-month-salary` → month, `per-year-salary` → year; any other interval or a missing `salaryRange` → none} |
+| Ashby        | `title` (only `isListed = true`) | [`location`, ...`secondaryLocations[].location`]; + `Remote - US` when `workplaceType = "Remote"` and `address.postalAddress.addressCountry` ∈ {USA, US, United States, United States of America} (`isRemote` is not used: it is true for Hybrid jobs too) | `jobUrl`                                                       | `publishedAt` (instant)                                        | first `compensation.summaryComponents` item with `compensationType = "Salary"`; interval `1 HOUR`/`1 WEEK`/`1 MONTH`/`1 YEAR` → hour/week/month/year; other intervals → none                               |
+| SimplifyJobs | `title`                          | `locations`                                                                                                                                                                                                                                                | `url`                                                          | `date_posted` (day if `date_posted % 86400 = 0`, else instant) | none                                                                                                                                                                                                       |
+| SpeedyApply  | Position cell text               | Location cell: a trailing `+N` dropped; `Remote - City, ST` / `Remote - USA` → the place + `Remote - US`; other `Remote - X` kept as written                                                                                                               | Posting link (the ATS posting itself), tracking params removed | Age `Nd` → midnight UTC N days ago (day)                       | Salary cell `$193k/yr` / `$45/hr` → USD `max` (one figure)                                                                                                                                                 |
 
 Descriptions: Ashby `descriptionPlain`; Lever `descriptionPlain` + each
 `lists[]` heading and content (HTML to text) + `additionalPlain`; Greenhouse via
@@ -212,6 +218,16 @@ Descriptions: Ashby `descriptionPlain`; Lever `descriptionPlain` + each
 For ATS adapters `companyName` = `ctx.companyName` (the company record's name;
 Lever/Ashby responses don't include one). For SimplifyJobs it is
 `company_name`, and `meta` = {`active`, `visible` ← `is_visible`, `category`}.
+
+**SpeedyApply** (`raw.githubusercontent.com/speedyapply/2027-SWE-College-Jobs/main/NEW_GRAD_USA.md`,
+~900 rows, updated daily): every pipe table in the README (FAANG+, Quant and
+Other; only the first two have a Salary column), cells read by header name.
+`companyName` is the Company cell's text, `sourceJobId` the first 16 hex of the
+SHA-1 of the apply link (rows have no id; the link is stable), `meta` =
+{`active`: true, `visible`: true, `category`: `Software Engineering`} (a
+new-grad SWE list: listed means open). A row whose cell count doesn't match
+its table counts as invalid; a README with no table at all throws (the layout
+changed). Its links point at the postings, so board jobs dedupe by URL.
 
 - Adapters throw on transport errors, non-2xx/304 statuses (including 404), and
   when more than 50% of a non-empty response's items fail Zod validation (likely
@@ -800,7 +816,7 @@ Pages are built with the frontend-design skill:
 - **Companies**: table with tier, Track toggle, ATS, slug, status, health (last
   successful poll, consecutive failures, last error); add / edit / delete.
 - **Suggested**: Add (with tier picker) / Dismiss.
-- **Settings**: all settings; Simplify source health; last poll / push times.
+- **Settings**: all settings; each new-grad list's health (the "New-grad lists" section; its settings keep their `simplify` names but apply to every list); last poll / push times.
 
 PWA installable on the phone (over Tailscale HTTPS); manifest `id`/`scope` `/`,
 standalone, maskable icon, and home-screen shortcuts to Saved and Applied. Updates: the

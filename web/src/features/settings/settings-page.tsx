@@ -234,7 +234,7 @@ function MatchingSection({ settings }: { settings: Settings }) {
     <Section
       title="Matching"
       dirty={dirty}
-      description="Company-board titles need a role keyword and nothing senior (exclude keywords, or levels like II or 3). SimplifyJobs is new-grad only, so its titles just need to avoid excludes."
+      description="Company-board titles need a role keyword and nothing senior (exclude keywords, or levels like II or 3). The new-grad lists are new-grad only, so their titles just need to avoid excludes."
       footer={
         <SaveBar
           dirty={dirty}
@@ -389,7 +389,7 @@ function TiersSection({ settings }: { settings: Settings }) {
     <Section
       title="Tiers to track"
       dirty={dirty}
-      description="Decides which companies are polled, which jobs push, and the feed’s default tier filter. Unlisted = SimplifyJobs roles at companies not in your list."
+      description="Decides which companies are polled, which jobs push, and the feed’s default tier filter. Unlisted = roles from the new-grad lists at companies not in your list."
       footer={
         <SaveBar
           dirty={dirty}
@@ -427,31 +427,34 @@ function TiersSection({ settings }: { settings: Settings }) {
   )
 }
 
-function SimplifySection({ payload }: { payload: SettingsPayload }) {
-  const { draft, set, dirty, reset } = useDraft('SimplifyJobs', payload.settings, [
+function ListsSection({ payload }: { payload: SettingsPayload }) {
+  const { draft, set, dirty, reset } = useDraft('New-grad lists', payload.settings, [
     'simplifyCategories',
     'applyLevelToSimplify',
     'showSimplifyJobs',
     'suggestCompanies',
   ] as const)
-  const { save, pending, error } = useSave('SimplifyJobs')
-  const health = payload.sourceHealth.find((h) => h.source === 'simplify')
+  const { save, pending, error } = useSave('New-grad lists')
   return (
     <Section
-      title="SimplifyJobs"
+      title="New-grad lists"
       dirty={dirty}
       description={
-        health && (
-          <>
-            Last good fetch {relative(health.lastSuccessAt)}
-            {health.consecutiveFailures > 0 && (
-              <span className="text-stop">
-                {' '}
-                · {health.consecutiveFailures} failed
-                {health.lastError ? `: ${health.lastError}` : ''}
+        payload.sourceHealth.length > 0 && (
+          <span className="grid gap-0.5">
+            {payload.sourceHealth.map((h) => (
+              <span key={h.source}>
+                {h.label}: last good fetch {relative(h.lastSuccessAt)}
+                {h.consecutiveFailures > 0 && (
+                  <span className="text-stop">
+                    {' '}
+                    · {h.consecutiveFailures} failed
+                    {h.lastError ? `: ${h.lastError}` : ''}
+                  </span>
+                )}
               </span>
-            )}
-          </>
+            ))}
+          </span>
         )
       }
       footer={
@@ -465,25 +468,22 @@ function SimplifySection({ payload }: { payload: SettingsPayload }) {
       }
     >
       <ChipsInput
-        label="Trusted categories (other categories need a role keyword)"
+        label="Trusted SimplifyJobs categories (others need a role keyword)"
         value={draft.simplifyCategories}
         onChange={(v) => set('simplifyCategories', v)}
       />
-      <Row label="Apply level keywords" hint="Also require a level keyword in Simplify titles.">
+      <Row label="Apply level keywords" hint="Also require a level keyword in list titles.">
         <Switch
           checked={draft.applyLevelToSimplify}
           onCheckedChange={(v) => set('applyLevelToSimplify', v)}
-          aria-label="Apply level keywords to Simplify"
+          aria-label="Apply level keywords to the lists"
         />
       </Row>
-      <Row
-        label="Show SimplifyJobs-only roles"
-        hint="Roles also found on a company board always show."
-      >
+      <Row label="Show list-only roles" hint="Roles also found on a company board always show.">
         <Switch
           checked={draft.showSimplifyJobs}
           onCheckedChange={(v) => set('showSimplifyJobs', v)}
-          aria-label="Show SimplifyJobs jobs"
+          aria-label="Show roles found only on the lists"
         />
       </Row>
       <Row
@@ -493,7 +493,7 @@ function SimplifySection({ payload }: { payload: SettingsPayload }) {
         <Switch
           checked={draft.suggestCompanies}
           onCheckedChange={(v) => set('suggestCompanies', v)}
-          aria-label="Suggest companies from SimplifyJobs"
+          aria-label="Suggest companies from the lists"
         />
       </Row>
     </Section>
@@ -705,7 +705,7 @@ export function SettingsPage() {
             <div className="space-y-4">
               <ScheduleSection payload={settings.data} />
               <TiersSection settings={settings.data.settings} />
-              <SimplifySection payload={settings.data} />
+              <ListsSection payload={settings.data} />
               <SourcesSection payload={settings.data} />
             </div>
           </div>

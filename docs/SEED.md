@@ -192,6 +192,16 @@ these companies, but its Cloudflare front end answers Node's HTTP client with
 a bot challenge (`cf-mitigated: challenge`, HTTP 429) even for one request, and
 getting around that is off limits. Leidos would also need 60+ pages per poll.
 
+## New-grad lists (Nov 2026)
+
+Most mid-size and large companies post on systems jobvr can't read, so
+"Mid" jobs were rare. Public GitHub lists name many of them:
+
+| List                              | Rows | NY/NJ/PA/Remote | Notes                                                                                  |
+| --------------------------------- | ---- | --------------- | -------------------------------------------------------------------------------------- |
+| SimplifyJobs/New-Grad-Positions   | 19k  | (in use)        | JSON with ids                                                                          |
+| speedyapply/2027-SWE-College-Jobs | 913  | 115             | Links go to the postings. Added: first poll +43 new jobs, 16 merged into existing ones |
+
 ## Suggested backlog (Nov 2026)
 
 The 42 open suggestions were triaged:

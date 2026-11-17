@@ -250,8 +250,8 @@ export function FilterBar({ search, onChange, locations, sources, companies }: F
               <span>
                 <span className="block text-sm font-medium">Entry level only</span>
                 <span className="block text-xs text-dim">
-                  Titles that say new grad, junior, I, and so on, plus everything from SimplifyJobs.
-                  Hides plain “Software Engineer” board roles.
+                  Titles that say new grad, junior, I, and so on, plus everything on the new-grad
+                  lists. Hides plain “Software Engineer” board roles.
                 </span>
               </span>
               <Switch
