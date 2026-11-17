@@ -501,6 +501,57 @@ describe("runPoll: health and transactions", () => {
     );
   });
 
+  it("treats every board of one ATS failing as an outage, not as broken boards", async () => {
+    const slugs = ["a", "b", "c", "d", "e"];
+    for (const slug of slugs) {
+      await createCompany(database.db, {
+        name: `Co ${slug}`,
+        tier: "Startup",
+        track: true,
+        ats: "greenhouse",
+        slug,
+        status: "ok",
+      });
+      env.failing.add(slug);
+    }
+    const lines: string[] = [];
+    const logger = createConsoleLogger({
+      level: "info",
+      color: false,
+      write: (line) => lines.push(line.slice(13)),
+    });
+    for (let i = 0; i < 3; i++) {
+      clock = new Date(T0.getTime() + i * HOUR);
+      env.calls.length = 0;
+      await poll(true, logger);
+      // After 3 boards fail in a row the rest aren't requested (one more was already in flight)
+      expect(env.calls.length).toBe(4);
+    }
+    // Lever was down for hours in Nov 2026: no board should end up "needs review"
+    expect((await database.db.select().from(companies)).map((c) => c.status)).toEqual(
+      slugs.map(() => "ok"),
+    );
+    expect(
+      await database.db.select().from(sourceState).where(eq(sourceState.source, "greenhouse")),
+    ).toEqual([]);
+    const warnings = lines.filter((l) => l.startsWith("WARN") && !l.includes("poll finished"));
+    expect(warnings).toEqual([
+      'WARN  poll · Greenhouse looks down: all 5 boards failed (HTTP 500); their health is left alone and the next poll retries  source=greenhouse boards=5 error="HTTP 500"',
+      expect.stringContaining("Greenhouse looks down"),
+      expect.stringContaining("Greenhouse looks down"),
+    ]);
+
+    // A 404 is about that board, so it isn't an outage: every board's failure counts
+    env.failing.delete("c");
+    env.calls.length = 0;
+    await poll();
+    expect(env.calls.length).toBe(5);
+    expect(
+      (await database.db.select().from(sourceState).where(eq(sourceState.source, "greenhouse")))
+        .length,
+    ).toBe(5);
+  });
+
   it("rolls back a failed target without saving its ETag", async () => {
     const acme = await addAcme();
     env.boards.set("acme", [

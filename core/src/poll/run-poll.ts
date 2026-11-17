@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { gte, inArray } from "drizzle-orm";
-import { FILTER_VERSION, POLL_BUDGET_MS, POLL_LOCK_KEY, type TierFilter } from "../constants";
+import {
+  FILTER_VERSION,
+  POLL_BUDGET_MS,
+  POLL_LOCK_KEY,
+  SOURCE_OUTAGE_MIN_TARGETS,
+  type TierFilter,
+} from "../constants";
 import type { Database } from "../db/client";
 import { type CompanyRow, companies, jobSources, jobs, sourceState } from "../db/schema";
 import type { HttpClient } from "../http";
@@ -45,6 +51,35 @@ export type TargetOutcome = { key: string; label: string } & (
 /** Counters worth a field: zeros and false flags only repeat what the message says. */
 const nonZero = (counts: Record<string, number | boolean>) =>
   Object.fromEntries(Object.entries(counts).filter(([, v]) => v !== 0 && v !== false));
+
+/** Expected to pass on its own: network errors, timeouts, 5xx, 429 (not 404s). */
+const transient = (f: Fetched) =>
+  "error" in f &&
+  (typeof f.fields.status !== "number" || f.fields.status >= 500 || f.fields.status === 429);
+
+/**
+ * ATS sources whose every board failed transiently this poll (an outage, not
+ * a slug problem), with the first error as a sample.
+ */
+const sourcesDown = (
+  targets: readonly Target[],
+  fetched: ReadonlyMap<string, Fetched>,
+): Map<string, { count: number; error: string }> => {
+  const bySource = new Map<string, Fetched[]>();
+  for (const t of targets) {
+    if (t.kind !== "company") continue;
+    const f = fetched.get(t.key);
+    if (!f) continue;
+    bySource.set(t.adapter.id, [...(bySource.get(t.adapter.id) ?? []), f]);
+  }
+  const down = new Map<string, { count: number; error: string }>();
+  for (const [source, list] of bySource) {
+    if (list.length < SOURCE_OUTAGE_MIN_TARGETS || !list.every(transient)) continue;
+    const first = list[0];
+    down.set(source, { count: list.length, error: first && "error" in first ? first.error : "" });
+  }
+  return down;
+};
 
 const changed = (s: TargetStats) => s.inserted + s.closed + s.reopened > 0;
 
@@ -217,12 +252,23 @@ const fetchAll = async (
   const workers: Promise<void>[] = [];
   for (const queue of bySource.values()) {
     const concurrency = Math.max(1, queue[0]?.adapter.concurrency ?? 1);
+    // Circuit breaker: the source's first boards all failing transiently means it's down
+    let failedInARow = 0;
+    let anyOk = false;
     for (let i = 0; i < concurrency; i++) {
       workers.push(
         (async () => {
           for (let t = queue.shift(); t; t = queue.shift()) {
             if (budget.signal.aborted) {
               out.set(t.key, { skipped: true });
+              continue;
+            }
+            if (!anyOk && failedInARow >= SOURCE_OUTAGE_MIN_TARGETS) {
+              out.set(t.key, {
+                error: `not fetched: ${t.adapter.label}'s first ${failedInARow} boards all failed`,
+                fields: {},
+                ms: 0,
+              });
               continue;
             }
             const started = performance.now();
@@ -236,13 +282,17 @@ const fetchAll = async (
               });
               const details = await enrich(t, result, budget.signal);
               out.set(t.key, { result, ms: performance.now() - started, details });
+              anyOk = true;
             } catch (err) {
               const aborted = budget.signal.aborted;
-              out.set(t.key, {
+              const failed: Fetched = {
                 error: aborted ? "Poll fetch budget exceeded" : errorMessage(err),
                 fields: aborted ? {} : errorFields(err),
                 ms: performance.now() - started,
-              });
+              };
+              out.set(t.key, failed);
+              if (t.kind === "company" && transient(failed)) failedInARow++;
+              else failedInARow = 0;
             }
           }
         })(),
@@ -363,9 +413,28 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
       ...targets.filter((t) => t.kind === "company"),
       ...targets.filter((t) => t.kind === "aggregator"),
     ];
+    const down = sourcesDown(targets, fetched);
+    for (const [source, { count, error }] of down) {
+      log.warn(
+        { source, boards: count, error },
+        `${getAdapter(registry, source)?.label ?? source} looks down: all ${count} boards failed (${error}); their health is left alone and the next poll retries`,
+      );
+    }
     const outcomes: TargetOutcome[] = [];
     for (const target of ordered) {
       const label = targetLabel(target);
+      const f0 = fetched.get(target.key);
+      if (target.kind === "company" && down.has(target.adapter.id) && f0 && "error" in f0) {
+        log.debug({ target: target.key }, `${label} failed (source down): ${f0.error}`);
+        outcomes.push({
+          key: target.key,
+          label,
+          status: "failed",
+          error: f0.error,
+          failures: null,
+        });
+        continue;
+      }
       const f = fetched.get(target.key) ?? { skipped: true as const };
       if ("skipped" in f) {
         log.warn(

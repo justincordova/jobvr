@@ -22,6 +22,11 @@ export const RETENTION_MARGIN_DAYS = 15;
  * ahead and keep them open (HRT's 2027 Grads role was 4 months old in Nov 2026).
  */
 export const ENTRY_LEVEL_STORE_DAYS = 180;
+/**
+ * When every board of one ATS fails in a poll (at least this many, all with
+ * network errors, 5xx or 429), the ATS is down: no board's health changes.
+ */
+export const SOURCE_OUTAGE_MIN_TARGETS = 3;
 export const CLEANUP_INTERVAL_MS = DAY;
 
 export const POLL_BUDGET_MS = 5 * MINUTE;

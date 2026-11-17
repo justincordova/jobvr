@@ -558,6 +558,14 @@ missing (with `baselined_at` null). The write is skipped if the company was
 deleted or its `ats`/`slug` changed since the run loaded it (so a mid-poll edit
 isn't overwritten with stale state). The same guard applies to step 10.
 
+**Source outage**: when every board of one ATS fails in a poll (at least 3,
+all with network errors, timeouts, 5xx or 429; any 404 rules it out), the ATS
+is down, not the boards: no board's health is written (no streak, no move to
+`needs_review`) and one warning names the source. A circuit breaker in step 3
+stops requesting a source once its first 3 boards have all failed that way
+with none succeeding; the rest count toward the outage. (Lever was unreachable
+for hours on 2026-11-17 and every Lever board had been marked needs review.)
+
 ### Freshness
 
 - `first_seen_at` = when the job was inserted.
@@ -659,14 +667,14 @@ Pino in the API (JSON on the PC, pino-pretty in development); the scripts use
 core's console logger with the same one-line shape. Core takes a `Logger` port
 (`debug`/`info`/`warn`/`error`/`child`) and tags lines with `module`.
 
-| Module      | Logs                                                                                                                                                                                                                                                                           |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `server`    | Database ready (host/name only, migration time), listening (env, scheduler, sources), shutdown, fatal startup errors. In development a busy port is retried for 5 s (tsx restarts before the old process exits).                                                               |
-| `http`      | One line per `/api` request: `GET /api/jobs 200` plus `responseTime`, `reqId`; 4xx warn, 5xx error. `/health` and static files at trace.                                                                                                                                       |
-| `scheduler` | Start (tick timing, whether pushes are configured), a crashed task (error), a tick skipped because the previous one still runs (warn), tick time (debug).                                                                                                                      |
-| `poll`      | Per target: changes (new/closed/reopened) at info, unchanged at debug, with listings, details fetched, and duration; failures at warn with the streak (`2 in a row`), company/ATS/slug and HTTP status; the move to needs review; budget-skipped targets. One summary per run. |
-| `notify`    | Push sent (count, job ids), push failed (status/cause, no stack), NTFY_URL unset (warned once); not due / quiet hours / nothing new at debug.                                                                                                                                  |
-| `cleanup`   | Jobs deleted and the retention cutoff.                                                                                                                                                                                                                                         |
+| Module      | Logs                                                                                                                                                                                                                                                                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server`    | Database ready (host/name only, migration time), listening (env, scheduler, sources), shutdown, fatal startup errors. In development a busy port is retried for 5 s (tsx restarts before the old process exits).                                                                                                                       |
+| `http`      | One line per `/api` request: `GET /api/jobs 200` plus `responseTime`, `reqId`; 4xx warn, 5xx error. `/health` and static files at trace.                                                                                                                                                                                               |
+| `scheduler` | Start (tick timing, whether pushes are configured), a crashed task (error), a tick skipped because the previous one still runs (warn), tick time (debug).                                                                                                                                                                              |
+| `poll`      | Per target: changes (new/closed/reopened) at info, unchanged at debug, with listings, details fetched, and duration; failures at warn with the streak (`2 in a row`), company/ATS/slug and HTTP status; the move to needs review; a source outage as one warn line (its boards at debug); budget-skipped targets. One summary per run. |
+| `notify`    | Push sent (count, job ids), push failed (status/cause, no stack), NTFY_URL unset (warned once); not due / quiet hours / nothing new at debug.                                                                                                                                                                                          |
+| `cleanup`   | Jobs deleted and the retention cutoff.                                                                                                                                                                                                                                                                                                 |
 
 Expected failures (HTTP statuses, schema drift, push errors) log one line with
 their status; unexpected errors log `err` with its stack. Zero counters are left
