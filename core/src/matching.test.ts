@@ -15,6 +15,14 @@ import { DEFAULT_SETTINGS as S, type Settings } from "./settings";
 describe("keyword rule", () => {
   const ats = (t: string, settings: Settings = S) => passesKeywordRule(t, "ats", settings);
 
+  it("a role phrase that contains an exclude word still passes; seniority still rejects", () => {
+    // "staff" is an exclude; OpenAI and Anthropic post new-grad roles under this title
+    expect(ats("Member of Technical Staff, New Grad")).toBe(true);
+    expect(ats("Member of Technical Staff - Applied AI")).toBe(true);
+    expect(ats("Senior Member of Technical Staff")).toBe(false);
+    expect(ats("Staff Software Engineer")).toBe(false);
+  });
+
   it("company boards: role keyword, no seniority; level is optional by default", () => {
     for (const t of [
       "Software Engineer, New Grad",

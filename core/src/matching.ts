@@ -78,6 +78,22 @@ export const isEntryLevelTitle = (title: string, settings: Pick<Settings, "level
  *    it's entry level on a board, or in a trusted SimplifyJobs category.
  *    "AI Acceleration Specialist" never passes.
  */
+/**
+ * Blanks out the words of multi-word role phrases found in the title, so an
+ * exclude word inside one ("Member of Technical Staff") doesn't reject it.
+ */
+const maskRolePhrases = (tokens: readonly string[], roles: readonly string[]): string[] => {
+  const out = [...tokens];
+  for (const phrase of roles) {
+    const needle = tokenize(phrase);
+    if (needle.length < 2) continue;
+    for (let i = 0; i + needle.length <= out.length; i++) {
+      if (needle.every((w, j) => tokens[i + j] === w)) out.fill("", i, i + needle.length);
+    }
+  }
+  return out;
+};
+
 export const passesKeywordRule = (
   title: string,
   kind: SourceKind,
@@ -85,7 +101,10 @@ export const passesKeywordRule = (
   category?: string | null,
 ): boolean => {
   const tokens = tokenize(title);
-  if (matchesAnyKeyword(tokens, settings.excludeKeywords) || CONTRACT_TAG.test(title)) return false;
+  const excludable = maskRolePhrases(tokens, settings.roleKeywords);
+  if (matchesAnyKeyword(excludable, settings.excludeKeywords) || CONTRACT_TAG.test(title)) {
+    return false;
+  }
   const entry = isEntryLevelTitle(title, settings);
   if (!entry && tokens.some((t) => EXPERIENCED_LEVEL_TOKENS.has(t))) return false;
   const role = matchesAnyKeyword(tokens, settings.roleKeywords);
