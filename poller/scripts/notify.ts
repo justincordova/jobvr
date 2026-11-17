@@ -1,4 +1,4 @@
-import { consoleLogger, createNtfyNotifier, runNotify } from "@jobvr/core";
+import { createConsoleLogger, createNtfyNotifier, envLogLevel, runNotify } from "@jobvr/core";
 import { adapters } from "../src/sources";
 import { openDatabase } from "./db";
 
@@ -14,12 +14,17 @@ try {
     publicUrl: process.env.PUBLIC_URL,
     force: true,
     dryRun,
-    logger: consoleLogger,
+    logger: createConsoleLogger({ level: envLogLevel("debug"), hide: ["target"] }),
   });
   if ("jobs" in summary) {
     for (const j of summary.jobs) console.log(`  ${j.companyName}: ${j.title}  (${j.url})`);
   }
-  console.log(summary.sent ? `Sent: ${summary.jobs.length} jobs` : `Not sent: ${summary.reason}`);
+  // This is the script's result, not a log line
+  console.log(
+    summary.sent
+      ? `Sent: ${summary.jobs.length} jobs`
+      : `Not sent: ${summary.reason.replaceAll("_", " ")}`,
+  );
 } finally {
   await database.close();
 }

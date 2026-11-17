@@ -626,6 +626,26 @@ Template variables (`NODE_ENV`, `LOG_LEVEL`, `PORT`, `HOST`, `APP_NAME`,
 | `SCHEDULER_ENABLED` | `true` on the PC; `false` in Mac dev unless testing                 |
 | `TS_AUTHKEY`        | Tailscale auth key (compose only)                                   |
 
+## Logging
+
+Pino in the API (JSON on the PC, pino-pretty in development); the scripts use
+core's console logger with the same one-line shape. Core takes a `Logger` port
+(`debug`/`info`/`warn`/`error`/`child`) and tags lines with `module`.
+
+| Module      | Logs                                                                                                                                                                                                                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server`    | Database ready (host/name only, migration time), listening (env, scheduler, sources), shutdown, fatal startup errors. In development a busy port is retried for 5 s (tsx restarts before the old process exits).                                                              |
+| `http`      | One line per `/api` request: `GET /api/jobs 200` plus `responseTime`, `reqId`; 4xx warn, 5xx error. `/health` and static files at trace.                                                                                                                                      |
+| `scheduler` | Start (tick timing, whether pushes are configured), a crashed task (error), a tick skipped because the previous one still runs (warn), tick time (debug).                                                                                                                     |
+| `poll`      | Per target: changes (new/closed/reopened) at info, unchanged at debug, with listings, details fetched, and duration; failures at warn with the streak (`2 in a row`), company/ATS/slug and HTTP status; the move to needs review; budget-skipped targets. One summary per run. |
+| `notify`    | Push sent (count, job ids), push failed (status/cause, no stack), NTFY_URL unset (warned once); not due / quiet hours / nothing new at debug.                                                                                                                                 |
+| `cleanup`   | Jobs deleted and the retention cutoff.                                                                                                                                                                                                                                        |
+
+Expected failures (HTTP statuses, schema drift, push errors) log one line with
+their status; unexpected errors log `err` with its stack. Zero counters are left
+out of the fields. Secrets (the ntfy topic URL, the database password) are never
+logged.
+
 ## API
 
 All routes under `/api` use the template envelope `{ success, data?, error?,

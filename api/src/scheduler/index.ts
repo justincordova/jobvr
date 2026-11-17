@@ -2,6 +2,7 @@ import {
   createHttpClient,
   createNtfyNotifier,
   type Database,
+  formatDuration,
   type Logger,
   type Registry,
   runCleanup,
@@ -26,31 +27,44 @@ export interface SchedulerOptions {
  */
 export const startScheduler = (options: SchedulerOptions) => {
   const { database, registry, logger } = options;
+  // Tasks get the root logger and tag their own lines (poll, notify, cleanup)
+  const log = logger.child({ module: "scheduler" });
   const http = createHttpClient();
   const notifier = options.ntfyUrl ? createNtfyNotifier(options.ntfyUrl) : null;
-  let running = false;
+  let running: number | null = null;
 
   const step = async (name: string, fn: () => Promise<unknown>) => {
     try {
       await fn();
     } catch (err) {
-      logger.error({ err, task: name }, "scheduled task failed");
+      log.error({ err, task: name }, `${name} crashed; the next tick tries again`);
     }
   };
 
   const tick = async () => {
-    if (running) return;
-    running = true;
+    if (running !== null) {
+      log.warn(
+        { runningForMs: Math.round(performance.now() - running) },
+        `tick skipped: the previous tick is still running after ${formatDuration(performance.now() - running)}`,
+      );
+      return;
+    }
+    running = performance.now();
     try {
       await step("poll", () => runPoll({ database, registry, http, logger }));
       await step("notify", () =>
         runNotify({ database, registry, notifier, publicUrl: options.publicUrl, logger }),
       );
       await step("cleanup", () => runCleanup({ database, logger }));
+      log.debug({}, `tick done in ${formatDuration(performance.now() - running)}`);
     } finally {
-      running = false;
+      running = null;
     }
   };
+  log.info(
+    { tickMs: SCHEDULER_TICK_MS, firstTickMs: SCHEDULER_FIRST_TICK_MS, push: Boolean(notifier) },
+    `scheduler started: first tick in ${formatDuration(SCHEDULER_FIRST_TICK_MS)}, then every ${formatDuration(SCHEDULER_TICK_MS)}${notifier ? "" : " (NTFY_URL unset: no pushes)"}`,
+  );
 
   const first = setTimeout(() => void tick(), SCHEDULER_FIRST_TICK_MS);
   const interval = setInterval(() => void tick(), SCHEDULER_TICK_MS);

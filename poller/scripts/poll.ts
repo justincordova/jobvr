@@ -1,6 +1,9 @@
-import { consoleLogger, createHttpClient, runPoll } from "@jobvr/core";
+import { createConsoleLogger, createHttpClient, envLogLevel, runPoll } from "@jobvr/core";
 import { adapters } from "../src/sources";
 import { openDatabase } from "./db";
+
+// Debug by default: one line per board, then the summary. LOG_LEVEL=info for just the changes.
+const logger = createConsoleLogger({ level: envLogLevel("debug"), hide: ["target"] });
 
 const database = await openDatabase();
 try {
@@ -9,23 +12,9 @@ try {
     registry: adapters,
     http: createHttpClient(),
     force: true,
-    logger: consoleLogger,
+    logger,
   });
-  if (!summary.ran) {
-    console.log(`Poll did not run: ${summary.reason}`);
-  } else {
-    for (const t of summary.targets) {
-      const detail =
-        t.status === "failed"
-          ? t.error
-          : t.status === "skipped"
-            ? "skipped (budget)"
-            : t.stats.abandoned
-              ? "abandoned (company changed)"
-              : `+${t.stats.inserted} new, ${t.stats.merged} merged, ${t.stats.closed} closed${t.stats.baseline ? " (baseline)" : ""}`;
-      console.log(`${t.status.padEnd(12)} ${t.label.padEnd(36)} ${detail}`);
-    }
-  }
+  if (summary.ran && summary.targets.some((t) => t.status === "failed")) process.exitCode = 1;
 } finally {
   await database.close();
 }

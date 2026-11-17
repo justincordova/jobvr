@@ -96,6 +96,30 @@ DATABASE_URL=postgres://jobvr:<password>@jobvr.<your-tailnet>.ts.net:5432/jobvr 
 
 Update: `git pull && docker compose up -d --build`.
 
+### Logs
+
+The app logs one line per event, tagged with the part that wrote it
+(`server`, `http`, `scheduler`, `poll`, `notify`, `cleanup`). On the PC
+they're JSON; in development (`pnpm dev`) and the scripts they're plain text:
+
+```
+22:20:05.112 WARN  poll · Remedy (Greenhouse) failed (2 in a row): HTTP 404 for https://…
+22:20:06.004 INFO  poll · poll finished in 4.3 s · 64 targets: 61 unchanged, 2 updated, 1 failed · +3 new, 9 refreshed, 1 closed
+```
+
+- `info`: something happened (a board had new or closed jobs, a push went
+  out, a poll finished). `warn`: worth a look (a board failing, a company moved
+  to needs review, the poll budget running out). `error`: a bug or an outage.
+  `debug`: every board on every poll, and why a push didn't go out (not due,
+  quiet hours, nothing new).
+- `LOG_LEVEL` sets the level (default `info`; the `poll` and `notify` scripts
+  default to `debug`).
+- Filter on the PC, for example the failures of the last day:
+  `docker compose logs --since 24h app | jq -c 'select(.level == "warn" or .level == "error")'`,
+  or one board: `... | jq -c 'select(.module == "poll" and (.msg | contains("Remedy")))'`.
+- Secrets never appear: the ntfy topic URL isn't logged, and the database is
+  shown as `host:port/name` only.
+
 ### Backups
 
 The `backup` service writes `jobvr-YYYY-MM-DD.dump` at 03:00 Eastern and keeps

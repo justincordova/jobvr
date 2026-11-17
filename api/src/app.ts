@@ -49,9 +49,12 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
         // Bind the request ID to the request-scoped logger so every line carries it,
         // and disable hono-pino's own reqId so it is not written twice.
         onReqBindings: (c) => ({
+          module: "http",
           reqId: c.var.requestId,
           req: { method: c.req.method, path: c.req.path },
         }),
+        // One readable line per request ("GET /api/jobs 200 · 23 ms")
+        onResMessage: (c) => `${c.req.method} ${c.req.path} ${c.res.status}`,
         reqId: false,
         referRequestIdKey: "_unused",
         onResBindings: (c) => ({ res: { status: c.res.status } }),
@@ -99,11 +102,14 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
     }
     if (err instanceof HTTPException) {
       if (err.res) return err.getResponse();
-      log[err.status >= 500 ? "error" : "warn"]({ err }, "HTTP exception");
+      log[err.status >= 500 ? "error" : "warn"](
+        { err },
+        `${c.req.method} ${c.req.path}: ${err.status} ${err.message}`,
+      );
       return fail(c, err.status, err.message);
     }
 
-    log.error({ err }, "Unhandled error occurred");
+    log.error({ err }, `${c.req.method} ${c.req.path}: unhandled error`);
     const message = env.NODE_ENV === "production" ? "Something went wrong on our end" : err.message;
     return fail(c, HTTP_STATUS.INTERNAL_SERVER_ERROR, message);
   });

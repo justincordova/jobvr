@@ -5,7 +5,7 @@ import type { Database } from "../db/client";
 import { type CompanyRow, companies, jobSources, jobs, sourceState } from "../db/schema";
 import type { HttpClient } from "../http";
 import { withAdvisoryLock } from "../lock";
-import { type Logger, silentLogger } from "../logger";
+import { errorFields, formatDuration, type Logger, silentLogger } from "../logger";
 import { passesPollFilter } from "../matching";
 import { companyStateKey } from "../repos/companies";
 import { getSettingsState, setSettingsTimestamp } from "../repos/settings";
@@ -29,10 +29,115 @@ export interface RunPollOptions {
 }
 
 export type TargetOutcome = { key: string; label: string } & (
-  | { status: "ok" | "not_modified"; stats: TargetStats }
-  | { status: "failed"; error: string }
+  | {
+      status: "ok" | "not_modified";
+      stats: TargetStats;
+      durationMs: number;
+      /** Listings in the response (null when not modified). */
+      listings: number | null;
+      /** Job detail requests made (Greenhouse). */
+      details: number;
+    }
+  | { status: "failed"; error: string; failures: number | null }
   | { status: "skipped" }
 );
+
+/** Counters worth a field: zeros and false flags only repeat what the message says. */
+const nonZero = (counts: Record<string, number | boolean>) =>
+  Object.fromEntries(Object.entries(counts).filter(([, v]) => v !== 0 && v !== false));
+
+const changed = (s: TargetStats) => s.inserted + s.closed + s.reopened > 0;
+
+/** One line per target: info when something changed, debug otherwise. */
+const logTarget = (log: Logger, o: TargetOutcome) => {
+  if (o.status !== "ok" && o.status !== "not_modified") return;
+  const { stats } = o;
+  const fields = {
+    target: o.key,
+    durationMs: Math.round(o.durationMs),
+    ...(o.listings !== null && { listings: o.listings }),
+    ...nonZero({ ...stats, details: o.details }),
+  };
+  if (stats.abandoned) {
+    log.info(fields, `${o.label} · skipped: its ATS or slug changed during the poll`);
+    return;
+  }
+  if (o.status === "not_modified") {
+    log.debug(fields, `${o.label} · not modified · ${formatDuration(o.durationMs)}`);
+    return;
+  }
+  const parts = [
+    `${o.listings} listings`,
+    stats.inserted > 0 &&
+      `+${stats.inserted} new${stats.baseline ? " (baseline, not pushed)" : ""}`,
+    stats.merged > 0 && `${stats.merged} refreshed`,
+    stats.closed > 0 && `${stats.closed} closed`,
+    stats.reopened > 0 && `${stats.reopened} reopened`,
+    stats.skippedOld > 0 && `${stats.skippedOld} already seen`,
+    o.details > 0 && `${o.details} details`,
+    formatDuration(o.durationMs),
+  ].filter(Boolean);
+  log[changed(stats) ? "info" : "debug"](fields, `${o.label} · ${parts.join(" · ")}`);
+};
+
+export interface PollTotals {
+  targets: number;
+  unchanged: number;
+  updated: number;
+  failed: number;
+  skipped: number;
+  inserted: number;
+  merged: number;
+  closed: number;
+  reopened: number;
+  details: number;
+}
+
+const summarize = (outcomes: readonly TargetOutcome[]): PollTotals => {
+  const t: PollTotals = {
+    targets: outcomes.length,
+    unchanged: 0,
+    updated: 0,
+    failed: 0,
+    skipped: 0,
+    inserted: 0,
+    merged: 0,
+    closed: 0,
+    reopened: 0,
+    details: 0,
+  };
+  for (const o of outcomes) {
+    if (o.status === "failed") t.failed++;
+    else if (o.status === "skipped") t.skipped++;
+    else {
+      if (changed(o.stats)) t.updated++;
+      else t.unchanged++;
+      t.inserted += o.stats.inserted;
+      t.merged += o.stats.merged;
+      t.closed += o.stats.closed;
+      t.reopened += o.stats.reopened;
+      t.details += o.details;
+    }
+  }
+  return t;
+};
+
+const describeSummary = (t: PollTotals) => {
+  const status = [
+    `${t.unchanged} unchanged`,
+    t.updated > 0 && `${t.updated} updated`,
+    t.failed > 0 && `${t.failed} failed`,
+    t.skipped > 0 && `${t.skipped} skipped`,
+  ].filter(Boolean);
+  const jobs = [
+    `+${t.inserted} new`,
+    `${t.merged} refreshed`,
+    `${t.closed} closed`,
+    t.reopened > 0 && `${t.reopened} reopened`,
+    t.details > 0 && `${t.details} details`,
+  ].filter(Boolean);
+  return `${t.targets} targets: ${status.join(", ")} · ${jobs.join(", ")}`;
+};
 
 const targetLabel = (t: Target) =>
   t.kind === "company" ? `${t.company.name} (${t.adapter.label})` : t.adapter.label;
@@ -82,10 +187,13 @@ export const pollTargets = (
   return targets;
 };
 
-type Fetched = { result: FetchResult } | { error: string } | { skipped: true };
+type Fetched =
+  | { result: FetchResult; ms: number; details: number }
+  | { error: string; fields: Record<string, unknown>; ms: number }
+  | { skipped: true };
 
-/** Adds detail (description, pay) to an ok result's listings; never throws. */
-type Enrich = (target: Target, result: FetchResult, signal: AbortSignal) => Promise<void>;
+/** Adds detail (description, pay) to an ok result's listings; returns how many it fetched. */
+type Enrich = (target: Target, result: FetchResult, signal: AbortSignal) => Promise<number>;
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -117,6 +225,7 @@ const fetchAll = async (
               out.set(t.key, { skipped: true });
               continue;
             }
+            const started = performance.now();
             try {
               const result = await t.adapter.fetch({
                 slug: t.kind === "company" ? (t.company.slug ?? undefined) : undefined,
@@ -125,11 +234,14 @@ const fetchAll = async (
                 signal: budget.signal,
                 http,
               });
-              await enrich(t, result, budget.signal);
-              out.set(t.key, { result });
+              const details = await enrich(t, result, budget.signal);
+              out.set(t.key, { result, ms: performance.now() - started, details });
             } catch (err) {
+              const aborted = budget.signal.aborted;
               out.set(t.key, {
-                error: budget.signal.aborted ? "Poll fetch budget exceeded" : errorMessage(err),
+                error: aborted ? "Poll fetch budget exceeded" : errorMessage(err),
+                fields: aborted ? {} : errorFields(err),
+                ms: performance.now() - started,
               });
             }
           }
@@ -159,7 +271,7 @@ const loadWindow = async (database: Database, now: Date, settings: Settings): Pr
 export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => {
   const { database, registry, http } = options;
   const clock = options.now ?? (() => new Date());
-  const log = options.logger ?? silentLogger;
+  const log = (options.logger ?? silentLogger).child({ module: "poll" });
 
   const locked = await withAdvisoryLock(database.pool, POLL_LOCK_KEY, async () => {
     const { db } = database;
@@ -167,8 +279,10 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
     const state = await getSettingsState(db);
     const settings = state.settings;
     if (!options.force && !isDue(state.lastPollAt, settings.pollEveryMinutes * 60_000, startedAt)) {
+      log.debug({ lastPollAt: state.lastPollAt }, "poll not due yet");
       return { ran: false, reason: "not_due" } as const;
     }
+    const runStarted = performance.now();
     await setSettingsTimestamp(db, "lastPollAt", startedAt);
 
     const companyRows = await db.select().from(companies);
@@ -195,9 +309,10 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
     const enrich: Enrich = async (t, result, signal) => {
       const { adapter } = t;
       const slug = t.kind === "company" ? t.company.slug : null;
-      if (result.status !== "ok" || !adapter.fetchDetail || !slug) return;
+      if (result.status !== "ok" || !adapter.fetchDetail || !slug) return 0;
+      let fetchedCount = 0;
       for (const listing of result.jobs) {
-        if (signal.aborted) return;
+        if (signal.aborted) break;
         if (listing.description !== undefined) continue;
         if (!passesPollFilter(listing, adapter.kind, settings, startedAt)) continue;
         const known = checked.get(`${listing.source}:${listing.sourceJobId}`);
@@ -216,17 +331,25 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
         }
         try {
           const detail = await adapter.fetchDetail(slug, listing.sourceJobId, { http, signal });
+          fetchedCount++;
           if (!detail) continue;
           listing.description = detail.description;
           if (detail.salary && !listing.salary) listing.salary = detail.salary;
         } catch (err) {
           // Left unchecked: retried on the next poll
-          log.warn({ target: t.key, job: listing.sourceJobId, err }, "job detail fetch failed");
+          log.warn(
+            { job: listing.sourceJobId, ...errorFields(err) },
+            `${targetLabel(t)} · detail for "${listing.title}" failed; retrying next poll`,
+          );
         }
       }
+      return fetchedCount;
     };
 
-    log.info({ targets: targets.length }, "poll started");
+    log.debug(
+      { targets: targets.length, jobsInWindow: window.size, forced: options.force ?? false },
+      `poll started · ${targets.length} targets`,
+    );
     const fetched = await fetchAll(
       targets,
       etagFor,
@@ -242,13 +365,19 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
     ];
     const outcomes: TargetOutcome[] = [];
     for (const target of ordered) {
+      const label = targetLabel(target);
       const f = fetched.get(target.key) ?? { skipped: true as const };
       if ("skipped" in f) {
-        outcomes.push({ key: target.key, label: targetLabel(target), status: "skipped" });
+        log.warn(
+          { target: target.key },
+          `${label} · not fetched: the ${formatDuration(options.budgetMs ?? POLL_BUDGET_MS)} poll budget ran out; next poll retries`,
+        );
+        outcomes.push({ key: target.key, label, status: "skipped" });
         continue;
       }
       const now = clock();
       let error = "error" in f ? f.error : null;
+      let fields = "error" in f ? f.fields : {};
       if ("result" in f) {
         const ws = new WorkingSet(window);
         try {
@@ -266,35 +395,73 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
             }),
           );
           window = ws.commit();
-          outcomes.push({
+          const outcome: TargetOutcome = {
             key: target.key,
-            label: targetLabel(target),
+            label,
             status: f.result.status,
             stats,
-          });
+            durationMs: f.ms,
+            listings: f.result.status === "ok" ? f.result.jobs.length : null,
+            details: f.details,
+          };
+          logTarget(log, outcome);
+          outcomes.push(outcome);
           continue;
         } catch (err) {
           error = errorMessage(err);
-          log.error({ err, target: target.key }, "poll target processing failed");
+          fields = { err };
+          log.error(
+            { target: target.key, err },
+            `${label} · saving results failed; rolled back, next poll refetches in full`,
+          );
         }
       }
       const message = error ?? "unknown error";
-      log.warn({ target: target.key, error: message }, "poll target failed");
-      await db
+      const health = await db
         .transaction((tx) => recordFailure(tx, target, message, now))
-        .catch((err) => log.error({ err, target: target.key }, "failed to record poll failure"));
+        .catch((err) => {
+          log.error({ target: target.key, err }, `${label} · could not record the failure`);
+          return null;
+        });
+      const company =
+        target.kind === "company"
+          ? { company: target.company.name, ats: target.company.ats, slug: target.company.slug }
+          : { source: target.adapter.id };
+      const inARow = health ? ` (${health.failures} in a row)` : "";
+      // The error itself was logged above when processing failed
+      log.warn(
+        // The message already carries the error text; keep the extra details (status)
+        {
+          target: target.key,
+          ...company,
+          ...("err" in fields ? {} : { ...fields, error: undefined }),
+        },
+        `${label} failed${inARow}: ${message}`,
+      );
+      if (health?.needsReview) {
+        log.warn(
+          { target: target.key, ...company },
+          `${label} · marked needs review after ${health.failures} failures in a row; check its slug on the Companies page`,
+        );
+      }
       outcomes.push({
         key: target.key,
-        label: targetLabel(target),
+        label,
         status: "failed",
         error: message,
+        failures: health?.failures ?? null,
       });
     }
 
-    const failed = outcomes.filter((o) => o.status === "failed").length;
-    log.info({ targets: outcomes.length, failed }, "poll finished");
+    const summary = summarize(outcomes);
+    const ms = performance.now() - runStarted;
+    log[summary.failed > 0 ? "warn" : "info"](
+      { durationMs: Math.round(ms), targets: summary.targets, ...nonZero({ ...summary }) },
+      `poll finished in ${formatDuration(ms)} · ${describeSummary(summary)}`,
+    );
     return { ran: true, startedAt, targets: outcomes } as const;
   });
 
+  if (!locked.acquired) log.info({}, "poll skipped: another poll holds the lock");
   return locked.acquired ? locked.value : { ran: false, reason: "locked" };
 };

@@ -485,7 +485,7 @@ export const recordFailure = async (
   target: Target,
   error: string,
   now: Date,
-): Promise<void> => {
+): Promise<{ failures: number; needsReview: boolean } | null> => {
   let companyId: string | null = null;
   if (target.kind === "company") {
     const [c] = await tx
@@ -493,7 +493,7 @@ export const recordFailure = async (
       .from(companies)
       .where(eq(companies.id, target.company.id))
       .for("update");
-    if (!c || c.ats !== target.company.ats || c.slug !== target.company.slug) return;
+    if (!c || c.ats !== target.company.ats || c.slug !== target.company.slug) return null;
     companyId = c.id;
   }
   const [row] = await tx
@@ -516,10 +516,16 @@ export const recordFailure = async (
       },
     })
     .returning({ failures: sourceState.consecutiveFailures });
-  if (companyId && (row?.failures ?? 0) >= FAILURES_BEFORE_REVIEW) {
-    await tx
+  const failures = row?.failures ?? 1;
+  let needsReview = false;
+  if (companyId && failures >= FAILURES_BEFORE_REVIEW) {
+    // Only reported once: the update matches while the company is still "ok"
+    const moved = await tx
       .update(companies)
       .set({ status: "needs_review", updatedAt: now })
-      .where(and(eq(companies.id, companyId), eq(companies.status, "ok")));
+      .where(and(eq(companies.id, companyId), eq(companies.status, "ok")))
+      .returning({ id: companies.id });
+    needsReview = moved.length > 0;
   }
+  return { failures, needsReview };
 };

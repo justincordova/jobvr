@@ -2,8 +2,9 @@ import { and, eq, gte, inArray, isNull, lt } from "drizzle-orm";
 import { CLEANUP_INTERVAL_MS, NOTIFY_LOCK_KEY } from "./constants";
 import type { Database } from "./db/client";
 import { jobs } from "./db/schema";
+import { HttpError } from "./http";
 import { withAdvisoryLock } from "./lock";
-import { type Logger, silentLogger } from "./logger";
+import { formatDuration, type Logger, silentLogger } from "./logger";
 import { isFreshMatch, type JobRecord, kindLookup, loadJobViews } from "./repos/jobs";
 import { getSettingsState, setSettingsTimestamp } from "./repos/settings";
 import { inQuietHours, isDue } from "./schedule";
@@ -37,7 +38,8 @@ export const createNtfyNotifier = (
       },
       signal: AbortSignal.timeout(deps.timeoutMs ?? 15_000),
     });
-    if (!res.ok) throw new Error(`ntfy responded ${res.status}`);
+    // The topic URL is the secret, so it's never part of the error
+    if (!res.ok) throw new HttpError(`ntfy responded ${res.status}`, res.status);
   },
 });
 
@@ -83,9 +85,23 @@ export type NotifySummary =
   | { sent: false; reason: "dry_run" | "failed"; jobs: JobRecord[] }
   | { sent: true; jobs: JobRecord[] };
 
+/** Warn about a missing NTFY_URL once per process, not every tick. */
+let warnedNoNotifier = false;
+
+/** "fetch failed (ECONNREFUSED)" rather than a stack: push failures are expected now and then. */
+const pushError = (err: unknown) => {
+  if (!(err instanceof Error)) return { error: String(err) };
+  const cause = err.cause instanceof Error ? err.cause.message : undefined;
+  return {
+    error: err.message,
+    ...(err instanceof HttpError && err.status !== undefined && { status: err.status }),
+    ...(cause && { cause }),
+  };
+};
+
 export const runNotify = async (options: RunNotifyOptions): Promise<NotifySummary> => {
   const clock = options.now ?? (() => new Date());
-  const log = options.logger ?? silentLogger;
+  const log = (options.logger ?? silentLogger).child({ module: "notify" });
   const { database } = options;
 
   const locked = await withAdvisoryLock(
@@ -97,17 +113,34 @@ export const runNotify = async (options: RunNotifyOptions): Promise<NotifySummar
       const s = state.settings;
       if (!options.force) {
         if (!isDue(state.lastPushAt, s.pushEveryMinutes * 60_000, now)) {
+          log.debug({ lastPushAt: state.lastPushAt }, "push not due yet");
           return { sent: false, reason: "not_due" };
         }
-        if (inQuietHours(now, s.quietHours)) return { sent: false, reason: "quiet_hours" };
+        if (inQuietHours(now, s.quietHours)) {
+          log.debug(
+            s.quietHours,
+            `quiet hours (${s.quietHours.start}-${s.quietHours.end} ET); new jobs wait for the first push after`,
+          );
+          return { sent: false, reason: "quiet_hours" };
+        }
       }
       const selected = await selectPushable(database, options.registry, s, now);
       if (options.dryRun) return { sent: false, reason: "dry_run", jobs: selected };
-      if (selected.length === 0) return { sent: false, reason: "nothing_new" };
+      if (selected.length === 0) {
+        log.debug({}, "nothing new to push");
+        return { sent: false, reason: "nothing_new" };
+      }
       if (!options.notifier) {
-        log.warn({ pending: selected.length }, "NTFY_URL is not set; skipping push");
+        if (!warnedNoNotifier) {
+          log.warn(
+            { pending: selected.length },
+            `NTFY_URL is not set, so ${selected.length} pushable jobs aren't pushed (warned once)`,
+          );
+          warnedNoNotifier = true;
+        }
         return { sent: false, reason: "no_notifier" };
       }
+      const started = performance.now();
       try {
         await options.notifier.send({
           title: "jobvr",
@@ -115,7 +148,10 @@ export const runNotify = async (options: RunNotifyOptions): Promise<NotifySummar
           clickUrl: options.publicUrl,
         });
       } catch (err) {
-        log.error({ err }, "push failed; will retry next tick");
+        log.error(
+          { pending: selected.length, ...pushError(err) },
+          `push of ${selected.length} jobs failed; retrying next tick`,
+        );
         return { sent: false, reason: "failed", jobs: selected };
       }
       await database.db.transaction(async (tx) => {
@@ -130,14 +166,18 @@ export const runNotify = async (options: RunNotifyOptions): Promise<NotifySummar
           );
         await setSettingsTimestamp(tx, "lastPushAt", now);
       });
-      log.info({ count: selected.length }, "push sent");
+      log.info(
+        { count: selected.length, jobIds: selected.map((j) => j.id) },
+        `push sent: ${pushBody(selected.length)} · ${formatDuration(performance.now() - started)}`,
+      );
       return { sent: true, jobs: selected };
     },
   );
+  if (!locked.acquired) log.info({}, "push skipped: another notify run holds the lock");
   return locked.acquired ? locked.value : { sent: false, reason: "locked" };
 };
 
-/** Daily retention: drops new/hidden jobs older than 45 days (sources cascade). */
+/** Daily retention: drops new/hidden jobs past the store window + margin (sources cascade). */
 export const runCleanup = async (options: {
   database: Database;
   force?: boolean;
@@ -156,6 +196,12 @@ export const runCleanup = async (options: {
     .delete(jobs)
     .where(and(inArray(jobs.state, ["new", "hidden"]), lt(jobs.effectiveAt, cutoff)))
     .returning({ id: jobs.id });
-  options.logger?.info({ deleted: deleted.length }, "cleanup finished");
+  const days = Math.round(retentionMs(state.settings) / 86_400_000);
+  (options.logger ?? silentLogger)
+    .child({ module: "cleanup" })
+    .info(
+      { deleted: deleted.length, cutoff },
+      `cleanup deleted ${deleted.length} new/hidden jobs older than ${days} days`,
+    );
   return { ran: true, deleted: deleted.length };
 };

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../db/client";
 import { companies, jobSources, jobs, sourceState, suggestions } from "../db/schema";
 import { HttpError } from "../http";
+import { createConsoleLogger, type Logger } from "../logger";
 import { companyStateKey, createCompany, updateCompany } from "../repos/companies";
 import { listJobs } from "../repos/jobs";
 import { getSettingsState, updateSettings } from "../repos/settings";
@@ -130,13 +131,14 @@ let database: Database;
 let env: ReturnType<typeof makeEnv>;
 let clock: Date;
 
-const poll = (force = true) =>
+const poll = (force = true, logger?: Logger) =>
   runPoll({
     database,
     registry: env.registry,
     http: { getJson: async () => ({ status: "not_modified" }) },
     force,
     now: () => clock,
+    logger,
   });
 
 const allJobs = () => database.db.select().from(jobs).orderBy(jobs.id);
@@ -470,6 +472,33 @@ describe("runPoll: health and transactions", () => {
     expect((await database.db.select().from(companies))[0]?.status).toBe("ok");
     // The first successful poll is still the baseline
     expect((await allJobs())[0]?.baseline).toBe(true);
+  });
+
+  it("logs what a failing board needs: name, streak, status, and the needs-review move", async () => {
+    await addAcme();
+    env.failing.add("acme");
+    const lines: string[] = [];
+    const logger = createConsoleLogger({
+      level: "info",
+      color: false,
+      hide: ["target"],
+      write: (line) => lines.push(line.slice(13)),
+    });
+    for (let i = 0; i < 3; i++) {
+      clock = new Date(T0.getTime() + i * HOUR);
+      await poll(true, logger);
+    }
+    const warnings = lines.filter((l) => l.startsWith("WARN"));
+    expect(warnings[0]).toBe(
+      "WARN  poll · Acme (Greenhouse) failed (1 in a row): HTTP 500  company=Acme ats=greenhouse slug=acme status=500",
+    );
+    expect(warnings).toContain(
+      "WARN  poll · Acme (Greenhouse) · marked needs review after 3 failures in a row; check its slug on the Companies page  company=Acme ats=greenhouse slug=acme",
+    );
+    // The summary is a warning while anything failed
+    expect(lines.at(-1)).toMatch(
+      /^WARN {2}poll · poll finished in \d+ ms · 2 targets: 1 unchanged, 1 failed · \+0 new, 0 refreshed, 0 closed/,
+    );
   });
 
   it("rolls back a failed target without saving its ETag", async () => {
