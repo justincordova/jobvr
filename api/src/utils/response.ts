@@ -36,3 +36,27 @@ export const fail = <S extends ContentfulStatusCode>(
     },
     status,
   );
+
+/** "careersUrl" -> "careers URL", "quietHours.start" -> "quiet hours start". */
+const fieldName = (path: readonly PropertyKey[]) =>
+  path
+    .filter((p): p is string => typeof p === "string")
+    .join(" ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/\burl\b/g, "URL");
+
+/**
+ * A readable validation message naming the fields: "careers URL: Invalid URL;
+ * tier: Invalid option". The issues themselves still go in `details`.
+ */
+export const validationMessage = (
+  issues: readonly { path: readonly PropertyKey[]; message: string }[],
+) => {
+  const parts = issues.slice(0, 3).map((i) => {
+    const field = fieldName(i.path);
+    return field ? `${field}: ${i.message}` : i.message;
+  });
+  const more = issues.length > 3 ? ` (+${issues.length - 3} more)` : "";
+  return parts.length > 0 ? `${parts.join("; ")}${more}` : "Request validation failed";
+};

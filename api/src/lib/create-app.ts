@@ -3,7 +3,7 @@ import type { Database, Registry } from "@jobvr/core";
 import type { RequestIdVariables } from "hono/request-id";
 import type { PinoLogger } from "hono-pino";
 import { HTTP_STATUS } from "@/constants";
-import { fail } from "@/utils/response";
+import { fail, validationMessage } from "@/utils/response";
 
 /** Runtime dependencies injected into every request (so tests can swap them). */
 export interface AppDeps {
@@ -29,7 +29,7 @@ export const createRouter = () =>
     strict: false,
     defaultHook: (result, c) => {
       if (!result.success) {
-        return fail(c, HTTP_STATUS.BAD_REQUEST, "Request validation failed", {
+        return fail(c, HTTP_STATUS.BAD_REQUEST, validationMessage(result.error.issues), {
           error: "Validation Error",
           details: result.error.issues,
         });

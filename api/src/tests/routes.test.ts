@@ -229,6 +229,11 @@ describe("companies routes", () => {
       json: { name: "Z", tier: "Mid", ats: "workday" },
     });
     expect(badAts.status).toBe(400);
+    const badUrl = await client.api.companies.$post({
+      json: { name: "Y", tier: "Mid", ats: "lever", slug: "y", careersUrl: "javascript:alert(1)" },
+    });
+    // The message names the field instead of only "Request validation failed"
+    expect(await badUrl.json()).toMatchObject({ message: "careers URL: Invalid URL" });
     const badInvariant = await client.api.companies[":id"].$patch({
       param: { id: created.data.id },
       json: { ats: "other" },

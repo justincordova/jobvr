@@ -146,10 +146,7 @@ interface SourceAdapter {
   concurrency: number; // max in-flight fetches for this source
   fetch(ctx: FetchCtx): Promise<FetchResult>; // ctx: { slug?, companyName?, etag?, signal, http }
   parseUrl?(url: string): { sourceJobId: string; slug?: string } | null; // ats only
-  probe?(
-    slug: string,
-    ctx: ProbeCtx,
-  ): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
+  probe?(slug: string, ctx: ProbeCtx): Promise<{ found: boolean; jobCount: number }>; // ats only; `discover`
   // Sources whose list has no description (Greenhouse): one job's description and pay; null when gone
   fetchDetail?(
     slug: string,

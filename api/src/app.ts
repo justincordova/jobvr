@@ -19,7 +19,7 @@ import companiesRouter from "@/modules/companies";
 import jobsRouter from "@/modules/jobs";
 import settingsRouter from "@/modules/settings";
 import suggestionsRouter from "@/modules/suggestions";
-import { fail } from "@/utils/response";
+import { fail, validationMessage } from "@/utils/response";
 import pkg from "../package.json" with { type: "json" };
 
 export interface AppOptions {
@@ -103,7 +103,7 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
     if (err instanceof ConflictError) return fail(c, HTTP_STATUS.CONFLICT, err.message);
     if (err instanceof InvalidError) return fail(c, HTTP_STATUS.BAD_REQUEST, err.message);
     if (err instanceof ZodError) {
-      return fail(c, HTTP_STATUS.BAD_REQUEST, "Request validation failed", {
+      return fail(c, HTTP_STATUS.BAD_REQUEST, validationMessage(err.issues), {
         error: "Validation Error",
         details: err.issues,
       });
