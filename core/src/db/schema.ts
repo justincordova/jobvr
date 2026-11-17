@@ -36,6 +36,8 @@ export const settings = pgTable(
     backupErrorAt: ts("backup_error_at"),
     /** When the app last pushed a backup alert (at most one a day). */
     backupAlertAt: ts("backup_alert_at"),
+    /** ATS sources that look down, by id (see `SourceOutage`); cleared once a board answers. */
+    sourceOutages: jsonb("source_outages").notNull().default({}),
   },
   (t) => [check("settings_single_row", sql`${t.id} = 1`)],
 );

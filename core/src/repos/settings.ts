@@ -16,7 +16,46 @@ export interface SettingsState {
   lastPushAt: Date | null;
   lastCleanupAt: Date | null;
   backup: BackupStatus;
+  sourceOutages: SourceOutages;
 }
+
+/** An ATS whose boards all failed in the latest polls (an outage, not the boards). */
+export interface SourceOutage {
+  /** First poll that found it down (ISO). */
+  since: string;
+  /** Latest poll that found it down (ISO). */
+  lastSeenAt: string;
+  error: string;
+  boards: number;
+}
+export type SourceOutages = Record<string, SourceOutage>;
+
+/**
+ * Records this poll's view of each ATS: down ones are added (keeping `since`),
+ * ones where a board answered are cleared. Sources not polled are left alone.
+ */
+export const recordSourceOutages = async (
+  db: DbOrTx,
+  down: ReadonlyMap<string, { count: number; error: string }>,
+  answered: ReadonlySet<string>,
+  now: Date,
+): Promise<SourceOutages> => {
+  const { sourceOutages: current } = await getSettingsState(db);
+  const next: SourceOutages = { ...current };
+  for (const source of answered) delete next[source];
+  for (const [source, { count, error }] of down) {
+    next[source] = {
+      since: current[source]?.since ?? now.toISOString(),
+      lastSeenAt: now.toISOString(),
+      error,
+      boards: count,
+    };
+  }
+  if (JSON.stringify(next) !== JSON.stringify(current)) {
+    await db.update(settings).set({ sourceOutages: next }).where(eq(settings.id, 1));
+  }
+  return next;
+};
 
 /** As recorded by deploy/backup.sh; all null where no backup service runs (the Mac). */
 export interface BackupStatus {
@@ -55,6 +94,7 @@ export const getSettingsState = async (db: DbOrTx): Promise<SettingsState> => {
       errorAt: row.backupErrorAt,
       alertAt: row.backupAlertAt,
     },
+    sourceOutages: (row.sourceOutages ?? {}) as SourceOutages,
   };
 };
 

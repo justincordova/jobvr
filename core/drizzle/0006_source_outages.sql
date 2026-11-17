@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "source_outages" jsonb DEFAULT '{}'::jsonb NOT NULL;

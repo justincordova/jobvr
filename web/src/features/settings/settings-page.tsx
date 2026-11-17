@@ -598,6 +598,7 @@ function SourcesSection({ payload }: { payload: SettingsPayload }) {
   ] as const)
   const { save, pending, error } = useSave('Sources')
   const off = new Set(draft.disabledSources)
+  const outage = (id: string) => payload.sourceOutages.find((o) => o.source === id)
   return (
     <Section
       title="Sources"
@@ -617,7 +618,18 @@ function SourcesSection({ payload }: { payload: SettingsPayload }) {
         <Row
           key={s.id}
           label={s.label}
-          hint={s.kind === 'ats' ? 'Company job boards' : 'Aggregated list'}
+          hint={
+            outage(s.id) ? (
+              <span className="text-stop">
+                Looks down since {relative(outage(s.id)?.since ?? null)}: all {outage(s.id)?.boards}{' '}
+                boards failed ({outage(s.id)?.error}). Retried every poll.
+              </span>
+            ) : s.kind === 'ats' ? (
+              'Company job boards'
+            ) : (
+              'Aggregated list'
+            )
+          }
         >
           <Switch
             checked={!off.has(s.id)}

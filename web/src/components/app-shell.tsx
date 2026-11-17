@@ -38,18 +38,27 @@ function PollStatus() {
   const last = data.lastPollAt ? new Date(data.lastPollAt).getTime() : 0
   // Healthy if a poll landed within roughly two intervals of the last refresh
   const healthy = dataUpdatedAt - last < data.settings.pollEveryMinutes * 2 * 60_000 + 60_000
+  const down = data.sourceOutages.map((o) => o.label)
   return (
     <Link
       to="/settings"
       title={
-        data.lastPollAt
+        (data.lastPollAt
           ? `Last poll ${new Date(data.lastPollAt).toLocaleString()}`
-          : 'No poll has run yet'
+          : 'No poll has run yet') + (down.length ? ` · ${down.join(', ')} looks down` : '')
       }
       className="flex items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[0.7rem] text-faint transition-colors hover:text-dim"
     >
-      <span className={cn('size-1.5 rounded-full', healthy ? 'bg-go' : 'bg-stop')} />
+      <span
+        className={cn(
+          'size-1.5 rounded-full',
+          !healthy ? 'bg-stop' : down.length ? 'bg-signal' : 'bg-go',
+        )}
+      />
       polled {relative(data.lastPollAt)}
+      {down.length > 0 && (
+        <span className="text-signal max-sm:sr-only">· {down.join(', ')} down</span>
+      )}
     </Link>
   )
 }

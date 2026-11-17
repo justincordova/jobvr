@@ -29,6 +29,11 @@ export const loadSettingsPayload = async (
     lastPollAt: isoOrNull(state.lastPollAt),
     lastPushAt: isoOrNull(state.lastPushAt),
     lastVisitAt: isoOrNull(state.lastVisitAt),
+    sourceOutages: Object.entries(state.sourceOutages).map(([source, o]) => ({
+      source,
+      label: registry.find((a) => a.id === source)?.label ?? source,
+      ...o,
+    })),
     backup: {
       lastBackupAt: isoOrNull(state.backup.lastBackupAt),
       problem: backupProblem(state.backup, now),

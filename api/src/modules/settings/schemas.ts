@@ -25,6 +25,17 @@ export const SettingsPayload = z
     lastVisitAt: isoNullable,
     /** Recorded by the PC's backup service; both null where none runs. */
     backup: z.object({ lastBackupAt: isoNullable, problem: z.string().nullable() }),
+    /** ATS sources whose every board failed in the latest polls. */
+    sourceOutages: z.array(
+      z.object({
+        source: z.string(),
+        label: z.string(),
+        since: z.string(),
+        lastSeenAt: z.string(),
+        error: z.string(),
+        boards: z.number().int(),
+      }),
+    ),
     sourceHealth: z.array(SourceHealthSchema),
     sources: z.array(SourceInfoSchema),
   })

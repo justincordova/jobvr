@@ -582,7 +582,11 @@ boards: those boards' health isn't written (no streak, no move to
 `needs_review`) and one warning names the source. A board that got a 404
 still counts it (that's about its slug). A circuit breaker in step 3
 stops requesting a source once its first 3 boards have all failed that way
-with none succeeding; the boards it never requested are left alone too. (Lever was unreachable
+with none succeeding; the boards it never requested are left alone too. Each
+poll records outages in `settings.source_outages` (`{ [source]: { since,
+lastSeenAt, error, boards } }`, `since` kept while it lasts) and clears a source
+once any of its boards answers; Settings → Sources, a notice on the feed and
+the header's poll status show it (`sourceOutages` on `GET /api/settings`). (Lever was unreachable
 for hours on 2026-11-17 and every Lever board had been marked needs review.)
 
 ### Freshness

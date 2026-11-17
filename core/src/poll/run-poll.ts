@@ -14,7 +14,7 @@ import { withAdvisoryLock } from "../lock";
 import { errorFields, formatDuration, type Logger, silentLogger } from "../logger";
 import { passesPollFilter } from "../matching";
 import { companyStateKey } from "../repos/companies";
-import { getSettingsState, setSettingsTimestamp } from "../repos/settings";
+import { getSettingsState, recordSourceOutages, setSettingsTimestamp } from "../repos/settings";
 import { isDue } from "../schedule";
 import { maxStoreWindowMs, type Settings } from "../settings";
 import { getAdapter } from "../sources/registry";
@@ -452,6 +452,12 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
       ...targets.filter((t) => t.kind === "aggregator"),
     ];
     const down = sourcesDown(targets, fetched);
+    const answered = new Set(
+      targets
+        .filter((t) => t.kind === "company" && "result" in (fetched.get(t.key) ?? {}))
+        .map((t) => t.adapter.id),
+    );
+    await recordSourceOutages(db, down, answered, startedAt);
     for (const [source, { count, error }] of down) {
       log.warn(
         { source, boards: count, error },

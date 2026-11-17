@@ -1,6 +1,16 @@
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
-import { Bookmark, EyeOff, Keyboard, LoaderCircle, Radar, Send, Sparkle, X } from 'lucide-react'
+import {
+  Bookmark,
+  CloudOff,
+  EyeOff,
+  Keyboard,
+  LoaderCircle,
+  Radar,
+  Send,
+  Sparkle,
+  X,
+} from 'lucide-react'
 import { type ComponentType, useEffect, useState } from 'react'
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { Button } from '@/components/ui/button'
@@ -184,6 +194,19 @@ export function FeedPage() {
         }
       />
       <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      {(settings.data?.sourceOutages.length ?? 0) > 0 && (
+        <p
+          role="status"
+          className="mt-3 flex animate-fade-in items-start gap-2 rounded-lg border border-signal/30 bg-signal-soft/30 px-3 py-2 text-sm text-dim"
+        >
+          <CloudOff className="mt-0.5 size-4 shrink-0 text-signal" />
+          <span>
+            {settings.data?.sourceOutages.map((o) => o.label).join(' and ')} look
+            {settings.data?.sourceOutages.length === 1 ? 's' : ''} down, so jobs from those boards
+            aren’t updating. jobvr retries every poll.
+          </span>
+        </p>
+      )}
       <JobDetailsDialog
         job={detailsJob}
         sourceLabel={sourceLabel}

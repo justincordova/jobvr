@@ -559,6 +559,15 @@ describe("runPoll: health and transactions", () => {
       // After 3 boards fail in a row the rest aren't requested (one more was already in flight)
       expect(env.calls.length).toBe(4);
     }
+    // Shown in the app: down since the first poll that saw it
+    expect((await getSettingsState(database.db)).sourceOutages).toEqual({
+      greenhouse: {
+        since: T0.toISOString(),
+        lastSeenAt: new Date(T0.getTime() + 2 * HOUR).toISOString(),
+        error: "HTTP 500",
+        boards: 5,
+      },
+    });
     // Lever was down for hours in Nov 2026: no board should end up "needs review"
     expect((await database.db.select().from(companies)).map((c) => c.status)).toEqual(
       slugs.map(() => "ok"),
@@ -588,6 +597,7 @@ describe("runPoll: health and transactions", () => {
     env.boards.set("a", []);
     env.failing.delete("a");
     await poll();
+    expect((await getSettingsState(database.db)).sourceOutages).toEqual({});
     expect(
       (await database.db.select().from(sourceState).where(eq(sourceState.source, "greenhouse")))
         .length,
