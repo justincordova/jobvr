@@ -50,7 +50,11 @@ export const runBackupCheck = async (options: {
     return { problem, alerted: false };
   }
   log.warn({ problem }, `backup problem: ${problem}; check docker compose logs backup`);
-  if (!options.notifier) return { problem, alerted: false };
+  if (!options.notifier) {
+    // Logged once a day, like the push
+    await setSettingsTimestamp(db, "backupAlertAt", now);
+    return { problem, alerted: false };
+  }
   try {
     await options.notifier.send({
       title: "jobvr backup problem",
