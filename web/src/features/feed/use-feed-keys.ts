@@ -87,7 +87,8 @@ export function useFeedKeys({
       setPicked({ id: job.id, index: at })
       const link = rowLink(job.id)
       link?.focus({ preventScroll: true })
-      link?.closest('li')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      link?.closest('li')?.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' })
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return

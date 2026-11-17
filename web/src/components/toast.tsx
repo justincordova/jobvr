@@ -121,8 +121,8 @@ function Toast({ toast: t }: { toast: ToastItem }) {
   }, [paused, open, id])
 
   return (
+    // The list is the live region; a role here too made screen readers read each toast twice
     <li
-      role={tone === 'error' ? 'alert' : 'status'}
       className={cn(
         'grid transition-[grid-template-rows,opacity] duration-200 ease-out',
         open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] overflow-hidden opacity-0',

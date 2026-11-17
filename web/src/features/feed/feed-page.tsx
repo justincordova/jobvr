@@ -137,8 +137,9 @@ export function FeedPage() {
   const locations = (settings.data?.settings.locations ?? [])
     .filter((l) => l.enabled)
     .map((l) => l.label)
+  // A view switch is a place you can go Back from; filter and search tweaks aren't
   const update = (next: Partial<FeedSearch>) =>
-    navigate({ search: (prev) => ({ ...prev, ...next }), replace: true })
+    navigate({ search: (prev) => ({ ...prev, ...next }), replace: !('view' in next) })
 
   const newCount = sessionNewCount()
   const list = (jobs.data?.jobs ?? []).filter((j) =>

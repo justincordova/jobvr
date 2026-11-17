@@ -69,6 +69,8 @@ function PollStatus() {
         )}
       />
       polled {relative(data.lastPollAt)}
+      {/* Not by colour alone: a late poll says so */}
+      {!healthy && <span className="text-stop">· late</span>}
       {down.length > 0 && (
         <span className="text-signal max-sm:sr-only">· {down.join(', ')} down</span>
       )}
