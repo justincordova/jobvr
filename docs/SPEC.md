@@ -59,9 +59,10 @@ jobvr/                       pnpm 12, Node 26
 │                            runPoll(), runNotify(), runCleanup(), ntfy notifier
 ├── poller/    @jobvr/poller src/sources/{greenhouse,lever,ashby,simplify}.ts,
 │                            src/sources/index.ts (registry), scripts/{poll,notify,
-│                            discover,seed}.ts, data/companies.json, fixtures
+│                            discover,seed,match-report}.ts, data/companies.json,
+│                            fixtures
 ├── api/       @jobvr/api    from hono-starter; modules/{jobs,companies,
-│                            suggestions,settings}; server.ts (API + web/dist + scheduler)
+│                            suggestions,settings}; src/index.ts (API + web/dist), src/scheduler
 ├── web/       @jobvr/web    from react-starter; TanStack Router/Query,
 │                            Tailwind + shadcn/ui, vite-plugin-pwa
 ├── docker-compose.yml       PC: app + postgres + tailscale + backup; no host ports
@@ -72,7 +73,7 @@ jobvr/                       pnpm 12, Node 26
 Dependency direction: `core` ← `poller` ← `api`; `web` imports only the typed
 client exported by `api` (`@jobvr/api/client`). `core` never imports `poller`:
 `runPoll` receives the adapter registry as an argument (dependency injection),
-and `server.ts` / `scripts/poll.ts` wire them together.
+and `api/src/index.ts` / `poller/scripts/poll.ts` wire them together.
 
 `core` and `poller` are internal packages consumed as TypeScript source (no
 build step): api's tsdown bundles them into `dist`, Vitest resolves them
@@ -89,7 +90,7 @@ the api client before the web app.
   persist → closures → suggestions → health.
 - **runNotify** (`core`): selects pushable jobs, sends one ntfy push, marks them notified.
 - **runCleanup** (`core`): daily retention delete.
-- **Scheduler** (`api/server.ts`): a tick every 5 min plus one tick 10 s after
+- **Scheduler** (`api/src/scheduler`, started by `api/src/index.ts`): a tick every 5 min plus one tick 10 s after
   boot. Each tick calls runPoll, runNotify, and runCleanup in sequence; each checks
   whether it is due and returns immediately if not. Disabled with
   `SCHEDULER_ENABLED=false`. (On AWS this becomes an EventBridge Scheduler rule
@@ -677,6 +678,11 @@ Template variables (`NODE_ENV`, `LOG_LEVEL`, `PORT`, `HOST`, `APP_NAME`,
 | `AUTH_MODE`         | `none` (MVP)                                                        |
 | `SCHEDULER_ENABLED` | `true` on the PC; `false` in Mac dev unless testing                 |
 | `TS_AUTHKEY`        | Tailscale auth key (compose only)                                   |
+| `POSTGRES_PASSWORD` | Database password, letters and digits (compose only)                |
+| `BACKUP_DIR`        | Where nightly dumps go, e.g. a synced folder (compose only)         |
+| `PC_LOG_LEVEL`      | The app's log level on the PC (compose only; default `info`)        |
+| `WEB_DIST_DIR`      | Built SPA the API serves (default `../web/dist`)                    |
+| `MIGRATIONS_DIR`    | Drizzle migrations folder (default `../core/drizzle`)               |
 
 ## Logging
 

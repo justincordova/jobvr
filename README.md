@@ -27,7 +27,8 @@ the API's typed client (`@jobvr/api/client`).
 
 ## Requirements
 
-- Node 26 (`nvm install 26 && nvm use`) and pnpm 12 (`npm i -g pnpm@12` or Corepack)
+- Node 26 (`nvm install 26 && nvm use`) and pnpm 12 (`npm i -g pnpm@12`; Node 26
+  no longer bundles Corepack, so for that route `npm i -g corepack && corepack enable`)
 - Docker (Postgres for development; Testcontainers for tests)
 
 ## Develop on the Mac
@@ -51,6 +52,7 @@ scripts instead:
 | `pnpm notify -- --dry-run`     | List the jobs a push would include, without sending                                                                                                       |
 | `pnpm notify`                  | Send the push now (skips the due check and quiet hours)                                                                                                   |
 | `pnpm seed`                    | Insert-only seed from `poller/data/companies.json` (also moves manual-only companies to a board the seed now names); slugs are confirmed via each ATS API |
+| `pnpm match-report`            | Fetch every board now and show which listings pass the matching rules and why the rest are rejected (writes nothing)                                      |
 | `pnpm discover "Company Name"` | Try slug guesses against Greenhouse, Lever, and Ashby; prints hits, writes nothing                                                                        |
 
 Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm fix`
