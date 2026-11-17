@@ -1247,5 +1247,222 @@
     "ats": "ashby",
     "slug": "openai-deployment-company",
     "notes": "OpenAI's forward deployed engineering company (absorbed Northslope; Nov 2026 audit)"
+  },
+  {
+    "name": "Ande",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "ande",
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "CrossCountry Consulting",
+    "tier": "Mid",
+    "ats": "lever",
+    "slug": "crosscountry-consulting",
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Kalshi",
+    "tier": "A",
+    "ats": "ashby",
+    "slug": "kalshi",
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Discernis",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "discernis",
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Alchemi",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "alchemi",
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Empire State Realty Trust",
+    "tier": "Corporate",
+    "ats": "lever",
+    "slug": "esrtreit",
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Pure",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "pureapp",
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "RainFocus",
+    "tier": "Mid",
+    "ats": "lever",
+    "slug": "rainfocus",
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Sola",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "sola",
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Bask Health",
+    "tier": "Startup",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Amazon",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "H2O.ai",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "General Dynamics Mission Systems",
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Salesforce",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "84 Lumber",
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Aerotech",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Akamai Technologies",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Cisco",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Citi",
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Empowerly",
+    "tier": "Startup",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "GHD",
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Google",
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Guidewire",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Innovative Defense Technologies",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Magnite",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Microsoft",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "NVIDIA",
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "ShadowDragon",
+    "tier": "Startup",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Wyetech",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "ZT Systems",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Shield AI",
+    "tier": "A",
+    "ats": "ashby",
+    "slug": "shield",
+    "notes": "Added from the Suggested backlog (Nov 2026)"
   }
 ]

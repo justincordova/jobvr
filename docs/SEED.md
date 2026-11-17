@@ -191,3 +191,23 @@ A Workday adapter was built and dropped: Workday's public JSON API covers 7 of
 these companies, but its Cloudflare front end answers Node's HTTP client with
 a bot challenge (`cf-mitigated: challenge`, HTTP 429) even for one request, and
 getting around that is off limits. Leidos would also need 60+ pages per poll.
+
+## Suggested backlog (Nov 2026)
+
+The 42 open suggestions were triaged:
+
+- Added and tracked (board found): Shield AI (A, Ashby `shield`; the
+  suggestion carried an Ashby board id instead), Kalshi (A), Ande, Discernis,
+  Alchemi, Pure, Sola (Startup), CrossCountry Consulting, RainFocus (Mid),
+  Empire State Realty Trust (Corporate).
+- Added as manual only (no supported board; tiered so their SimplifyJobs jobs
+  get a tier): Google, NVIDIA (S); Amazon, Microsoft, Salesforce (A); H2O.ai,
+  Aerotech, Akamai Technologies, Cisco, Guidewire, Innovative Defense
+  Technologies, Magnite, Wyetech, ZT Systems (Mid); Bask Health, Empowerly,
+  ShadowDragon (Startup); General Dynamics Mission Systems, 84 Lumber, Citi,
+  GHD (Corporate).
+- Dismissed: Memorial Hermann (hospital IT in Houston), Pragmatike (recruiting
+  agency), Star Mountain Capital (finance systems), eClerx (outsourcing),
+  Techstra Solutions and All Lines Technology (staffing/consulting).
+- Left open (unclear): Lumaril, Multi Media, Natuvion, neurohire.ai, Orbis
+  Operations.
