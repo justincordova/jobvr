@@ -122,11 +122,20 @@ they're JSON; in development (`pnpm dev`) and the scripts they're plain text:
 
 ### Backups
 
-The `backup` service writes `jobvr-YYYY-MM-DD.dump` at 03:00 Eastern and keeps
-the newest 14. Restore with:
+The `backup` service writes `jobvr-YYYY-MM-DD-HHMM.dump` at 03:00 Eastern and
+keeps the newest 14. Take one now (before an update, say) with:
 
 ```sh
-docker compose exec -T postgres pg_restore -U jobvr -d jobvr --clean --if-exists < backups/jobvr-2026-11-13.dump
+docker compose run --rm backup --once
+```
+
+Restore with the app stopped, so nothing writes mid-restore. A dump from an
+older version is fine: the app applies any newer migrations when it starts.
+
+```sh
+docker compose stop app
+docker compose exec -T postgres pg_restore -U jobvr -d jobvr --clean --if-exists < backups/jobvr-2026-11-13-0300.dump
+docker compose start app
 ```
 
 ## Add a company
