@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { adjustedPostedAt, initialEffectiveAt, mergedEffectiveAt } from "./freshness";
 import {
   annualUsd,
+  isEntryLevelTitle,
   isRemoteUs,
   isVisible,
   matchedLocationLabels,
@@ -28,6 +29,8 @@ describe("keyword rule", () => {
       "Engineer 2, New Grad",
       "New Grad Engineer",
       "Machine Learning Compiler Engineer",
+      "AI Forward Deployed Engineer",
+      "Forward Deployed Software Engineer, New Grad - Warp Speed",
     ]) {
       expect(ats(t), t).toBe(true);
     }
@@ -47,9 +50,30 @@ describe("keyword rule", () => {
       "Research Engineer / Scientist, Reinforcement Learning",
       "Technical Curriculum Developer, Technical Enablement",
       "Developer Advocate",
+      // Real titles that got through before (Nov 2026)
+      "Forward Deployed UX Designer",
+      "Forward Deployed Strategist",
+      "Forward Deployed Finance Engineer, Private Credit",
+      "Forward Deployed AI Accelerator, Marketing",
+      "Software Engineer - 2027 Interns",
+      "Mid-Level Software Engineer",
+      "Applications Development Intermediate Programmer Analyst - Officer",
+      "Machine Learning Researcher",
+      "Machine Learning Educator",
+      "Campus Recruiter, Machine Learning and Quantitative Research",
+      "Software Engineer (Part-Time)",
+      "Temporary Manager - Python Developer - Risk Technology & AI",
     ]) {
       expect(ats(t), t).toBe(false);
     }
+  });
+
+  it("a keyword's last word also matches its plural", () => {
+    expect(isEntryLevelTitle("Software Engineer, New Grads", S)).toBe(true);
+    expect(isEntryLevelTitle("Software Engineer - 2027 New Grads", S)).toBe(true);
+    expect(ats("Software Engineering Leads")).toBe(false);
+    // Only whole words: "ios" doesn't become "io", "grad" doesn't match "gradient"
+    expect(isEntryLevelTitle("Gradient Boosting Engineer", S)).toBe(false);
   });
 
   it("company boards can require a level keyword", () => {

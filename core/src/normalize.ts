@@ -22,9 +22,18 @@ export const containsSequence = (
   return false;
 };
 
-/** Token-based keyword match: `sr.` matches "Sr", `full stack` matches "Full-Stack". */
-export const matchesKeyword = (textTokens: readonly string[], keyword: string): boolean =>
-  containsSequence(textTokens, tokenize(keyword));
+/**
+ * Token-based keyword match: `sr.` matches "Sr", `full stack` matches
+ * "Full-Stack". The last word may also be plural: `intern` matches "2027
+ * Interns", `new grad` matches "New Grads".
+ */
+export const matchesKeyword = (textTokens: readonly string[], keyword: string): boolean => {
+  const needle = tokenize(keyword);
+  const last = needle.at(-1);
+  if (containsSequence(textTokens, needle)) return true;
+  if (!last || !/^[a-z]{2,}$/.test(last)) return false;
+  return containsSequence(textTokens, [...needle.slice(0, -1), `${last}s`]);
+};
 
 export const matchesAnyKeyword = (textTokens: readonly string[], keywords: readonly string[]) =>
   keywords.some((k) => matchesKeyword(textTokens, k));
