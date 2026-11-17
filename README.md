@@ -57,7 +57,10 @@ scripts instead:
 
 Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm fix`
 to apply Biome / Prettier fixes. Commits follow Conventional Commits (enforced
-by commitlint).
+by commitlint). CI runs the same checks plus web formatting, commit messages,
+shellcheck on `deploy/backup.sh`, a `docker compose config` check and a Docker
+smoke test. The web app stays on TypeScript 6 while the rest uses 7, because
+typescript-eslint supports TypeScript below 6.1 only.
 
 ## Deploy on the Windows PC
 

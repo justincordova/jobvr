@@ -32,6 +32,7 @@ backup() {
     record "${err:-pg_dump failed}"
     return 1
   fi
+  # shellcheck disable=SC2012 # our own dump names: no spaces or newlines
   ls -1t /backups/jobvr-*.dump 2>/dev/null | tail -n +"$((KEEP + 1))" | xargs -r rm --
 }
 
