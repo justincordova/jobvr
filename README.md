@@ -76,6 +76,10 @@ One-time setup:
 
 Then on the PC:
 
+The repo's `.gitattributes` keeps LF line endings on Windows too (a CRLF
+`deploy/backup.sh` fails in bash), so clone it as is and don't change
+`core.autocrlf` for this repo.
+
 ```sh
 git clone <repo> jobvr && cd jobvr
 cp .env.example .env

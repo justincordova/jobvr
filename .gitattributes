@@ -1,0 +1,6 @@
+# LF everywhere, including Windows checkouts: deploy/backup.sh runs in bash and
+# dies on CRLF ("set: pipefail: invalid option name").
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.woff2 binary
