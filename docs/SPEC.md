@@ -796,7 +796,8 @@ waiting version shows a "Reload" toast instead of swapping code under unsaved
 edits, and applies on the next cold launch if ignored. The service worker
 precaches the app shell; API reads (`GET /api/{jobs,settings,companies,
 suggestions}`) are network-first, falling back to their last response (7 days,
-60 entries) only when the request fails, marked `X-Jobvr-Offline: 1`. Then (or
+60 entries) only when the request fails or takes over 6 s (a hanging
+connection), marked `X-Jobvr-Offline: 1`. Then (or
 when the browser reports no connection) the header shows "offline · saved
 data"; writes fail with "Can't reach jobvr".
 

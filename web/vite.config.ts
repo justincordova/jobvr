@@ -58,6 +58,8 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: {
               cacheName: 'jobvr-api',
+              // A dead subway signal can hang a request for a minute; fall back after 6 s
+              networkTimeoutSeconds: 6,
               expiration: { maxEntries: 60, maxAgeSeconds: 7 * 24 * 60 * 60 },
               cacheableResponse: { statuses: [200] },
               plugins: [
