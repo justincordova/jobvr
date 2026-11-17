@@ -143,3 +143,18 @@ Smartsheet (`smartsheet`), Affirm (`affirm`), StubHub (`stubhubinc`) on
 Greenhouse; Meow (`meow`), Spruce (`spruceid`), Quora (`quora`), Madhive
 (`madhive`) on Ashby. Lumos (Ashby `lumos`) was skipped: its only nearby role
 is "Remote - East Coast", which the Remote-US rule doesn't accept.
+
+## Added Nov 2026 (wider board scan)
+
+All ~470 Greenhouse/Lever/Ashby boards listed in New-Grad-Jobs' `config.yml`
+(MIT) were fetched and run through jobvr's own rules (location, title, store
+window, experience). The 31 boards with at least one job that would show in
+the feed were added, tiered by judgment (notes say where they came from):
+OpenAI, Anthropic (S); Coinbase, Notion, Airbnb, Robinhood, Reddit, DoorDash,
+DRW, ElevenLabs, Mercury, Cohere (A); GitLab, Betterment, Tailscale,
+PlanetScale, ClickHouse, Flow Traders, Pinecone, Vultr, CentralReach (Mid);
+NICE, ALTEN Technology USA, PAR Technology (Corporate); Baseten, Mercor,
+Fluidstack, Safe Security, Rox Data Corp, Swarm Aero, ATOMS (Startup).
+Skipped: BJAK (posts each role in 100+ countries), and boards whose only
+matches were titles the rules now reject (Roblox contract role, Justworks GTM,
+Airbyte support, Proconex services).

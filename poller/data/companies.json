@@ -926,5 +926,284 @@
     "tier": "Startup",
     "ats": "ashby",
     "slug": "madhive"
+  },
+  {
+    "name": "Airbnb",
+    "city": "Remote",
+    "state": "US",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "airbnb",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "GitLab",
+    "city": "Remote",
+    "state": "US",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "gitlab",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Mercury",
+    "city": "NYC/Remote",
+    "state": "NY/US",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "mercury",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "PlanetScale",
+    "city": "Remote",
+    "state": "US",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "planetscale",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Robinhood",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "robinhood",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Reddit",
+    "city": "Remote",
+    "state": "US",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "reddit",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Tailscale",
+    "city": "Remote",
+    "state": "US",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "tailscale",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "ATOMS",
+    "city": "PA",
+    "state": "PA",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "cssmerge",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "DRW",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "drweng",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Coinbase",
+    "city": "Remote",
+    "state": "US",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "coinbase",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Flow Traders",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "flowtraders",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Anthropic",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "S",
+    "ats": "greenhouse",
+    "slug": "anthropic",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Betterment",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "betterment",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "ALTEN Technology USA",
+    "city": "NJ",
+    "state": "NJ",
+    "tier": "Corporate",
+    "ats": "greenhouse",
+    "slug": "altentechnologyusa",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "CentralReach",
+    "city": "NJ",
+    "state": "NJ",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "centralreach",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "DoorDash",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "doordashusa",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "NICE",
+    "city": "Remote",
+    "state": "US",
+    "tier": "Corporate",
+    "ats": "greenhouse",
+    "slug": "nice",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Safe Security",
+    "city": "Remote",
+    "state": "US",
+    "tier": "Startup",
+    "ats": "lever",
+    "slug": "safe",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Notion",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "A",
+    "ats": "ashby",
+    "slug": "notion",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Cohere",
+    "city": "NYC/Remote",
+    "state": "NY/US",
+    "tier": "A",
+    "ats": "ashby",
+    "slug": "cohere",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Baseten",
+    "city": "NYC/Remote",
+    "state": "NY/US",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "baseten",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "OpenAI",
+    "city": "NYC/Remote",
+    "state": "NY/US",
+    "tier": "S",
+    "ats": "ashby",
+    "slug": "openai",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Pinecone",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "ashby",
+    "slug": "pinecone",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "ElevenLabs",
+    "city": "Remote",
+    "state": "US",
+    "tier": "A",
+    "ats": "ashby",
+    "slug": "elevenlabs",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "ClickHouse",
+    "city": "NYC/Remote",
+    "state": "NY/US",
+    "tier": "Mid",
+    "ats": "ashby",
+    "slug": "clickhouse",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Fluidstack",
+    "city": "NYC/Remote",
+    "state": "NY/US",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "fluidstack",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Mercor",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "mercor",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Rox Data Corp",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "rox-data-corp",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Swarm Aero",
+    "city": "Remote",
+    "state": "US",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "swarmaero",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "Vultr",
+    "city": "Remote",
+    "state": "US",
+    "tier": "Mid",
+    "ats": "ashby",
+    "slug": "vultr",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
+  },
+  {
+    "name": "PAR Technology",
+    "city": "PA/NYC",
+    "state": "PA/NY",
+    "tier": "Corporate",
+    "ats": "ashby",
+    "slug": "PAR Technology",
+    "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
   }
 ]
