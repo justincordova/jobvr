@@ -53,7 +53,7 @@ const nonZero = (counts: Record<string, number | boolean>) =>
   Object.fromEntries(Object.entries(counts).filter(([, v]) => v !== 0 && v !== false));
 
 /** Expected to pass on its own: network errors, timeouts, 5xx, 429 (not 404s). */
-const transient = (f: Fetched) =>
+const transient = (f: Fetched): f is Extract<Fetched, { error: string }> =>
   "error" in f &&
   (typeof f.fields.status !== "number" || f.fields.status >= 500 || f.fields.status === 429);
 
