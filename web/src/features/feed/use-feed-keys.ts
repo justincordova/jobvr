@@ -22,6 +22,14 @@ const VIEW_KEYS: Record<string, View> = { '1': 'feed', '2': 'saved', '3': 'appli
 const rowLink = (id: string) =>
   document.querySelector<HTMLAnchorElement>(`[data-job-id="${CSS.escape(id)}"] a`)
 
+/** The focused control a key would act on natively (a button, a radio, a link). */
+const controlOf = (target: EventTarget | null) =>
+  target instanceof Element
+    ? target.closest(
+        'a, button, summary, [role="radio"], [role="switch"], [role="tab"], [role="menuitem"]',
+      )
+    : null
+
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   Boolean(target.closest('input, textarea, select, [contenteditable], [role="dialog"]'))
@@ -82,21 +90,22 @@ export function useFeedKeys({
       const { list, index, onState, onView, onHelp } = latest.current
       const job = index >= 0 ? list[index] : undefined
       const key = e.key
+      const control = controlOf(e.target)
+      // Arrows belong to a focused radio group or menu; on a row's title they move the selection
+      const arrowsFree = !control || control.matches('[data-job-id] a')
       let handled = true
-      if (key === 'j' || key === 'ArrowDown') select(index + 1)
-      else if (key === 'k' || key === 'ArrowUp') select(index < 0 ? 0 : index - 1)
+      if (key === 'j' || (key === 'ArrowDown' && arrowsFree)) select(index + 1)
+      else if (key === 'k' || (key === 'ArrowUp' && arrowsFree)) select(index < 0 ? 0 : index - 1)
       else if (key === '?') onHelp()
       else if (key in VIEW_KEYS) onView(VIEW_KEYS[key] as View)
       else if (key === 'u') handled = toast.undoLatest()
       else if (key === 'Escape' && job) {
         setPicked(null)
         ;(document.activeElement as HTMLElement | null)?.blur()
-      } else if (job && (key === 'o' || key === 'Enter')) {
-        // Enter on the focused title link already opens it
-        if (key === 'o' || document.activeElement !== rowLink(job.id)) {
-          const href = safeHref(job.url)
-          if (href) window.open(href, '_blank', 'noopener,noreferrer')
-        } else handled = false
+      } else if (job && (key === 'o' || (key === 'Enter' && !control))) {
+        // Enter on a focused control does what that control does (a title link opens itself)
+        const href = safeHref(job.url)
+        if (href) window.open(href, '_blank', 'noopener,noreferrer')
       } else if (job && key === 'a') onState(job, job.state === 'applied' ? 'new' : 'applied')
       else if (job && key === 's') onState(job, job.state === 'saved' ? 'new' : 'saved')
       else if (job && key === 'h') onState(job, job.state === 'hidden' ? 'new' : 'hidden')

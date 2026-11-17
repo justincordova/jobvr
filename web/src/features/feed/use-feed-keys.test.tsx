@@ -13,9 +13,11 @@ const job = (id: string): Job =>
 function Feed({
   onState,
   onView,
+  onButton = () => {},
 }: {
   onState: (id: string, state: Job['state']) => void
   onView: (view: View) => void
+  onButton?: (id: string) => void
 }) {
   const [list, setList] = useState(['1', '2', '3'].map(job))
   const { selected, focusRow } = useFeedKeys({
@@ -34,13 +36,16 @@ function Feed({
           <a href={j.url} onFocus={() => focusRow(j.id)}>
             {j.title}
           </a>
+          <button type="button" onClick={() => onButton(j.id)}>
+            Save {j.id}
+          </button>
         </li>
       ))}
     </ul>
   )
 }
 
-const current = () => document.querySelector('[aria-current="true"]')?.textContent
+const current = () => document.querySelector('[aria-current="true"] a')?.textContent
 
 // jsdom has no layout
 beforeAll(() => {
@@ -70,6 +75,23 @@ describe('feed keyboard triage', () => {
 
     await user.keyboard('3')
     expect(onView).toHaveBeenCalledWith('applied')
+  })
+
+  it('lets Enter press a focused button instead of opening the posting', async () => {
+    const onButton = vi.fn()
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    render(<Feed onState={vi.fn()} onView={vi.fn()} onButton={onButton} />)
+    const user = userEvent.setup()
+    await user.keyboard('j')
+    await user.tab()
+    expect(document.activeElement).toBe(screen.getByText('Save 1'))
+    await user.keyboard('{Enter}')
+    expect(onButton).toHaveBeenCalledWith('1')
+    expect(open).not.toHaveBeenCalled()
+    // "o" still opens the selected posting from anywhere
+    await user.keyboard('o')
+    expect(open).toHaveBeenCalledWith('https://x.test/1', '_blank', 'noopener,noreferrer')
+    open.mockRestore()
   })
 
   it('ignores keys typed into fields and with modifiers', async () => {

@@ -6,6 +6,8 @@ import type { Job, JobList } from '@/lib/types'
 
 export type JobState = Job['state']
 
+const JOB_STATE_KEY = ['job-state'] as const
+
 const message = (from: JobState, to: JobState) => {
   if (to === 'applied') return 'Marked applied'
   if (to === 'saved') return 'Saved for later'
@@ -19,6 +21,7 @@ export function useJobActions() {
   const toast = useToast()
 
   const setState = useMutation({
+    mutationKey: JOB_STATE_KEY,
     // `also`: reposts of the same role shown on this row; they move together
     mutationFn: ({
       id,
@@ -66,7 +69,13 @@ export function useJobActions() {
         undo: () => setState.mutate({ id, state: prev, also, silent: true }),
       })
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.allJobs }),
+    // Refetch once the last of several quick actions settles: an earlier one's
+    // refetch would bring back a row hidden after it was sent
+    onSettled: () => {
+      if (qc.isMutating({ mutationKey: JOB_STATE_KEY }) === 1) {
+        return qc.invalidateQueries({ queryKey: queryKeys.allJobs })
+      }
+    },
   })
 
   return { setState }

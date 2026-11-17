@@ -103,9 +103,16 @@ export function FeedPage() {
   })
   const { setState } = useJobActions()
 
+  // Only the plain feed counts as a visit: opening on Saved (a home-screen
+  // shortcut) or a filtered list would record it and lose the feed's highlights
+  const plainFeed =
+    view === 'feed' &&
+    activeFilterCount(search) === 0 &&
+    (search.age ?? DEFAULT_AGE) === DEFAULT_AGE
   useEffect(() => {
-    if (jobs.data && !jobs.isPlaceholderData && captureFirstResponse(jobs.data)) recordVisit()
-  }, [jobs.data, jobs.isPlaceholderData, recordVisit])
+    if (!plainFeed || !jobs.data || jobs.isPlaceholderData) return
+    if (captureFirstResponse(jobs.data)) recordVisit()
+  }, [plainFeed, jobs.data, jobs.isPlaceholderData, recordVisit])
 
   const sources = settings.data?.sources ?? []
   const sourceLabel = (id: string) => sources.find((s) => s.id === id)?.label ?? id
