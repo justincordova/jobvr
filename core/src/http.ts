@@ -14,6 +14,10 @@ export type JsonResult =
   | { status: "not_modified" }
   | { status: "ok"; etag: string | null; data: unknown };
 
+export type TextResult =
+  | { status: "not_modified" }
+  | { status: "ok"; etag: string | null; data: string };
+
 export interface GetOptions {
   etag?: string | null;
   signal?: AbortSignal;
@@ -22,6 +26,8 @@ export interface GetOptions {
 export interface HttpClient {
   /** GET a JSON document. Throws HttpError on transport errors and any status other than 2xx/304. */
   getJson(url: string, options?: GetOptions): Promise<JsonResult>;
+  /** GET a text document (a GitHub README), with the same retries, ETag and size cap. */
+  getText(url: string, options?: GetOptions): Promise<TextResult>;
 }
 
 export interface HttpClientDeps {
@@ -92,12 +98,13 @@ export const createHttpClient = (deps: HttpClientDeps = {}): HttpClient => {
   const attempt = async (
     url: string,
     options: GetOptions,
+    json: boolean,
   ): Promise<{ result?: JsonResult; retryable: boolean; error?: HttpError; waitMs?: number }> => {
     const signals = [AbortSignal.timeout(timeoutMs)];
     if (options.signal) signals.push(options.signal);
     const headers: Record<string, string> = {
       "User-Agent": USER_AGENT,
-      Accept: "application/json",
+      Accept: json ? "application/json" : "text/plain, text/markdown, */*",
       "Accept-Encoding": "gzip",
     };
     if (options.etag) headers["If-None-Match"] = options.etag;
@@ -119,7 +126,11 @@ export const createHttpClient = (deps: HttpClientDeps = {}): HttpClient => {
       try {
         const text = await readCapped(res, maxBytes);
         return {
-          result: { status: "ok", etag: res.headers.get("etag"), data: JSON.parse(text) },
+          result: {
+            status: "ok",
+            etag: res.headers.get("etag"),
+            data: json ? JSON.parse(text) : text,
+          },
           retryable: false,
         };
       } catch (err) {
@@ -146,21 +157,24 @@ export const createHttpClient = (deps: HttpClientDeps = {}): HttpClient => {
     return { retryable: false, error };
   };
 
+  const get = async (url: string, options: GetOptions, json: boolean): Promise<JsonResult> => {
+    const first = await attempt(url, options, json);
+    if (first.result) return first.result;
+    if (!first.retryable) throw first.error;
+    const waitMs =
+      first.waitMs !== undefined
+        ? Math.min(first.waitMs, HTTP_MAX_RETRY_AFTER_MS)
+        : 1000 + random() * 2000;
+    await sleep(waitMs, options.signal).catch(() => {
+      throw new HttpError("Aborted");
+    });
+    const second = await attempt(url, options, json);
+    if (second.result) return second.result;
+    throw second.error;
+  };
+
   return {
-    async getJson(url, options = {}) {
-      const first = await attempt(url, options);
-      if (first.result) return first.result;
-      if (!first.retryable) throw first.error;
-      const waitMs =
-        first.waitMs !== undefined
-          ? Math.min(first.waitMs, HTTP_MAX_RETRY_AFTER_MS)
-          : 1000 + random() * 2000;
-      await sleep(waitMs, options.signal).catch(() => {
-        throw new HttpError("Aborted");
-      });
-      const second = await attempt(url, options);
-      if (second.result) return second.result;
-      throw second.error;
-    },
+    getJson: (url, options = {}) => get(url, options, true),
+    getText: async (url, options = {}) => (await get(url, options, false)) as TextResult,
   };
 };

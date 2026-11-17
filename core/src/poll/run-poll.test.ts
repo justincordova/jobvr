@@ -145,7 +145,10 @@ const poll = (force = true, logger?: Logger) =>
   runPoll({
     database,
     registry: env.registry,
-    http: { getJson: async () => ({ status: "not_modified" }) },
+    http: {
+      getJson: async () => ({ status: "not_modified" }),
+      getText: async () => ({ status: "not_modified" }),
+    },
     force,
     now: () => clock,
     logger,

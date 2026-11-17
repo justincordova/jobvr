@@ -79,4 +79,17 @@ describe("http client", () => {
     });
     await expect(client.getJson("https://x.test")).rejects.toThrow(/exceeds/);
   });
+
+  it("returns text as is, with its etag, retrying a 5xx like JSON", async () => {
+    const { client, requests } = scripted(
+      new Response("", { status: 503 }),
+      new Response("| a | b |", { headers: { etag: '"md"' } }),
+    );
+    expect(await client.getText("https://x.test/README.md")).toEqual({
+      status: "ok",
+      etag: '"md"',
+      data: "| a | b |",
+    });
+    expect(requests).toHaveLength(2);
+  });
 });
