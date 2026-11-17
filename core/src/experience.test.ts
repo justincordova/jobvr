@@ -59,4 +59,11 @@ describe("requiredYears", () => {
       ),
     ).toBe(5);
   });
+
+  it("stays fast on long runs of long words (no catastrophic backtracking)", () => {
+    const text = `In 2 years ${"observability/monitoring/alerting ".repeat(40)}done`;
+    const start = performance.now();
+    expect(requiredYears(text)).toBeNull();
+    expect(performance.now() - start).toBeLessThan(50);
+  });
 });
