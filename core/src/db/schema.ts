@@ -27,7 +27,12 @@ export const settings = pgTable(
     id: integer("id").primaryKey().default(1),
     data: jsonb("data").notNull().default({}),
     lastVisitAt: ts("last_visit_at"),
+    /** When the latest poll started (also how "is a poll due" is decided). */
     lastPollAt: ts("last_poll_at"),
+    /** When the latest poll finished writing its results (what /health checks). */
+    lastPollOkAt: ts("last_poll_ok_at"),
+    /** When the app last pushed a "polling stalled" alert (at most one a day). */
+    pollStallAlertAt: ts("poll_stall_alert_at"),
     lastPushAt: ts("last_push_at"),
     lastCleanupAt: ts("last_cleanup_at"),
     /** Written by deploy/backup.sh after each pg_dump (the app only reads them). */

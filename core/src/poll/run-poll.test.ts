@@ -682,6 +682,8 @@ describe("runPoll: health and transactions", () => {
     const summary = await poll();
     expect(summary.ran && summary.targets[0]?.status).toBe("failed");
     expect(await allJobs()).toHaveLength(0);
+    // A board failing doesn't make the poll fail: /health sees it finished
+    expect((await getSettingsState(database.db)).lastPollOkAt).toEqual(clock);
     const state = await stateOf(companyStateKey(acme.id));
     expect(state).toMatchObject({ etag: null, consecutiveFailures: 1, baselinedAt: null });
   });

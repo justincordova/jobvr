@@ -9,6 +9,7 @@ import {
   runCleanup,
   runNotify,
   runPoll,
+  runPollStallCheck,
   SCHEDULER_FIRST_TICK_MS,
   SCHEDULER_TICK_MS,
 } from "@jobvr/core";
@@ -35,6 +36,7 @@ export const startScheduler = (options: SchedulerOptions) => {
   let running: number | null = null;
   let current: Promise<void> = Promise.resolve();
   const stopping = new AbortController();
+  const startedAt = new Date();
 
   const step = async (name: string, fn: () => Promise<unknown>) => {
     try {
@@ -67,6 +69,9 @@ export const startScheduler = (options: SchedulerOptions) => {
       await step("cleanup", () => runCleanup({ database, logger }));
       if (stopping.signal.aborted) return;
       await step("backup check", () => runBackupCheck({ database, notifier, logger }));
+      await step("poll check", () =>
+        runPollStallCheck({ database, notifier, bootedAt: startedAt, logger }),
+      );
       log.debug({}, `tick done in ${formatDuration(performance.now() - running)}`);
     } finally {
       running = null;

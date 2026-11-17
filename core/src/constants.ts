@@ -30,6 +30,11 @@ export const SOURCE_OUTAGE_MIN_TARGETS = 3;
 export const CLEANUP_INTERVAL_MS = DAY;
 
 export const POLL_BUDGET_MS = 5 * MINUTE;
+/**
+ * Polling is stalled when no poll has finished for this many poll intervals
+ * (counting from boot, so a fresh process gets time for its first poll).
+ */
+export const STALE_POLL_INTERVALS = 3;
 
 export const HTTP_TIMEOUT_MS = 15_000;
 export const HTTP_MAX_RETRY_AFTER_MS = 30_000;

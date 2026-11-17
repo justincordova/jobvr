@@ -592,6 +592,8 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
         });
       }
 
+      // Boards failing is their own health; the poll itself got through
+      await setSettingsTimestamp(db, "lastPollOkAt", clock());
       const summary = summarize(outcomes);
       const ms = performance.now() - runStarted;
       log[summary.failed > 0 ? "warn" : "info"](

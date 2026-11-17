@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { setSettingsTimestamp } from "@jobvr/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "@/app";
 import { BODY_LIMIT_BYTES } from "@/constants";
@@ -22,7 +23,7 @@ describe("App", () => {
   it("GET /health returns ok", async () => {
     const res = await app.request("/health");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: "ok", lastPollAt: null });
+    expect(await res.json()).toEqual({ status: "ok", lastPollAt: null, lastPollOkAt: null });
   });
 
   it("returns the 404 envelope for unknown routes", async () => {
@@ -39,7 +40,25 @@ describe("App", () => {
     now = new Date(now.getTime() + 31 * 60_000);
     const stale = await scheduled.request("/health");
     expect(stale.status).toBe(503);
-    expect(await stale.json()).toEqual({ status: "stale", lastPollAt: null });
+    expect(await stale.json()).toEqual({ status: "stale", lastPollAt: null, lastPollOkAt: null });
+  });
+
+  it("GET /health is 503 when polls start but none finishes", async () => {
+    let now = new Date("2026-11-17T12:00:00Z");
+    const scheduled = createApp({ ...ctx.deps, now: () => now }, { schedulerEnabled: true });
+    now = new Date(now.getTime() + 31 * 60_000);
+    // A poll started a minute ago (then crashed); the last one that finished is old
+    await setSettingsTimestamp(
+      ctx.deps.database.db,
+      "lastPollAt",
+      new Date(now.getTime() - 60_000),
+    );
+    const stale = await scheduled.request("/health");
+    expect(stale.status).toBe(503);
+    await setSettingsTimestamp(ctx.deps.database.db, "lastPollOkAt", now);
+    expect((await scheduled.request("/health")).status).toBe(200);
+    await setSettingsTimestamp(ctx.deps.database.db, "lastPollAt", null);
+    await setSettingsTimestamp(ctx.deps.database.db, "lastPollOkAt", null);
   });
 
   it("sets security headers and echoes a request ID", async () => {

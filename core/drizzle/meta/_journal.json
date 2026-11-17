@@ -50,6 +50,13 @@
       "when": 1794950642771,
       "tag": "0006_source_outages",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794957601907,
+      "tag": "0007_poll_ok",
+      "breakpoints": true
     }
   ]
 }

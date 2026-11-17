@@ -13,6 +13,8 @@ export interface SettingsState {
   settings: Settings;
   lastVisitAt: Date | null;
   lastPollAt: Date | null;
+  lastPollOkAt: Date | null;
+  pollStallAlertAt: Date | null;
   lastPushAt: Date | null;
   lastCleanupAt: Date | null;
   backup: BackupStatus;
@@ -68,6 +70,8 @@ export interface BackupStatus {
 export type SettingsTimestamp =
   | "lastVisitAt"
   | "lastPollAt"
+  | "lastPollOkAt"
+  | "pollStallAlertAt"
   | "lastPushAt"
   | "lastCleanupAt"
   | "backupAlertAt";
@@ -86,6 +90,8 @@ export const getSettingsState = async (db: DbOrTx): Promise<SettingsState> => {
     settings: parseStoredSettings(row.data),
     lastVisitAt: row.lastVisitAt,
     lastPollAt: row.lastPollAt,
+    lastPollOkAt: row.lastPollOkAt,
+    pollStallAlertAt: row.pollStallAlertAt,
     lastPushAt: row.lastPushAt,
     lastCleanupAt: row.lastCleanupAt,
     backup: {

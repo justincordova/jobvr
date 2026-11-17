@@ -1,7 +1,13 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { ConflictError, getSettingsState, InvalidError, NotFoundError } from "@jobvr/core";
+import {
+  ConflictError,
+  getSettingsState,
+  InvalidError,
+  NotFoundError,
+  pollStalledFor,
+} from "@jobvr/core";
 import { HTTPException } from "hono/http-exception";
 import { methodNotAllowed } from "hono/method-not-allowed";
 import { requestId } from "hono/request-id";
@@ -30,7 +36,6 @@ export interface AppOptions {
 }
 
 /** /health turns 503 when the last poll is older than this many poll intervals. */
-const STALE_POLL_INTERVALS = 3;
 
 /**
  * Build and configure the Hono application.
@@ -137,17 +142,26 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
       try {
         const state = await getSettingsState(deps.database.db);
         const lastPollAt = state.lastPollAt?.toISOString() ?? null;
+        const lastPollOkAt = state.lastPollOkAt?.toISOString() ?? null;
         if (options.schedulerEnabled) {
-          // A fresh process gets one stale window to run its first poll
-          const since = Math.max(state.lastPollAt?.getTime() ?? 0, bootedAt.getTime());
-          const staleMs = STALE_POLL_INTERVALS * state.settings.pollEveryMinutes * 60_000;
-          if (deps.now().getTime() - since > staleMs) {
-            return c.json({ status: "stale" as const, lastPollAt }, 503);
+          // A poll that starts and then crashes every time is stalled too
+          const stalled = pollStalledFor(
+            state.lastPollOkAt,
+            bootedAt,
+            state.settings.pollEveryMinutes,
+            deps.now(),
+          );
+          if (stalled !== null) {
+            return c.json({ status: "stale" as const, lastPollAt, lastPollOkAt }, 503);
           }
         }
-        return c.json({ status: "ok" as const, lastPollAt }, 200);
-      } catch {
-        return c.json({ status: "unavailable" as const, lastPollAt: null }, 503);
+        return c.json({ status: "ok" as const, lastPollAt, lastPollOkAt }, 200);
+      } catch (err) {
+        (c.var.logger ?? logger).error({ err }, "health check could not read the database");
+        return c.json(
+          { status: "unavailable" as const, lastPollAt: null, lastPollOkAt: null },
+          503,
+        );
       }
     })
     .route("/api/jobs", jobsRouter)

@@ -76,6 +76,7 @@ describe("scheduler", () => {
       "notify crashed; the next tick tries again",
       "cleanup crashed; the next tick tries again",
       "backup check crashed; the next tick tries again",
+      "poll check crashed; the next tick tries again",
     ]);
   });
 });
