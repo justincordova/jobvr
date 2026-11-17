@@ -33,6 +33,8 @@ export const JobSchema = z
     entryLevel: z.boolean(),
     /** The location strings that match an enabled location (shown first). */
     matchedLocations: z.array(z.string()),
+    /** Other postings of the same role (same company, title, and locations); actions apply to all. */
+    duplicateIds: z.array(z.string()),
     sources: z.array(JobSourceSchema),
   })
   .openapi("Job");

@@ -16,9 +16,10 @@ const at = (hoursAgo: number) => new Date(ctx.clock.getTime() - hoursAgo * HOUR)
 const insertJob = async (
   id: string,
   extra: Partial<typeof schema.jobs.$inferInsert> = {},
+  // Distinct roles by default ("gh:1" -> "... - Team gh1"); identical ones collapse into one row
   source = {
     source: "greenhouse",
-    title: "Software Engineer, New Grad",
+    title: `Software Engineer, New Grad - Team ${id.replace(/\W/g, "")}`,
     category: null as string | null,
   },
 ) => {
@@ -76,6 +77,7 @@ describe("jobs routes", () => {
     // Default age is "all"; 3d drops the 100 h old job
     expect(data.data.jobs.map((j) => j.id)).toEqual(["gh:2", "sj:6", "gh:1", "gh:5"]);
     expect(data.data.jobs[0]).toMatchObject({ tier: "Unlisted", isNew: false, state: "new" });
+    expect(data.data.jobs[0]?.duplicateIds).toEqual([]);
     const recent = await body<{ data: { jobs: { id: string }[] } }>(
       await client.api.jobs.$get({ query: { age: "3d" } }),
     );
@@ -116,6 +118,17 @@ describe("jobs routes", () => {
 
     const bad = await client.api.jobs.$get({ query: { tier: "Z" as "S" } });
     expect(bad.status).toBe(400);
+  });
+
+  it("shows a role posted several times as one row (H2O.ai posted the same role 3 times)", async () => {
+    const same = { source: "simplify", title: "Software Engineer", category: "Software" };
+    await insertJob("sj:a", { effectiveAt: at(3) }, same);
+    await insertJob("sj:b", { effectiveAt: at(1) }, same);
+    await insertJob("sj:c", { effectiveAt: at(2) }, same);
+    const res = await body<{ data: { jobs: { id: string; duplicateIds: string[] }[] } }>(
+      await client.api.jobs.$get({ query: {} }),
+    );
+    expect(res.data.jobs.map((j) => [j.id, j.duplicateIds])).toEqual([["sj:b", ["sj:c", "sj:a"]]]);
   });
 
   it("counts new jobs since the last visit", async () => {

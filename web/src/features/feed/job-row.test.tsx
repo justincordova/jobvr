@@ -23,6 +23,7 @@ const job = (extra: Partial<Job> = {}): Job => ({
   isNew: false,
   entryLevel: true,
   matchedLocations: ['New York, NY'],
+  duplicateIds: [],
   sources: [
     { source: 'greenhouse', url: '', title: '', category: null, removedAt: null, requiredYears: 0 },
     {
@@ -77,6 +78,11 @@ describe('JobRow', () => {
     // Phone line shows one place, the desktop column two
     expect(screen.getByText('King of Prussia, PA +2')).toBeInTheDocument()
     expect(screen.getByText('King of Prussia, PA · Farmington Hills, MI +1')).toBeInTheDocument()
+  })
+
+  it('notes reposts of the same role', () => {
+    renderRow(job({ duplicateIds: ['gh:2', 'gh:3'] }))
+    expect(screen.getByText('· 3 postings')).toBeInTheDocument()
   })
 
   it('shows the experience a description asks for', () => {

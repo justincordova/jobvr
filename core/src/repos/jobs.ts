@@ -10,6 +10,7 @@ import {
   passesLocationRule,
   type SourceKind,
 } from "../matching";
+import { normalizeCompanyName, tokenize } from "../normalize";
 import { startOfEasternDay } from "../schedule";
 import type { Settings } from "../settings";
 import { getAdapter } from "../sources/registry";
@@ -71,6 +72,37 @@ export type JobWithFlags = JobRecord & {
   isNew: boolean;
   entryLevel: boolean;
   matchedLocations: string[];
+  /** Other postings of the same role (see `collapseReposts`), newest first. */
+  duplicateIds: string[];
+};
+
+/**
+ * Same company, same title, same locations: a company posting one role
+ * several times (H2O.ai's three "Software Engineer" listings). Distinct
+ * postings stay separate in the database; the feed shows one row.
+ */
+const repostKey = (j: JobRecord) =>
+  [
+    j.companyId ?? normalizeCompanyName(j.companyName),
+    tokenize(j.title).join(" "),
+    j.locations
+      .map((l) => tokenize(l).join(" "))
+      .sort()
+      .join("|"),
+  ].join("\u0000");
+
+/** Keeps the first (newest) job of each repost group and lists the others on it. */
+export const collapseReposts = <T extends JobRecord>(
+  list: readonly T[],
+): (T & { duplicateIds: string[] })[] => {
+  const groups = new Map<string, T & { duplicateIds: string[] }>();
+  for (const j of list) {
+    const key = repostKey(j);
+    const first = groups.get(key);
+    if (first) first.duplicateIds.push(j.id);
+    else groups.set(key, { ...j, duplicateIds: [] });
+  }
+  return [...groups.values()];
 };
 
 export interface JobList {
@@ -233,12 +265,14 @@ export const listJobs = async (
   }
 
   return {
-    jobs: filtered.slice(0, MAX_JOBS).map((j) => ({
-      ...j,
-      isNew: isNew(j),
-      entryLevel: entryLevel(j),
-      matchedLocations: j.locations.filter((l) => passesLocationRule([l], s)),
-    })),
+    jobs: collapseReposts(filtered)
+      .slice(0, MAX_JOBS)
+      .map((j) => ({
+        ...j,
+        isNew: isNew(j),
+        entryLevel: entryLevel(j),
+        matchedLocations: j.locations.filter((l) => passesLocationRule([l], s)),
+      })),
     lastVisitAt,
     newSinceLastVisit,
   };

@@ -19,8 +19,22 @@ export function useJobActions() {
   const toast = useToast()
 
   const setState = useMutation({
-    mutationFn: ({ id, state }: { id: string; state: JobState; silent?: boolean }) =>
-      unwrap(api.api.jobs[':id'].$patch({ param: { id }, json: { state } })),
+    // `also`: reposts of the same role shown on this row; they move together
+    mutationFn: ({
+      id,
+      state,
+      also = [],
+    }: {
+      id: string
+      state: JobState
+      also?: string[]
+      silent?: boolean
+    }) =>
+      Promise.all(
+        [id, ...also].map((jobId) =>
+          unwrap(api.api.jobs[':id'].$patch({ param: { id: jobId }, json: { state } })),
+        ),
+      ),
     // Moves the job in every cached list, animating rows in or out of the current view
     onMutate: async ({ id, state }) => {
       await qc.cancelQueries({ queryKey: queryKeys.allJobs })
@@ -40,11 +54,11 @@ export function useJobActions() {
       for (const [key, data] of ctx?.snapshot ?? []) qc.setQueryData(key, data)
       toast.error(err.message)
     },
-    onSuccess: (_d, { id, state, silent }, ctx) => {
+    onSuccess: (_d, { id, state, also, silent }, ctx) => {
       if (silent || !ctx) return
       const prev = ctx.prev
       toast.undoable(message(prev, state), {
-        undo: () => setState.mutate({ id, state: prev, silent: true }),
+        undo: () => setState.mutate({ id, state: prev, also, silent: true }),
       })
     },
     onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.allJobs }),

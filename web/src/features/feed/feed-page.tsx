@@ -237,7 +237,7 @@ export function FeedPage() {
               highlighted={isSessionNew(job.id, job.isNew)}
               sourceLabel={sourceLabel}
               busy={setState.isPending && setState.variables?.id === job.id}
-              onState={(state) => setState.mutate({ id: job.id, state })}
+              onState={(state) => setState.mutate({ id: job.id, state, also: job.duplicateIds })}
             />
           ))}
         </ul>

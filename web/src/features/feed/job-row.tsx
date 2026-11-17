@@ -115,6 +115,14 @@ export function JobRow({ job, highlighted, sourceLabel, onState, busy }: JobRowP
           )}
           {salary && <span className="font-mono text-xs text-go">{salary}</span>}
           <span className="font-mono text-[0.68rem] text-faint">{sources}</span>
+          {job.duplicateIds.length > 0 && (
+            <span
+              className="font-mono text-[0.68rem] text-faint"
+              title="The company posted this role more than once; Save, Hide, and Applied apply to every copy"
+            >
+              · {job.duplicateIds.length + 1} postings
+            </span>
+          )}
           {job.state === 'saved' && <Badge tone="signal">Saved</Badge>}
           {job.state === 'applied' && <Badge tone="go">Applied</Badge>}
           {closed && <Badge tone="stop">Closed</Badge>}

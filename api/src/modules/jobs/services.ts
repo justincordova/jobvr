@@ -22,5 +22,6 @@ export const toJobDto = (j: JobWithFlags): z.infer<typeof JobSchema> => ({
   isNew: j.isNew,
   entryLevel: j.entryLevel,
   matchedLocations: j.matchedLocations,
+  duplicateIds: j.duplicateIds,
   sources: j.sources.map((s) => ({ ...s, removedAt: isoOrNull(s.removedAt) })),
 });
