@@ -14,6 +14,7 @@ export const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['u'], label: 'Undo the last action' },
   { keys: ['1', '2', '3', '4'], label: 'Feed, Saved, Applied, Hidden' },
   { keys: ['Esc'], label: 'Clear the selection' },
+  { keys: ['/'], label: 'Search' },
   { keys: ['?'], label: 'Show these shortcuts' },
 ]
 
@@ -97,6 +98,7 @@ export function useFeedKeys({
       if (key === 'j' || (key === 'ArrowDown' && arrowsFree)) select(index + 1)
       else if (key === 'k' || (key === 'ArrowUp' && arrowsFree)) select(index < 0 ? 0 : index - 1)
       else if (key === '?') onHelp()
+      else if (key === '/') document.getElementById('feed-search')?.focus()
       else if (key in VIEW_KEYS) onView(VIEW_KEYS[key] as View)
       else if (key === 'u') handled = toast.undoLatest()
       else if (key === 'Escape' && job) {

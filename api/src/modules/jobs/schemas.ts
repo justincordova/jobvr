@@ -1,5 +1,12 @@
 import { z } from "@hono/zod-openapi";
-import { JOB_AGES, JOB_SORTS, JOB_STATES, JOB_VIEWS, TIER_FILTERS } from "@jobvr/core";
+import {
+  JOB_AGES,
+  JOB_SORTS,
+  JOB_STATES,
+  JOB_VIEWS,
+  MAX_JOBS_LIMIT,
+  TIER_FILTERS,
+} from "@jobvr/core";
 import { csv, envelope, isoNullable } from "@/lib/routes";
 
 export const JobSourceSchema = z.object({
@@ -52,11 +59,17 @@ export const JobListQuery = z.object({
   level: z.enum(["entry"]).optional(),
   /** `best` (feed default) or `newest` (default elsewhere). */
   sort: z.enum(JOB_SORTS).optional(),
+  /** Text search: every word must start a word of the title, company or locations. */
+  q: z.string().trim().max(200).optional(),
+  /** Rows to return (default 500). `total` in the response says how many matched. */
+  limit: z.coerce.number().int().min(1).max(MAX_JOBS_LIMIT).optional(),
 });
 
 export const JobListResponse = envelope(
   z.object({
     jobs: z.array(JobSchema),
+    /** Rows matching the view, filters and search, before `limit`. */
+    total: z.number().int(),
     lastVisitAt: isoNullable,
     newSinceLastVisit: z.number().int(),
   }),

@@ -18,6 +18,8 @@ export interface FeedSearch {
   level?: 'entry'
   /** Unset: best first in the feed, newest first in the other views. */
   sort?: Sort
+  /** Text search (title, company, places). */
+  q?: string
 }
 
 export const defaultSort = (view: View | undefined): Sort =>
@@ -45,6 +47,7 @@ export function parseFeedSearch(raw: Record<string, unknown>): FeedSearch {
     company: strings(raw.company),
     level: raw.level === 'entry' ? 'entry' : undefined,
     sort: oneOf(SORTS, raw.sort),
+    q: typeof raw.q === 'string' && raw.q.trim() ? raw.q.trim().slice(0, 200) : undefined,
   }
 }
 
@@ -60,6 +63,7 @@ export function toJobQuery(s: FeedSearch) {
     company: csv(s.company),
     level: s.level,
     sort: s.sort,
+    q: s.q,
   }
   return Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined)) as {
     view?: View
@@ -70,6 +74,7 @@ export function toJobQuery(s: FeedSearch) {
     company?: string
     level?: 'entry'
     sort?: Sort
+    q?: string
   }
 }
 

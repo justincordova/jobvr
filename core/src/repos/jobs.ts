@@ -35,6 +35,10 @@ export interface JobQuery {
   level?: "entry";
   /** "best" (see `rankScore`; the feed's default) or "newest" (other views' default). */
   sort?: JobSort;
+  /** Text search: every word must appear in the title, company or locations. */
+  q?: string;
+  /** Rows to return (default 500, at most MAX_JOBS_LIMIT); `total` says how many matched. */
+  limit?: number;
 }
 
 export const JOB_SORTS = ["best", "newest"] as const;
@@ -115,11 +119,22 @@ export const collapseReposts = <T extends JobRecord>(
 
 export interface JobList {
   jobs: JobWithFlags[];
+  /** Rows matching the view and filters (after collapsing reposts), before `limit`. */
+  total: number;
   lastVisitAt: Date | null;
   newSinceLastVisit: number;
 }
 
 export const MAX_JOBS = 500;
+export const MAX_JOBS_LIMIT = 5000;
+
+/** Words of a search, matched as word prefixes ("back" finds "Backend"). */
+const searchWords = (q: string | undefined) => (q ? tokenize(q) : []);
+const matchesSearch = (j: JobRecord, words: readonly string[]) => {
+  if (words.length === 0) return true;
+  const haystack = tokenize([j.title, j.companyName, ...j.locations].join(" "));
+  return words.every((w) => haystack.some((t) => t.startsWith(w)));
+};
 const HOUR = 3_600_000;
 
 export const kindLookup =
@@ -262,6 +277,7 @@ export const listJobs = async (
     lastVisitAt !== null && j.firstSeenAt > lastVisitAt && isFreshMatch(j, s, kindOf, now);
 
   const all = await loadJobViews(db, and(...conds));
+  const words = searchWords(query.q);
   const filtered = all.filter((j) => {
     if (applyV && !isVisible(j, s, kindOf)) return false;
     if (tiers && !tiers.includes(j.tier)) return false;
@@ -277,6 +293,7 @@ export const listJobs = async (
       return false;
     }
     if (query.level === "entry" && !entryLevel(j)) return false;
+    if (!matchesSearch(j, words)) return false;
     return true;
   });
 
@@ -304,7 +321,8 @@ export const listJobs = async (
   if (sort === "best") scored.sort(byRank);
 
   return {
-    jobs: scored.slice(0, MAX_JOBS).map((j) => ({
+    total: scored.length,
+    jobs: scored.slice(0, Math.min(query.limit ?? MAX_JOBS, MAX_JOBS_LIMIT)).map((j) => ({
       ...j,
       isNew: isNew(j),
       entryLevel: entryLevel(j),

@@ -76,13 +76,20 @@ function SkeletonRows() {
   )
 }
 
+const PAGE_SIZE = 500
+
 export function FeedPage() {
   const search = useSearch({ from: '/' })
   const navigate = useNavigate({ from: '/' })
   const [bannerOpen, setBannerOpen] = useState(true)
   const [helpOpen, setHelpOpen] = useState(false)
-  const query = toJobQuery(search)
+  const baseQuery = toJobQuery(search)
   const view = search.view ?? 'feed'
+  // "Show more" raises the page size; any other change of query starts over
+  const queryId = JSON.stringify(baseQuery)
+  const [paging, setPaging] = useState({ queryId, limit: PAGE_SIZE })
+  const limit = paging.queryId === queryId ? paging.limit : PAGE_SIZE
+  const query = limit > PAGE_SIZE ? { ...baseQuery, limit: String(limit) } : baseQuery
 
   const jobs = useQuery({
     queryKey: queryKeys.jobs(query),
@@ -106,6 +113,7 @@ export function FeedPage() {
   const plainFeed =
     view === 'feed' &&
     activeFilterCount(search) === 0 &&
+    !search.q &&
     (search.age ?? DEFAULT_AGE) === DEFAULT_AGE
   useEffect(() => {
     if (!plainFeed || !jobs.data || jobs.isPlaceholderData) return
@@ -134,7 +142,9 @@ export function FeedPage() {
     onHelp: () => setHelpOpen(true),
   })
   const empty = EMPTY_COPY[view]
-  const filtered = activeFilterCount(search) > 0
+  const filtered = activeFilterCount(search) > 0 || Boolean(search.q)
+  // Rows just acted on leave the list before the refetch lowers `total`
+  const total = (jobs.data?.total ?? 0) - ((jobs.data?.jobs.length ?? 0) - list.length)
   const narrowAge = (search.age ?? DEFAULT_AGE) !== 'all'
   const refreshing = jobs.isFetching && !jobs.isPending
 
@@ -145,7 +155,7 @@ export function FeedPage() {
         meta={
           jobs.data && (
             <span className="inline-flex items-center gap-1.5 font-mono text-xs text-faint tabular-nums">
-              {list.length} role{list.length === 1 ? '' : 's'}
+              {total} role{total === 1 ? '' : 's'}
               <LoaderCircle
                 aria-hidden
                 className={cn(
@@ -209,7 +219,9 @@ export function FeedPage() {
           title={filtered && view === 'feed' ? 'No matches' : empty.title}
           body={
             filtered
-              ? 'Nothing fits these filters. Loosen them to see more.'
+              ? search.q
+                ? `Nothing matches “${search.q}” here. Check the spelling or loosen the filters.`
+                : 'Nothing fits these filters. Loosen them to see more.'
               : narrowAge && view === 'feed'
                 ? 'Nothing posted in this window. Try a wider age range.'
                 : empty.body
@@ -218,8 +230,8 @@ export function FeedPage() {
             (filtered || narrowAge || view !== 'feed') && (
               <>
                 {filtered && (
-                  <Button size="sm" onClick={() => update(CLEARED_FILTERS)}>
-                    Clear filters
+                  <Button size="sm" onClick={() => update({ ...CLEARED_FILTERS, q: undefined })}>
+                    {search.q ? 'Clear search and filters' : 'Clear filters'}
                   </Button>
                 )}
                 {narrowAge && (
@@ -271,6 +283,21 @@ export function FeedPage() {
             />
           ))}
         </ul>
+      )}
+      {jobs.data && total > list.length && (
+        <div className="mt-4 flex items-center justify-center gap-3 font-mono text-xs text-faint">
+          <span className="tabular-nums">
+            {list.length} of {total}
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            pending={jobs.isFetching}
+            onClick={() => setPaging({ queryId, limit: limit + PAGE_SIZE })}
+          >
+            Show {Math.min(PAGE_SIZE, total - list.length)} more
+          </Button>
+        </div>
       )}
     </section>
   )

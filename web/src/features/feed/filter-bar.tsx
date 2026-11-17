@@ -1,6 +1,6 @@
-import { ChevronDown, SlidersHorizontal, X } from 'lucide-react'
-import { useState } from 'react'
-import { NativeSelect } from '@/components/ui/input'
+import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Input, NativeSelect } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/cn'
@@ -83,6 +83,73 @@ const AGE_OPTIONS: { id: Age; label: string }[] = [
   { id: 'all', label: 'All' },
 ]
 
+export const SEARCH_INPUT_ID = 'feed-search'
+
+/** Writes to the URL after a short pause, so typing doesn't refetch per key. */
+function SearchField({
+  value,
+  onChange,
+}: {
+  value: string | undefined
+  onChange: (q: string | undefined) => void
+}) {
+  const [text, setText] = useState(value ?? '')
+  const [synced, setSynced] = useState(value)
+  // Cleared or changed elsewhere (Back, "Clear filters"): follow it
+  if (value !== synced) {
+    setSynced(value)
+    setText(value ?? '')
+  }
+  const timer = useRef<number | undefined>(undefined)
+  const commit = (next: string, delay: number) => {
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => onChange(next.trim() || undefined), delay)
+  }
+  return (
+    <div className="relative order-first w-full sm:order-none sm:ml-auto sm:w-60">
+      <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />
+      <Input
+        id={SEARCH_INPUT_ID}
+        type="search"
+        value={text}
+        aria-label="Search roles, companies and places"
+        placeholder="Search roles"
+        autoComplete="off"
+        onChange={(e) => {
+          setText(e.target.value)
+          commit(e.target.value, 200)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setText('')
+            commit('', 0)
+            e.currentTarget.blur()
+          }
+        }}
+        className="h-[2.15rem] pr-8 pl-9 pointer-coarse:h-11 [&::-webkit-search-cancel-button]:hidden"
+      />
+      {!text && (
+        <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-line px-1 font-mono text-[0.65rem] text-faint pointer-fine:block">
+          /
+        </kbd>
+      )}
+      {text && (
+        <button
+          type="button"
+          aria-label="Clear search"
+          onClick={() => {
+            setText('')
+            commit('', 0)
+          }}
+          className="absolute top-1/2 right-1.5 grid size-6 -translate-y-1/2 place-items-center rounded text-faint transition-colors after:absolute after:-inset-2 hover:text-paper"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
+
 interface FilterBarProps {
   search: FeedSearch
   onChange: (next: Partial<FeedSearch>) => void
@@ -138,6 +205,7 @@ export function FilterBar({ search, onChange, locations, sources, companies }: F
             )}
           />
         </button>
+        <SearchField value={search.q} onChange={(q) => onChange({ q })} />
         {active > 0 && (
           <button
             type="button"

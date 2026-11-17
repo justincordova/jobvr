@@ -156,6 +156,28 @@ describe("jobs routes", () => {
     expect(newest.data.jobs.map((j) => j.id)).toEqual(["gh:plain", "gh:grad"]);
   });
 
+  it("searches title, company and places by word prefix, and pages with limit/total", async () => {
+    await insertJob("gh:a", { companyName: "Stripe", title: "Backend Engineer, New Grad" });
+    await insertJob("gh:b", { companyName: "Ramp", title: "Frontend Engineer, New Grad" });
+    await insertJob("gh:c", {
+      companyName: "Ramp",
+      title: "Software Engineer, New Grad",
+      locations: ["Philadelphia, PA"],
+    });
+    const ids = async (query: Record<string, string>) =>
+      (
+        await body<{ data: { jobs: { id: string }[]; total: number } }>(
+          await client.api.jobs.$get({ query }),
+        )
+      ).data;
+    expect((await ids({ q: "back" })).jobs.map((j) => j.id)).toEqual(["gh:a"]);
+    expect((await ids({ q: "ramp philly" })).jobs).toEqual([]);
+    expect((await ids({ q: "ramp phil" })).jobs.map((j) => j.id)).toEqual(["gh:c"]);
+    const page = await ids({ limit: "2", sort: "newest" });
+    expect(page.jobs).toHaveLength(2);
+    expect(page.total).toBe(3);
+  });
+
   it("counts new jobs since the last visit", async () => {
     await client.api.jobs.visit.$post();
     ctx.clock = new Date(ctx.clock.getTime() + HOUR);
