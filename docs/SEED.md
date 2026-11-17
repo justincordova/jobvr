@@ -204,14 +204,14 @@ Most mid-size and large companies post on systems jobvr can't read, so
 | jobright-ai/2026-Software-Engineer-New-Grad | 641  | 61              | Links go to jobright.ai pages (dedupe by company + title). Added: +53 new, 12 merged   |
 | vanshb03/New-Grad-2027                      | 2080 | 373             | Not added: see below                                                                   |
 
-After both, the feed went from 174 to 262 rows (88 new: 70 Unlisted, 10
-Corporate, 5 A, 3 Mid, 1 S). Most Unlisted ones are mid-size and large
+After both (and matching "Palantir Technologies" to Palantir), the feed went
+from 174 to 262 rows (89 new: 66 Unlisted, 10 Corporate, 5 S, 5 A, 3 Mid; 51
+with a Jobright row, 41 with a SpeedyApply row). Most Unlisted ones are mid-size and large
 companies not on the list yet (Palantir, American Express, Pinterest, IBM,
 BMO, D. E. Shaw, Priceline, Vanguard, Highmark Health); they show under
 Suggested, and tiering them is what makes "Mid" jobs show as Mid. Known
-leftovers: the lists sometimes name a company differently ("CACI" vs "CACI
-International Inc", "Abnormal Security" vs "Abnormal AI"), so those copies
-don't merge.
+leftover: a renamed company ("Abnormal Security" vs "Abnormal AI") doesn't
+match, so those copies don't merge.
 
 vanshb03 was measured and left out: its titles are rewritten ("New Grad 2027:
 Junior Forward Deployed Software Engineer"), so they don't dedupe by title;
