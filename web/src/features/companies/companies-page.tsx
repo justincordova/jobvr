@@ -144,7 +144,9 @@ function CompanyDialog({
   const toast = useToast()
   const { invalidate } = useCompanyMutations()
   const [error, setError] = useState<string | null>(null)
-  const [ats, setAts] = useState(editing?.ats ?? atsOptions[0]?.id ?? 'other')
+  // Until picked, follows the first board option: the options load with settings, possibly after mount
+  const [picked, setAts] = useState<string | null>(editing?.ats ?? null)
+  const ats = picked ?? atsOptions[0]?.id ?? 'other'
 
   const save = useMutation({
     mutationFn: (json: CompanyPatch & { name: string; tier: Tier; ats: string }) =>
