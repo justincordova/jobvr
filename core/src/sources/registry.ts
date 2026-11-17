@@ -33,7 +33,13 @@ export const parseAtsUrl = (
   url: string,
 ): { adapter: SourceAdapter; sourceJobId: string; slug?: string } | null => {
   for (const adapter of atsAdapters(registry)) {
-    const parsed = adapter.parseUrl?.(url);
+    let parsed: ReturnType<NonNullable<SourceAdapter["parseUrl"]>> | undefined;
+    try {
+      parsed = adapter.parseUrl?.(url);
+    } catch {
+      // One odd URL (community-edited SimplifyJobs data) must not fail a whole target
+      parsed = null;
+    }
     if (parsed) return { adapter, ...parsed };
   }
   return null;

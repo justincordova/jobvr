@@ -126,6 +126,18 @@ describe("greenhouse adapter", () => {
       sourceJobId: "4455",
     });
     expect(parseGreenhouseUrl("https://acme.com/careers")).toBeNull();
+    // new URL() accepts a stray "%"; decoding it throws
+    expect(parseGreenhouseUrl("https://boards.greenhouse.io/acme%E0/jobs/1")).toBeNull();
+    expect(
+      parseLeverUrl(
+        `https://jobs.lever.co/acme%E0/${"a".repeat(8)}-aaaa-aaaa-aaaa-${"a".repeat(12)}`,
+      ),
+    ).toBeNull();
+    expect(
+      parseAshbyUrl(
+        `https://jobs.ashbyhq.com/acme%/${"a".repeat(8)}-aaaa-aaaa-aaaa-${"a".repeat(12)}`,
+      ),
+    ).toBeNull();
     expect(parseGreenhouseUrl("https://job-boards.greenhouse.io/acme")).toBeNull();
   });
 });

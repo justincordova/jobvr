@@ -3,6 +3,15 @@ import { HttpError, type ProbeCtx } from "@jobvr/core";
 /** Location appended by adapters to remote US jobs (matched by the Remote-US rule). */
 export const REMOTE_US = "Remote - US";
 
+/** A URL path segment decoded, or null when it's malformed ("acme%E0" would throw). */
+export const decodeSlug = (segment: string): string | null => {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
+};
+
 /** GET a board for `discover`/`seed`: 404 means "no board with that slug". */
 export const probeBoard = async (
   url: string,

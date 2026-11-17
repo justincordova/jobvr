@@ -6,7 +6,7 @@ import {
   validateItems,
 } from "@jobvr/core";
 import { z } from "zod";
-import { probeBoard, REMOTE_US } from "./shared";
+import { decodeSlug, probeBoard, REMOTE_US } from "./shared";
 
 const Address = z
   .object({ postalAddress: z.object({ addressCountry: z.string().nullish() }).nullish() })
@@ -81,7 +81,8 @@ export const parseAshbyUrl = (raw: string): ParsedUrl | null => {
   const [slug, id, extra] = parts;
   if (!slug || !id || !UUID.test(id)) return null;
   if (parts.length > 3 || (extra !== undefined && extra !== "application")) return null;
-  return { sourceJobId: id.toLowerCase(), slug: decodeURIComponent(slug) };
+  const decoded = decodeSlug(slug);
+  return decoded ? { sourceJobId: id.toLowerCase(), slug: decoded } : null;
 };
 
 export const ashby: SourceAdapter = {

@@ -6,7 +6,7 @@ import {
   validateItems,
 } from "@jobvr/core";
 import { z } from "zod";
-import { htmlToText, probeBoard, REMOTE_US } from "./shared";
+import { decodeSlug, htmlToText, probeBoard, REMOTE_US } from "./shared";
 
 const RawPosting = z.object({
   id: z.string(),
@@ -73,7 +73,8 @@ export const parseLeverUrl = (raw: string): ParsedUrl | null => {
   const [slug, id, extra] = parts;
   if (!slug || !id || !UUID.test(id)) return null;
   if (parts.length > 3 || (extra !== undefined && extra !== "apply")) return null;
-  return { sourceJobId: id.toLowerCase(), slug: decodeURIComponent(slug) };
+  const decoded = decodeSlug(slug);
+  return decoded ? { sourceJobId: id.toLowerCase(), slug: decoded } : null;
 };
 
 export const lever: SourceAdapter = {

@@ -7,7 +7,7 @@ import {
   validateItems,
 } from "@jobvr/core";
 import { z } from "zod";
-import { htmlToText, probeBoard } from "./shared";
+import { decodeSlug, htmlToText, probeBoard } from "./shared";
 
 const HOSTS = new Set([
   "boards.greenhouse.io",
@@ -77,8 +77,9 @@ export const parseGreenhouseUrl = (raw: string): ParsedUrl | null => {
     return token && /^\d+$/.test(token) ? { sourceJobId: token } : null;
   }
   const [slug, jobs, id] = parts;
-  if (slug && jobs === "jobs" && id && /^\d+$/.test(id)) {
-    return { sourceJobId: id, slug: decodeURIComponent(slug) };
+  const decoded = slug && decodeSlug(slug);
+  if (decoded && jobs === "jobs" && id && /^\d+$/.test(id)) {
+    return { sourceJobId: id, slug: decoded };
   }
   return null;
 };
