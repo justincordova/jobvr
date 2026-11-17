@@ -5,6 +5,7 @@ import {
   formatDuration,
   type Logger,
   type Registry,
+  runBackupCheck,
   runCleanup,
   runNotify,
   runPoll,
@@ -64,6 +65,8 @@ export const startScheduler = (options: SchedulerOptions) => {
       );
       if (stopping.signal.aborted) return;
       await step("cleanup", () => runCleanup({ database, logger }));
+      if (stopping.signal.aborted) return;
+      await step("backup check", () => runBackupCheck({ database, notifier, logger }));
       log.debug({}, `tick done in ${formatDuration(performance.now() - running)}`);
     } finally {
       running = null;

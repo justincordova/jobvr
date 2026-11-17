@@ -23,6 +23,8 @@ export const SettingsPayload = z
     lastPollAt: isoNullable,
     lastPushAt: isoNullable,
     lastVisitAt: isoNullable,
+    /** Recorded by the PC's backup service; both null where none runs. */
+    backup: z.object({ lastBackupAt: isoNullable, problem: z.string().nullable() }),
     sourceHealth: z.array(SourceHealthSchema),
     sources: z.array(SourceInfoSchema),
   })

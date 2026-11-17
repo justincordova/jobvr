@@ -1,6 +1,7 @@
 import type { z } from "@hono/zod-openapi";
 import {
   aggregatorAdapters,
+  backupProblem,
   type Db,
   getSettingsState,
   getSourceHealth,
@@ -15,6 +16,7 @@ import type { SettingsPayload } from "./schemas";
 export const loadSettingsPayload = async (
   db: Db,
   registry: Registry,
+  now: Date,
 ): Promise<z.infer<typeof SettingsPayload>> => {
   const state = await getSettingsState(db);
   const aggregators = aggregatorAdapters(registry);
@@ -27,6 +29,10 @@ export const loadSettingsPayload = async (
     lastPollAt: isoOrNull(state.lastPollAt),
     lastPushAt: isoOrNull(state.lastPushAt),
     lastVisitAt: isoOrNull(state.lastVisitAt),
+    backup: {
+      lastBackupAt: isoOrNull(state.backup.lastBackupAt),
+      problem: backupProblem(state.backup, now),
+    },
     sourceHealth: aggregators.map((a) => {
       const h = health.get(a.id);
       return {

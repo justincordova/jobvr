@@ -514,7 +514,17 @@ function ScheduleSection({ payload }: { payload: SettingsPayload }) {
     <Section
       title="Schedule & notifications"
       dirty={dirty}
-      description={`Last poll ${relative(payload.lastPollAt)} · last push ${relative(payload.lastPushAt)}`}
+      description={
+        <>
+          Last poll {relative(payload.lastPollAt)} · last push {relative(payload.lastPushAt)}
+          {payload.backup.lastBackupAt && !payload.backup.problem && (
+            <> · last backup {relative(payload.backup.lastBackupAt)}</>
+          )}
+          {payload.backup.problem && (
+            <span className="block text-stop">Backups: {payload.backup.problem}</span>
+          )}
+        </>
+      }
       footer={
         <SaveBar
           dirty={dirty}

@@ -6,8 +6,8 @@ import type * as routes from "./routes";
 import { assertKnownSources, loadSettingsPayload } from "./services";
 
 export const getHandler: RouteHandler<typeof routes.get, AppBindings> = async (c) => {
-  const { database, registry } = c.var.deps;
-  return ok(c, await loadSettingsPayload(database.db, registry));
+  const { database, registry, now } = c.var.deps;
+  return ok(c, await loadSettingsPayload(database.db, registry, now()));
 };
 
 export const updateHandler: RouteHandler<typeof routes.update, AppBindings> = async (c) => {
@@ -15,5 +15,5 @@ export const updateHandler: RouteHandler<typeof routes.update, AppBindings> = as
   const patch = c.req.valid("json");
   assertKnownSources(registry, patch);
   await updateSettings(database.db, patch);
-  return ok(c, await loadSettingsPayload(database.db, registry));
+  return ok(c, await loadSettingsPayload(database.db, registry, c.var.deps.now()));
 };

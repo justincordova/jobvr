@@ -24,6 +24,12 @@ export const settings = pgTable(
     lastPollAt: ts("last_poll_at"),
     lastPushAt: ts("last_push_at"),
     lastCleanupAt: ts("last_cleanup_at"),
+    /** Written by deploy/backup.sh after each pg_dump (the app only reads them). */
+    lastBackupAt: ts("last_backup_at"),
+    backupError: text("backup_error"),
+    backupErrorAt: ts("backup_error_at"),
+    /** When the app last pushed a backup alert (at most one a day). */
+    backupAlertAt: ts("backup_alert_at"),
   },
   (t) => [check("settings_single_row", sql`${t.id} = 1`)],
 );

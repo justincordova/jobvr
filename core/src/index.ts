@@ -1,3 +1,4 @@
+export * from "./backup-check";
 export * from "./constants";
 export * from "./db/client";
 export type {

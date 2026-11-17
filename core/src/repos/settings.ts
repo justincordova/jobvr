@@ -15,9 +15,23 @@ export interface SettingsState {
   lastPollAt: Date | null;
   lastPushAt: Date | null;
   lastCleanupAt: Date | null;
+  backup: BackupStatus;
 }
 
-export type SettingsTimestamp = "lastVisitAt" | "lastPollAt" | "lastPushAt" | "lastCleanupAt";
+/** As recorded by deploy/backup.sh; all null where no backup service runs (the Mac). */
+export interface BackupStatus {
+  lastBackupAt: Date | null;
+  error: string | null;
+  errorAt: Date | null;
+  alertAt: Date | null;
+}
+
+export type SettingsTimestamp =
+  | "lastVisitAt"
+  | "lastPollAt"
+  | "lastPushAt"
+  | "lastCleanupAt"
+  | "backupAlertAt";
 
 const ensureRow = (db: DbOrTx) =>
   db.insert(settings).values({ id: 1, data: DEFAULT_SETTINGS }).onConflictDoNothing();
@@ -35,6 +49,12 @@ export const getSettingsState = async (db: DbOrTx): Promise<SettingsState> => {
     lastPollAt: row.lastPollAt,
     lastPushAt: row.lastPushAt,
     lastCleanupAt: row.lastCleanupAt,
+    backup: {
+      lastBackupAt: row.lastBackupAt,
+      error: row.backupError,
+      errorAt: row.backupErrorAt,
+      alertAt: row.backupAlertAt,
+    },
   };
 };
 

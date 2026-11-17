@@ -69,7 +69,8 @@ services:
       KEEP: "14"
     entrypoint: ["/bin/bash", "/scripts/backup.sh"]
     volumes:
-      - ./deploy/backup.sh:/scripts/backup.sh:ro
+      # The folder, not the file: a file mount keeps the old copy after git pull replaces it
+      - ./deploy:/scripts:ro
       # Point BACKUP_DIR at a synced folder (OneDrive/Dropbox) for off-machine copies
       - ${BACKUP_DIR:-./backups}:/backups
     depends_on:

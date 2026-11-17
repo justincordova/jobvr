@@ -258,7 +258,7 @@ All timestamps are `timestamptz`. Migrations run automatically on app start.
 
 | Table          | Columns                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `settings`     | single row (`id = 1`): `data` JSONB (Zod `Settings`, parsed with defaults on read so new fields need no migration), `last_visit_at`, `last_poll_at`, `last_push_at`, `last_cleanup_at`                                                                                                                                                                                                                                                                                         |
+| `settings`     | single row (`id = 1`): `data` JSONB (Zod `Settings`, parsed with defaults on read so new fields need no migration), `last_visit_at`, `last_poll_at`, `last_push_at`, `last_cleanup_at`, backup status (`last_backup_at`, `backup_error`, `backup_error_at`, `backup_alert_at`)                                                                                                                                                                                                 |
 | `companies`    | `id` uuid, `name`, `normalized_name` (unique; see Normalization helpers — so "Regal" and "Regal Inc" can't coexist), `city`, `state` (free text, e.g. city "Pittsburgh/NYC", state "PA/NY"), `tier` (S/A/Mid/Startup/Corporate), `track` bool, `ats` (text: a registered ATS adapter id or `other`), `slug` (nullable, case preserved; unique per `ats`, case-insensitive), `careers_url`, `notes`, `status` (ok/needs_review/manual_only), `created_at`, `updated_at`         |
 | `source_state` | `key` text PK (`<aggregator id>` or `company:<uuid>`), `source`, `company_id` (FK, cascade delete, nullable), `slug` (the slug this state belongs to; null for aggregators), `etag`, `filters_hash`, `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error`, `baselined_at`                                                                                                                                                                                |
 | `jobs`         | `id` text PK (canonical ID), `company_id` (FK, set null), `company_name`, `title`, `locations` text[], `url`, `primary_source`, `first_seen_at`, `effective_at`, `salary_min_usd`, `salary_max_usd` (annual), `state` (new/saved/hidden/applied), `baseline` bool, `notified_at`, `closed_at`, `updated_at`                                                                                                                                                                    |
@@ -832,6 +832,17 @@ the app shell only; API requests are network-only.
   at startup on 18).
 - Backups live on the PC disk; point the backup folder at a synced folder
   (OneDrive/Dropbox) for off-machine copies.
+- A silently failing backup is found only at restore time → `backup.sh` records
+  each result in `settings` (`last_backup_at`, `backup_error`,
+  `backup_error_at`); the scheduler's backup check (`runBackupCheck`) pushes
+  "jobvr backup problem" when the last backup failed or none succeeded for 26
+  h, outside quiet hours, at most once a day (`backup_alert_at`); Settings
+  shows the last backup or the problem. Nothing is reported until a backup was
+  recorded once (none runs on the Mac). A PC that was off at 03:00 backs up
+  when the service starts (no dump in the last 25 h).
+- `git pull` replaces `deploy/backup.sh` → compose mounts the `deploy/` folder
+  (a single-file mount keeps the old copy) and each night runs a fresh copy of
+  the script, so updates apply without recreating the service.
 - Docker Desktop never rotates container logs → every compose service caps
   them at 5 × 10 MB, and the app logs at `PC_LOG_LEVEL` (default `info`), not
   the `.env` `LOG_LEVEL` meant for the Mac.

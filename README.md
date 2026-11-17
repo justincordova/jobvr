@@ -141,7 +141,16 @@ they're JSON; in development (`pnpm dev`) and the scripts they're plain text:
 ### Backups
 
 The `backup` service writes `jobvr-YYYY-MM-DD-HHMM.dump` at 03:00 Eastern and
-keeps the newest 14. Take one now (before an update, say) with:
+keeps the newest 14. If the PC was off at 03:00, it takes one as soon as it
+starts. Each result is recorded in the database: Settings shows the last
+backup, and a failed backup (or none for 26 hours) sends one push a day until
+it's fixed. Updating `deploy/backup.sh` with `git pull` takes effect from the
+next night without recreating the container.
+
+Backups sit on the PC's own disk unless `BACKUP_DIR` points elsewhere. Set it
+to a synced folder (OneDrive, Dropbox) so a dead disk doesn't take them too.
+
+Take one now (before an update, say) with:
 
 ```sh
 docker compose run --rm backup --once
