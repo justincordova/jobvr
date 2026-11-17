@@ -31,6 +31,7 @@ const makeEnv = () => {
   const detailCalls: string[] = [];
   const detailFailing = new Set<string>();
   let simplify: SourceJob[] = [];
+  let invalid = 0;
   let onFetch: ((ctx: FetchCtx) => Promise<void>) | null = null;
 
   const ats: SourceAdapter = {
@@ -52,7 +53,7 @@ const makeEnv = () => {
         status: "ok",
         etag: tag,
         jobs: list.map((j) => ({ ...j, companyName: ctx.companyName ?? slug })),
-        invalidCount: 0,
+        invalidCount: invalid,
       };
     },
     async fetchDetail(_slug, id) {
@@ -89,6 +90,9 @@ const makeEnv = () => {
     },
     setOnFetch: (f: typeof onFetch) => {
       onFetch = f;
+    },
+    setInvalid: (n: number) => {
+      invalid = n;
     },
   };
 };
@@ -706,6 +710,29 @@ describe("runPoll: health and transactions", () => {
     ]);
     await poll();
     expect((await allJobs()).map((j) => [j.id, j.state])).toEqual([["gh:1", "hidden"]]);
+  });
+
+  it("closes nothing while a board has listings that failed validation", async () => {
+    await addAcme();
+    env.boards.set("acme", [
+      ghJob("acme", "1", "Software Engineer, New Grad"),
+      ghJob("acme", "2", "Backend Engineer, New Grad"),
+    ]);
+    await poll();
+    // Job 2 comes back malformed (dropped by validation): it may still be open
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    env.setInvalid(1);
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    expect((await allJobs()).map((j) => [j.id, j.closedAt])).toEqual([
+      ["gh:1", null],
+      ["gh:2", null],
+    ]);
+    // Clean again: now it's really gone
+    env.setInvalid(0);
+    clock = new Date(T0.getTime() + 2 * HOUR);
+    await poll();
+    expect((await allJobs()).find((j) => j.id === "gh:2")?.closedAt).toEqual(clock);
   });
 
   it("rolls back a failed target without saving its ETag", async () => {

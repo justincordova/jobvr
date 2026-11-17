@@ -550,7 +550,11 @@ EXISTS (SELECT 1 FROM job_sources WHERE job_id = $1)`), never based on the
    job: all rows removed → `closed_at = now` (if not already set); any row live →
    `closed_at = null`. Rows of targets that are not polled (untracked company,
    disabled source) and jobs outside the store window are not re-evaluated;
-   their open/closed status stays as last computed.
+   their open/closed status stays as last computed. A company board whose
+   response had listings that failed validation removes nothing that poll (a
+   malformed item may be one of its open jobs; live rows are still revived) and
+   its ETag isn't saved, so the next poll refetches and closes then.
+   Aggregators don't hold: one bad community-edited row would block all closures.
 9. **Suggestions** (aggregator targets with an `ok` result, when "Suggest
    companies from SimplifyJobs" is on): take the listings that passed the
    poll-time filter and resolved to no company; group them by normalized company

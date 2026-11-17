@@ -115,10 +115,14 @@ const logTarget = (log: Logger, o: TargetOutcome) => {
     stats.closed > 0 && `${stats.closed} closed`,
     stats.reopened > 0 && `${stats.reopened} reopened`,
     stats.skippedOld > 0 && `${stats.skippedOld} already seen`,
+    stats.invalid > 0 && `${stats.invalid} invalid (closures held)`,
     o.details > 0 && `${o.details} details`,
     formatDuration(o.durationMs),
   ].filter(Boolean);
-  log[changed(stats) ? "info" : "debug"](fields, `${o.label} · ${parts.join(" · ")}`);
+  log[changed(stats) || stats.invalid > 0 ? "info" : "debug"](
+    fields,
+    `${o.label} · ${parts.join(" · ")}`,
+  );
 };
 
 export interface PollTotals {
@@ -305,9 +309,13 @@ const fetchAll = async (
                 http,
               });
               const { fetched, incomplete } = await enrich(t, result, budget.signal);
-              // Without the ETag the next poll gets the full list (not a 304) and retries the detail
+              // Without the ETag the next poll gets the full list (not a 304): it retries the
+              // detail, or runs the closures held back for listings that failed validation
               const kept =
-                result.status === "ok" && incomplete ? { ...result, etag: null } : result;
+                result.status === "ok" &&
+                (incomplete || (t.kind === "company" && result.invalidCount > 0))
+                  ? { ...result, etag: null }
+                  : result;
               out.set(t.key, { result: kept, ms: performance.now() - started, details: fetched });
               anyOk = true;
             } catch (err) {

@@ -31,6 +31,8 @@ export interface TargetStats {
   skippedOld: number;
   closed: number;
   reopened: number;
+  /** A company board's listings that failed validation (its closures were held). */
+  invalid: number;
   baseline: boolean;
   abandoned: boolean;
 }
@@ -53,6 +55,7 @@ const emptyStats = (): TargetStats => ({
   skippedOld: 0,
   closed: 0,
   reopened: 0,
+  invalid: 0,
   baseline: false,
   abandoned: false,
 });
@@ -406,6 +409,7 @@ const insert = async (p: PreparedListing, ctx: ProcessContext, baseline: boolean
 const applyClosures = async (
   ctx: ProcessContext,
   liveKeys: Set<string>,
+  closeMissing: boolean,
 ): Promise<[number, number]> => {
   const { tx, ws, target, now } = ctx;
   const source = target.adapter.id;
@@ -419,7 +423,7 @@ const applyClosures = async (
     affected.push(m.job.id);
     for (const r of rows) {
       const live = liveKeys.has(r.sourceJobId);
-      if (!live && !r.removedAt) toRemove.push(r.sourceJobId);
+      if (closeMissing && !live && !r.removedAt) toRemove.push(r.sourceJobId);
       if (live && r.removedAt) toRevive.push(r.sourceJobId);
     }
   }
@@ -521,7 +525,12 @@ export const processTarget = async (ctx: ProcessContext): Promise<TargetStats> =
         )
         .map((l) => l.sourceJobId),
     );
-    [stats.closed, stats.reopened] = await applyClosures(ctx, liveKeys);
+    // On a company board a listing that failed validation may be one of ours that's still
+    // open: close nothing. Not for aggregators: one bad community-edited row out of 18k
+    // would hold every closure for as long as it stays
+    const hold = target.kind === "company" && result.invalidCount > 0;
+    if (hold) stats.invalid = result.invalidCount;
+    [stats.closed, stats.reopened] = await applyClosures(ctx, liveKeys, !hold);
 
     if (target.kind === "aggregator" && settings.suggestCompanies) {
       await updateSuggestions(

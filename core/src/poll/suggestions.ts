@@ -1,4 +1,4 @@
-import { notInArray, sql } from "drizzle-orm";
+import { and, ne, notInArray, sql } from "drizzle-orm";
 import type { Tx } from "../db/client";
 import { suggestions } from "../db/schema";
 import { OTHER_ATS_ID } from "../sources/registry";
@@ -98,7 +98,13 @@ export const updateSuggestions = async (
   await tx
     .update(suggestions)
     .set({ listingCount: 0 })
-    .where(seen.length > 0 ? notInArray(suggestions.id, seen) : undefined);
+    // Only rows that change: most are already 0, and rewriting them every poll is churn
+    .where(
+      and(
+        ne(suggestions.listingCount, 0),
+        seen.length > 0 ? notInArray(suggestions.id, seen) : undefined,
+      ),
+    );
   await tx.execute(
     sql`UPDATE suggestions SET state = 'added' WHERE state = 'open' AND ${resolvesToCompany}`,
   );
