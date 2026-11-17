@@ -266,26 +266,34 @@ const changes = <T extends object>(current: T, next: Partial<T>): Partial<T> => 
   return out;
 };
 
+/** Marks a moved posting carries, each with the target states it may raise. */
+const RAISES: Record<string, JobState[]> = {
+  applied: ["new", "hidden", "saved"],
+  saved: ["new", "hidden"],
+  hidden: ["new"],
+};
+
 /**
- * A saved/applied job whose only posting moved to another job would stay
- * forever with no sources (never closed). Its mark moves with the posting
- * (applied beats saved beats new/hidden; never downgraded) and the empty row
- * goes. Guarded in SQL like the delete above.
+ * A marked job whose only posting moved to another job would stay forever
+ * with no sources (never closed), or, if deleted, lose the mark (a hidden job
+ * would reappear). Its mark moves with the posting (applied beats saved beats
+ * hidden beats new; never downgraded) and the empty row goes. Guarded in SQL
+ * like the delete above.
  */
 const carryMark = async (tx: Tx, ws: WorkingSet, fromId: string, toId: string, now: Date) => {
   const removed = await tx.execute<{ state: JobState }>(sql`
     DELETE FROM jobs
-    WHERE id = ${fromId} AND state IN ('saved', 'applied')
+    WHERE id = ${fromId} AND state IN ('saved', 'applied', 'hidden')
       AND NOT EXISTS (SELECT 1 FROM job_sources WHERE job_id = ${fromId})
     RETURNING state`);
   const state = removed.rows[0]?.state;
   if (!state) return;
   ws.remove(fromId);
-  const lower = state === "applied" ? ["new", "hidden", "saved"] : ["new", "hidden"];
+  const lower = RAISES[state] ?? [];
   const raised = await tx
     .update(jobs)
     .set({ state, updatedAt: now })
-    .where(and(eq(jobs.id, toId), inArray(jobs.state, lower as JobState[])))
+    .where(and(eq(jobs.id, toId), inArray(jobs.state, lower)))
     .returning({ state: jobs.state });
   if (raised.length > 0) ws.touch(toId).job.state = state;
 };
@@ -334,7 +342,7 @@ const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => 
     // Guarded in SQL: never based on the in-memory state (the user may have just saved it)
     const deleted = await tx.execute(sql`
       DELETE FROM jobs
-      WHERE id = ${movedFrom} AND state IN ('new', 'hidden')
+      WHERE id = ${movedFrom} AND state = 'new'
         AND NOT EXISTS (SELECT 1 FROM job_sources WHERE job_id = ${movedFrom})
       RETURNING id`);
     if (deleted.rows.length > 0) ws.remove(movedFrom);

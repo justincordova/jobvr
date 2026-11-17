@@ -689,6 +689,25 @@ describe("runPoll: health and transactions", () => {
     expect(after.map((j) => [j.id, j.state])).toEqual([["gh:1", "saved"]]);
   });
 
+  it("keeps a hidden job hidden when its only posting moves to another job", async () => {
+    await addAcme();
+    env.setSimplify([
+      sjJob("s1", "Acme", "Software Engineer, New Grad", "https://acme.test/careers/1"),
+    ]);
+    env.boards.set("acme", [ghJob("acme", "1", "Platform Engineer, New Grad")]);
+    await poll();
+    const sj = (await allJobs()).find((j) => j.id.startsWith("sj:"));
+    if (!sj) throw new Error("expected the SimplifyJobs job");
+    await database.db.update(jobs).set({ state: "hidden" }).where(eq(jobs.id, sj.id));
+
+    clock = new Date(T0.getTime() + HOUR);
+    env.setSimplify([
+      sjJob("s1", "Acme", "Software Engineer, New Grad", "https://boards.test/acme/jobs/1"),
+    ]);
+    await poll();
+    expect((await allJobs()).map((j) => [j.id, j.state])).toEqual([["gh:1", "hidden"]]);
+  });
+
   it("rolls back a failed target without saving its ETag", async () => {
     const acme = await addAcme();
     env.boards.set("acme", [
