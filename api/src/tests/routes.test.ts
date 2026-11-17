@@ -210,6 +210,12 @@ describe("companies routes", () => {
     if (!created.success) throw new Error("expected success");
     expect(created.data).toMatchObject({ track: true, status: "ok", health: null });
 
+    // Top tiers are tracked too (they used to default to untracked)
+    const top = await client.api.companies.$post({
+      json: { name: "Stripe", tier: "S", ats: "greenhouse", slug: "stripe" },
+    });
+    expect(await top.json()).toMatchObject({ data: { track: true, status: "ok" } });
+
     const other = await client.api.companies.$post({
       json: { name: "Big Corp", tier: "Corporate", ats: "other" },
     });

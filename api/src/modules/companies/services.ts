@@ -49,12 +49,7 @@ export const assertKnownAts = (registry: Registry, ats: string | undefined) => {
 export const withCreateDefaults = (body: z.infer<typeof CreateCompanyBody>) => {
   const other = body.ats === OTHER_ATS_ID;
   const status: CompanyStatus = body.status ?? (other ? "manual_only" : "ok");
-  const track =
-    body.track ??
-    (!other &&
-      Boolean(body.slug) &&
-      status !== "manual_only" &&
-      body.tier !== "S" &&
-      body.tier !== "A");
+  // Any tier: S and A are the companies most worth polling
+  const track = body.track ?? (!other && Boolean(body.slug) && status !== "manual_only");
   return { ...body, status, track };
 };
