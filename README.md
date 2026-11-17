@@ -1,8 +1,8 @@
 # jobvr
 
 A personal job radar for new-grad software roles. It polls Greenhouse, Lever,
-and Ashby boards for the companies you track plus the SimplifyJobs New-Grad
-list, filters and de-duplicates the results, shows them in a web feed, and sends
+and Ashby boards for the companies you track plus three public new-grad lists
+(SimplifyJobs, SpeedyApply, Jobright), filters and de-duplicates the results, shows them in a web feed, and sends
 one bundled phone push per interval through ntfy.
 
 It runs 24/7 in Docker on a home PC and is reachable only over Tailscale.
@@ -249,7 +249,7 @@ exactly as the ATS spells it (Lever is case-sensitive). Not sure of the slug?
 Run `pnpm discover "Company Name"`. Companies on other ATSs (Workday, iCIMS)
 can be stored as "Other (manual only)"; they're never polled.
 
-Companies that show up on SimplifyJobs but aren't in your list appear under
+Companies that show up on the new-grad lists but aren't in your list appear under
 Suggested, where Add creates them in one click.
 
 The first successful poll of a new company (or after its ATS or slug changes)
