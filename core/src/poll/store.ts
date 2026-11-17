@@ -35,9 +35,16 @@ export class WorkingSet {
   private readonly touched = new Set<string>();
   private readonly bySource = new Map<string, string>();
   private readonly byUrlKey = new Map<string, Set<string>>();
+  private indexed = false;
 
   constructor(base: JobMap) {
     this.jobs = new Map(base);
+  }
+
+  /** Built on first lookup: most targets are 304s that never need it. */
+  private ensureIndex() {
+    if (this.indexed) return;
+    this.indexed = true;
     for (const [id, m] of this.jobs) {
       for (const s of m.sources) this.indexRow(id, s);
     }
@@ -88,12 +95,14 @@ export class WorkingSet {
   }
 
   add(job: JobRow, row: MemSourceRow): void {
+    this.ensureIndex();
     this.jobs.set(job.id, { job, sources: [row] });
     this.touched.add(job.id);
     this.indexRow(job.id, row);
   }
 
   remove(id: string): void {
+    this.ensureIndex();
     const m = this.jobs.get(id);
     if (!m) return;
     for (const s of m.sources) this.unindexRow(id, s);
@@ -101,10 +110,12 @@ export class WorkingSet {
   }
 
   jobIdForSource(source: string, sourceJobId: string): string | undefined {
+    this.ensureIndex();
     return this.bySource.get(sourceKey(source, sourceJobId));
   }
 
   jobIdsForUrlKey(key: string): string[] {
+    this.ensureIndex();
     return [...(this.byUrlKey.get(key) ?? [])];
   }
 
@@ -113,6 +124,7 @@ export class WorkingSet {
    * moved from (if it previously belonged to a different job).
    */
   upsertRow(jobId: string, row: MemSourceRow): string | undefined {
+    this.ensureIndex();
     const previous = this.jobIdForSource(row.source, row.sourceJobId);
     if (previous && previous !== jobId && this.jobs.has(previous)) {
       const old = this.touch(previous);
