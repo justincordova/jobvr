@@ -806,5 +806,125 @@
     "ats": "greenhouse",
     "slug": "mongodb",
     "track": false
+  },
+  {
+    "name": "SeatGeek",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "seatgeek"
+  },
+  {
+    "name": "Clear Street",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "clearstreet"
+  },
+  {
+    "name": "Garner Health",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "greenhouse",
+    "slug": "garnerhealth"
+  },
+  {
+    "name": "Meow",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "meow"
+  },
+  {
+    "name": "DV Trading",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "dvtrading"
+  },
+  {
+    "name": "Five Rings",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "fiveringsllc"
+  },
+  {
+    "name": "HelloFresh",
+    "city": "NYC/Newark",
+    "state": "NY/NJ",
+    "tier": "Corporate",
+    "ats": "greenhouse",
+    "slug": "hellofresh"
+  },
+  {
+    "name": "TeleTracking",
+    "city": "Pittsburgh",
+    "state": "PA",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "teletrackingtechnologiesinc"
+  },
+  {
+    "name": "Abnormal Security",
+    "city": "Remote",
+    "state": "US",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "abnormalsecurity"
+  },
+  {
+    "name": "Smartsheet",
+    "city": "Remote",
+    "state": "US",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "smartsheet"
+  },
+  {
+    "name": "Spruce",
+    "city": "Remote",
+    "state": "US",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "spruceid"
+  },
+  {
+    "name": "Affirm",
+    "city": "NYC/Remote",
+    "state": "NY",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "affirm"
+  },
+  {
+    "name": "Quora",
+    "city": "Remote",
+    "state": "US",
+    "tier": "Mid",
+    "ats": "ashby",
+    "slug": "quora"
+  },
+  {
+    "name": "StubHub",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "stubhubinc"
+  },
+  {
+    "name": "Madhive",
+    "city": "NYC",
+    "state": "NY",
+    "tier": "Startup",
+    "ats": "ashby",
+    "slug": "madhive"
   }
 ]

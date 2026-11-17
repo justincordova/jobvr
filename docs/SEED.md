@@ -130,3 +130,16 @@ the outcome. Hits were spot-checked against job locations before use.
   - Trayd (buildtrayd.com) hires through Gem, which isn't supported:
     `manual_only` with its careers URL.
   - Seek AI was acquired by IBM (2025): removed.
+
+## Added Nov 2026 (QA cross-check)
+
+Companies whose new-grad SWE roles in NYC/NJ/PA/Remote-US showed up on the
+2027-SWE-College-Jobs list but weren't tracked. Each board was checked live
+before adding: SeatGeek (`seatgeek`), Clear Street (`clearstreet`), Garner
+Health (`garnerhealth`), DV Trading (`dvtrading`), Five Rings
+(`fiveringsllc`), HelloFresh (`hellofresh`), TeleTracking
+(`teletrackingtechnologiesinc`), Abnormal Security (`abnormalsecurity`),
+Smartsheet (`smartsheet`), Affirm (`affirm`), StubHub (`stubhubinc`) on
+Greenhouse; Meow (`meow`), Spruce (`spruceid`), Quora (`quora`), Madhive
+(`madhive`) on Ashby. Lumos (Ashby `lumos`) was skipped: its only nearby role
+is "Remote - East Coast", which the Remote-US rule doesn't accept.
