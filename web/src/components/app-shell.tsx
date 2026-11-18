@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { Building2, CloudOff, Radar, Send, Settings2 } from 'lucide-react'
+import { Building2, CloudOff, Radar, Send, Settings } from 'lucide-react'
 import { type ComponentType, useEffect, useRef } from 'react'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { recallSearch } from '@/features/feed/search'
@@ -95,7 +95,7 @@ function SettingsLink({ active }: { active: boolean }) {
         active ? 'bg-raised text-signal' : 'text-dim',
       )}
     >
-      <Settings2 className="size-[1.1rem]" />
+      <Settings className="size-[1.1rem]" />
     </Link>
   )
 }
