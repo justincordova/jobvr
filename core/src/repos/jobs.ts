@@ -128,7 +128,14 @@ export interface JobList {
   total: number;
   lastVisitAt: Date | null;
   newSinceLastVisit: number;
+  /**
+   * The jobs counted in `newSinceLastVisit`, newest first (at most NEW_JOBS_SHOWN),
+   * whatever the query's filters: the "new since your last visit" banner links them.
+   */
+  newJobs: JobWithFlags[];
 }
+
+export const NEW_JOBS_SHOWN = 20;
 
 export const MAX_JOBS = 500;
 export const MAX_JOBS_LIMIT = 5000;
@@ -330,7 +337,16 @@ export const listJobs = async (
     return true;
   });
 
+  const withFlags = (j: JobRecord & { duplicateIds: string[]; score?: number }): JobWithFlags => ({
+    ...j,
+    score: j.score ?? scoreJob(j, s, kindOf, now),
+    isNew: isNew(j),
+    entryLevel: entryLevel(j),
+    matchedLocations: j.locations.filter((l) => passesLocationRule([l], s)),
+  });
+
   let newSinceLastVisit = 0;
+  let newJobs: JobWithFlags[] = [];
   if (lastVisitAt) {
     const candidates = await loadJobViews(
       db,
@@ -342,7 +358,9 @@ export const listJobs = async (
         gte(jobs.effectiveAt, new Date(now.getTime() - s.maxJobAgeHours * HOUR)),
       ),
     );
-    newSinceLastVisit = candidates.filter(isNew).length;
+    const fresh = collapseReposts(candidates.filter(isNew));
+    newSinceLastVisit = fresh.length;
+    newJobs = fresh.slice(0, NEW_JOBS_SHOWN).map(withFlags);
   }
 
   const sort = query.sort ?? defaultJobSort(view);
@@ -359,14 +377,10 @@ export const listJobs = async (
 
   return {
     total: scored.length,
-    jobs: scored.slice(0, Math.min(query.limit ?? MAX_JOBS, MAX_JOBS_LIMIT)).map((j) => ({
-      ...j,
-      isNew: isNew(j),
-      entryLevel: entryLevel(j),
-      matchedLocations: j.locations.filter((l) => passesLocationRule([l], s)),
-    })),
+    jobs: scored.slice(0, Math.min(query.limit ?? MAX_JOBS, MAX_JOBS_LIMIT)).map(withFlags),
     lastVisitAt,
     newSinceLastVisit,
+    newJobs,
   };
 };
 

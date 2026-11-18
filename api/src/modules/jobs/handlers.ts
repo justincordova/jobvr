@@ -15,6 +15,7 @@ export const listHandler: RouteHandler<typeof routes.list, AppBindings> = async 
       total: result.total,
       lastVisitAt: result.lastVisitAt?.toISOString() ?? null,
       newSinceLastVisit: result.newSinceLastVisit,
+      newJobs: result.newJobs.map(toJobDto),
     },
     { count: result.jobs.length },
   );

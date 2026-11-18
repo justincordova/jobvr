@@ -74,6 +74,8 @@ export const JobListResponse = envelope(
     total: z.number().int(),
     lastVisitAt: isoNullable,
     newSinceLastVisit: z.number().int(),
+    /** The new jobs themselves (newest first, up to 20), whatever the filters. */
+    newJobs: z.array(JobSchema),
   }),
 );
 

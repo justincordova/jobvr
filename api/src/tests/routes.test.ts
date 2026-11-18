@@ -262,6 +262,13 @@ describe("jobs routes", () => {
     expect(res.data.newSinceLastVisit).toBe(1);
     expect(res.data.jobs.find((j) => j.id === "gh:new")?.isNew).toBe(true);
     expect(res.data.jobs.find((j) => j.id === "gh:base")?.isNew).toBe(false);
+
+    // The banner's jobs come back even when the filters hide them from the list
+    const filtered = await body<{
+      data: { newSinceLastVisit: number; jobs: unknown[]; newJobs: { id: string }[] };
+    }>(await client.api.jobs.$get({ query: { q: "no such role" } }));
+    expect(filtered.data.jobs).toHaveLength(0);
+    expect(filtered.data.newJobs.map((j) => j.id)).toEqual(["gh:new"]);
   });
 
   it("saves, hides, marks applied, and moves a job back", async () => {

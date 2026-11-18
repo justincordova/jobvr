@@ -1,16 +1,6 @@
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import {
-  Bookmark,
-  CloudOff,
-  EyeOff,
-  Keyboard,
-  LoaderCircle,
-  Radar,
-  Send,
-  Sparkle,
-  X,
-} from 'lucide-react'
+import { Bookmark, CloudOff, EyeOff, Keyboard, LoaderCircle, Radar, Send } from 'lucide-react'
 import { type ComponentType, useEffect, useRef, useState } from 'react'
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { Button } from '@/components/ui/button'
@@ -36,7 +26,13 @@ import {
 import { ShortcutsDialog } from './shortcuts-dialog'
 import { useFeedKeys } from './use-feed-keys'
 import { useJobActions } from './use-job-actions'
-import { captureFirstResponse, isSessionNew, sessionNewCount } from './visit-session'
+import { NewSinceBanner } from './new-banner'
+import {
+  captureFirstResponse,
+  isSessionNew,
+  sessionNewCount,
+  sessionNewJobs,
+} from './visit-session'
 
 const EMPTY_COPY: Record<
   View,
@@ -176,8 +172,12 @@ function JobsPage({ search }: { search: FeedSearch }) {
     onHelp: () => setHelpOpen(true),
     onDetails: (job) => setDetailsId(job.id),
   })
-  // From the full response, so the panel stays open if the job leaves this view
-  const detailsJob = jobs.data?.jobs.find((j) => j.id === detailsId) ?? null
+  // From the full response, so the panel stays open if the job leaves this view; the
+  // banner's new jobs may be hidden by the filters, so they're looked up there too
+  const detailsJob =
+    jobs.data?.jobs.find((j) => j.id === detailsId) ??
+    sessionNewJobs().find((j) => j.id === detailsId) ??
+    null
   const empty = EMPTY_COPY[view]
   const filtered = activeFilterCount(search) > 0 || Boolean(search.q)
   // Rows just acted on leave the list before the refetch lowers `total`
@@ -237,24 +237,13 @@ function JobsPage({ search }: { search: FeedSearch }) {
       />
 
       {newCount > 0 && bannerOpen && view === 'feed' && (
-        <div
-          role="status"
-          className="mb-4 flex animate-rise items-center gap-3 rounded-lg border border-signal/40 bg-signal-soft px-3.5 py-2.5 text-sm"
-        >
-          <Sparkle className="size-4 shrink-0 text-signal" />
-          <p className="flex-1">
-            <span className="font-mono font-semibold text-signal">{newCount}</span> new since your
-            last visit
-          </p>
-          <button
-            type="button"
-            onClick={() => setBannerOpen(false)}
-            aria-label="Dismiss"
-            className="-my-1 rounded-md p-1 text-dim transition-colors hover:bg-signal-soft hover:text-paper pointer-coarse:-my-2.5 pointer-coarse:p-3"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+        <NewSinceBanner
+          count={newCount}
+          jobs={sessionNewJobs()}
+          inList={new Set(list.map((j) => j.id))}
+          onOpen={(job) => setDetailsId(job.id)}
+          onDismiss={() => setBannerOpen(false)}
+        />
       )}
 
       {view === 'applied' && <AppliedOverview />}
