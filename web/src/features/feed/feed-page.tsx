@@ -15,7 +15,6 @@ import { type ComponentType, useEffect, useRef, useState } from 'react'
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys, unwrap } from '@/lib/api'
-import { companiesQuery } from '@/lib/companies-query'
 import { cn } from '@/lib/cn'
 import { AppliedOverview } from './applied-overview'
 import { FEED_GRID } from './columns'
@@ -141,20 +140,15 @@ function JobsPage({ search }: { search: FeedSearch }) {
     queryKey: queryKeys.settings,
     queryFn: () => unwrap(api.api.settings.$get()),
   })
-  const companies = useQuery(companiesQuery)
   const { mutate: recordVisit } = useMutation({
     mutationFn: () => unwrap(api.api.jobs.visit.$post()),
   })
   const { setState } = useJobActions()
 
   // Only the plain feed counts as a visit: opening on Saved (a home-screen
-  // shortcut) or a filtered list would record it and lose the feed's highlights.
-  // Tiers don't count as a filter: they're remembered, so the feed usually opens with some
-  const plainFeed =
-    view === 'feed' &&
-    activeFilterCount({ ...search, tier: undefined }) === 0 &&
-    !search.q &&
-    (search.age ?? DEFAULT_AGE) === DEFAULT_AGE
+  // shortcut) or a searched or age-narrowed list would record it and lose the
+  // feed's highlights. Tiers don't count: they're remembered, so the feed usually opens with some
+  const plainFeed = view === 'feed' && !search.q && (search.age ?? DEFAULT_AGE) === DEFAULT_AGE
   useEffect(() => {
     if (!plainFeed || !jobs.data || jobs.isPlaceholderData) return
     if (captureFirstResponse(jobs.data)) recordVisit()
@@ -162,9 +156,6 @@ function JobsPage({ search }: { search: FeedSearch }) {
 
   const sources = settings.data?.sources ?? []
   const sourceLabel = (id: string) => sources.find((s) => s.id === id)?.label ?? id
-  const locations = (settings.data?.settings.locations ?? [])
-    .filter((l) => l.enabled)
-    .map((l) => l.label)
   // Filter and search tweaks replace the entry; a view switch is a place you can go Back from
   const update = (next: Partial<FeedSearch>) =>
     navigate({ to: pathOf(view), search: searchFor(view, { ...search, ...next }), replace: true })
@@ -268,14 +259,7 @@ function JobsPage({ search }: { search: FeedSearch }) {
 
       {view === 'applied' && <AppliedOverview />}
 
-      <FilterBar
-        search={search}
-        onChange={update}
-        onView={goView}
-        locations={locations}
-        sources={sources.map((s) => ({ id: s.id, label: s.label }))}
-        companies={companies.data ?? []}
-      />
+      <FilterBar search={search} onChange={update} onView={goView} />
 
       {jobs.isPending ? (
         <SkeletonRows />
@@ -288,8 +272,8 @@ function JobsPage({ search }: { search: FeedSearch }) {
           body={
             filtered
               ? search.q
-                ? `Nothing matches “${search.q}” here. Check the spelling or loosen the filters.`
-                : 'Nothing fits these filters. Loosen them to see more.'
+                ? `Nothing matches “${search.q}” here. Check the spelling or pick more tiers.`
+                : 'Nothing in these tiers. Pick more to see more.'
               : narrowAge && view === 'feed'
                 ? 'Nothing posted in this window. Try a wider age range.'
                 : empty.body
@@ -299,7 +283,7 @@ function JobsPage({ search }: { search: FeedSearch }) {
               <>
                 {filtered && (
                   <Button size="sm" onClick={() => update({ ...CLEARED_FILTERS, q: undefined })}>
-                    {search.q ? 'Clear search and filters' : 'Clear filters'}
+                    {search.q ? 'Clear search and tiers' : 'Clear tiers'}
                   </Button>
                 )}
                 {narrowAge && (

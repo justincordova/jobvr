@@ -83,6 +83,10 @@ describe("jobs routes", () => {
       await client.api.jobs.$get({ query: { age: "3d", sort: "newest" } }),
     );
     expect(recent.data.jobs.map((j) => j.id)).toEqual(["gh:2", "sj:6", "gh:1"]);
+    const week = await body<{ data: { jobs: { id: string }[] } }>(
+      await client.api.jobs.$get({ query: { age: "1w", sort: "newest" } }),
+    );
+    expect(week.data.jobs.map((j) => j.id)).toEqual(["gh:2", "sj:6", "gh:1", "gh:5"]);
 
     const gh = await client.api.jobs.$get({ query: { source: "greenhouse", age: "1h" } });
     const ghData = await gh.json();

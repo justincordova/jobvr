@@ -32,3 +32,9 @@ polling, pushes and the feed's default tier filter.
   lists. Nothing else changes them between polls except your own actions.
 - Feed row actions (Applied, Save/Unsave, Hide/Unhide, Not applied) are
   icon-only; each keeps its name as `aria-label` and tooltip.
+- **One compact filter row**, no Filters panel: view, age (All, Today, 1h,
+  3 days, 1 week; `1w` is new in the API), tiers (a multi-select pill; none
+  picked = tracked tiers) and order (Best / Newest, plus Applied on the
+  Applied page), then search. The place, source and company filters are gone
+  from the UI: places are set in Settings, and search covers companies,
+  places and titles. The API still accepts them; saved filters drop them.

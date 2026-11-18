@@ -20,7 +20,7 @@ import type { Registry } from "../sources/types";
 import { getSettingsState, setSettingsTimestamp } from "./settings";
 
 export const JOB_VIEWS = ["feed", "saved", "applied", "hidden"] as const;
-export const JOB_AGES = ["1h", "today", "3d", "all"] as const;
+export const JOB_AGES = ["1h", "today", "3d", "1w", "all"] as const;
 export type JobViewName = (typeof JOB_VIEWS)[number];
 export type JobAge = (typeof JOB_AGES)[number];
 
@@ -246,6 +246,8 @@ const ageCutoff = (age: JobAge, now: Date): Date | null => {
       return startOfEasternDay(now);
     case "3d":
       return new Date(now.getTime() - 72 * HOUR);
+    case "1w":
+      return new Date(now.getTime() - 7 * 24 * HOUR);
     case "all":
       return null;
   }

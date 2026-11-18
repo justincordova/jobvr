@@ -1,7 +1,7 @@
 import { TIER_FILTERS, type TierFilter } from '@/lib/types'
 
 export const VIEWS = ['feed', 'saved', 'applied', 'hidden'] as const
-export const AGES = ['1h', 'today', '3d', 'all'] as const
+export const AGES = ['1h', 'today', '3d', '1w', 'all'] as const
 export const SORTS = ['best', 'newest', 'applied'] as const
 export type View = (typeof VIEWS)[number]
 export type Age = (typeof AGES)[number]
@@ -10,10 +10,7 @@ export type Sort = (typeof SORTS)[number]
 export interface FeedSearch {
   view?: View
   age?: Age
-  location?: string[]
   tier?: TierFilter[]
-  source?: string[]
-  company?: string[]
   /** Unset: best first in the feed, latest applied first in Applied, else newest first. */
   sort?: Sort
   /** Text search (title, company, places). */
@@ -109,10 +106,7 @@ export function parseFeedSearch(raw: Record<string, unknown>): FeedSearch {
   return {
     view: oneOf(VIEWS, raw.view),
     age: oneOf(AGES, raw.age),
-    location: strings(raw.location),
     tier: tiers?.length ? tiers : undefined,
-    source: strings(raw.source),
-    company: strings(raw.company),
     sort: oneOf(SORTS, raw.sort),
     q: typeof raw.q === 'string' && raw.q.trim() ? raw.q.trim().slice(0, 200) : undefined,
   }
@@ -124,20 +118,14 @@ export function toJobQuery(s: FeedSearch) {
   const q = {
     view: s.view,
     age: s.age,
-    location: csv(s.location),
     tier: csv(s.tier),
-    source: csv(s.source),
-    company: csv(s.company),
     sort: s.sort,
     q: s.q,
   }
   return Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined)) as {
     view?: View
     age?: Age
-    location?: string
     tier?: string
-    source?: string
-    company?: string
     sort?: Sort
     q?: string
   }
@@ -145,12 +133,6 @@ export function toJobQuery(s: FeedSearch) {
 
 export const DEFAULT_AGE: Age = 'all'
 
-export const CLEARED_FILTERS = {
-  location: undefined,
-  tier: undefined,
-  source: undefined,
-  company: undefined,
-} satisfies Partial<FeedSearch>
+export const CLEARED_FILTERS = { tier: undefined } satisfies Partial<FeedSearch>
 
-export const activeFilterCount = (s: FeedSearch) =>
-  [s.location, s.tier, s.source, s.company].filter((v) => v?.length).length
+export const activeFilterCount = (s: FeedSearch) => (s.tier?.length ? 1 : 0)

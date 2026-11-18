@@ -1,67 +1,10 @@
-import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react'
+import { Search, X } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { Input, NativeSelect } from '@/components/ui/input'
+import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { cn } from '@/lib/cn'
-import { TIER_FILTERS, type Company } from '@/lib/types'
-import {
-  activeFilterCount,
-  type Age,
-  CLEARED_FILTERS,
-  DEFAULT_AGE,
-  defaultSort,
-  type FeedSearch,
-  type Sort,
-  type View,
-} from './search'
-
-function ChipGroup({
-  label,
-  options,
-  selected,
-  onChange,
-  hint,
-}: {
-  label: string
-  options: { id: string; label: string }[]
-  selected: string[] | undefined
-  onChange: (next: string[] | undefined) => void
-  hint?: string
-}) {
-  const set = new Set(selected ?? [])
-  const toggle = (id: string) => {
-    const next = new Set(set)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    onChange(next.size ? [...next] : undefined)
-  }
-  return (
-    <fieldset className="min-w-0">
-      <legend className="mb-1.5 font-mono text-[0.68rem] tracking-wider text-faint uppercase">
-        {label}
-        {hint && !set.size && <span className="ml-2 tracking-normal normal-case">{hint}</span>}
-      </legend>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((o) => (
-          <button
-            key={o.id}
-            type="button"
-            aria-pressed={set.has(o.id)}
-            onClick={() => toggle(o.id)}
-            className={cn(
-              'rounded-full border px-2.5 py-0.5 text-[0.8rem] transition-[color,background-color,border-color,scale] duration-150 active:scale-95 pointer-coarse:px-3.5 pointer-coarse:py-2.5',
-              set.has(o.id)
-                ? 'border-signal/60 bg-signal-soft text-signal'
-                : 'border-line text-dim hover:border-line-strong hover:text-paper',
-            )}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-    </fieldset>
-  )
-}
+import { TIER_FILTERS, type TierFilter } from '@/lib/types'
+import { type Age, DEFAULT_AGE, defaultSort, type FeedSearch, type Sort, type View } from './search'
 
 // Applied is its own page
 const VIEW_OPTIONS: { id: View; label: string }[] = [
@@ -71,20 +14,21 @@ const VIEW_OPTIONS: { id: View; label: string }[] = [
 ]
 
 const SORT_OPTIONS: { id: Sort; label: string }[] = [
-  { id: 'best', label: 'Best first' },
-  { id: 'newest', label: 'Newest first' },
+  { id: 'best', label: 'Best' },
+  { id: 'newest', label: 'Newest' },
 ]
 
 const APPLIED_SORT_OPTIONS: { id: Sort; label: string }[] = [
-  { id: 'applied', label: 'Latest applied' },
+  { id: 'applied', label: 'Applied' },
   ...SORT_OPTIONS,
 ]
 
 const AGE_OPTIONS: { id: Age; label: string }[] = [
-  { id: '1h', label: '1h' },
-  { id: 'today', label: 'Today' },
-  { id: '3d', label: '3 days' },
   { id: 'all', label: 'All' },
+  { id: 'today', label: 'Today' },
+  { id: '1h', label: '1h' },
+  { id: '3d', label: '3 days' },
+  { id: '1w', label: '1 week' },
 ]
 
 export const SEARCH_INPUT_ID = 'feed-search'
@@ -117,7 +61,7 @@ function SearchField({
         type="search"
         value={text}
         aria-label="Search roles, companies and places"
-        placeholder="Search roles"
+        placeholder="Search roles, companies, places"
         autoComplete="off"
         onChange={(e) => {
           setText(e.target.value)
@@ -154,154 +98,103 @@ function SearchField({
   )
 }
 
+/**
+ * Multi-select tiers in the same pill as the segmented controls. None picked
+ * means the default: your tracked tiers in the feed, every tier elsewhere.
+ */
+function TierToggle({
+  selected,
+  onChange,
+  fallback,
+}: {
+  selected: TierFilter[] | undefined
+  onChange: (next: TierFilter[] | undefined) => void
+  fallback: string
+}) {
+  const on = new Set(selected ?? [])
+  const toggle = (t: TierFilter) => {
+    const next = new Set(on)
+    if (next.has(t)) next.delete(t)
+    else next.add(t)
+    onChange(next.size ? TIER_FILTERS.filter((x) => next.has(x)) : undefined)
+  }
+  return (
+    <div className="flex max-w-full items-center gap-1">
+      <div
+        role="group"
+        aria-label="Tiers"
+        title={on.size ? undefined : `No tier picked: ${fallback}`}
+        className="inline-flex max-w-full scrollbar-none overflow-x-auto rounded-lg border border-line bg-panel p-0.5"
+      >
+        {TIER_FILTERS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            aria-pressed={on.has(t)}
+            onClick={() => toggle(t)}
+            className={cn(
+              'rounded-md px-2.5 py-1 text-sm whitespace-nowrap transition-[color,background-color,box-shadow] duration-200 pointer-coarse:py-2.5',
+              on.has(t)
+                ? 'bg-signal-soft text-signal ring-1 ring-signal/40'
+                : 'text-dim hover:text-paper',
+            )}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      {on.size > 0 && (
+        <button
+          type="button"
+          aria-label="Clear tiers"
+          title="Clear tiers"
+          onClick={() => onChange(undefined)}
+          className="grid size-7 shrink-0 animate-fade-in place-items-center rounded-md text-faint transition-colors hover:bg-raised hover:text-paper pointer-coarse:size-11"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
+
 interface FilterBarProps {
   search: FeedSearch
   onChange: (next: Partial<FeedSearch>) => void
   onView: (view: View) => void
-  locations: string[]
-  sources: { id: string; label: string }[]
-  companies: Company[]
 }
 
-export function FilterBar({
-  search,
-  onChange,
-  onView,
-  locations,
-  sources,
-  companies,
-}: FilterBarProps) {
-  const active = activeFilterCount(search)
-  const [open, setOpen] = useState(active > 0)
+/** One compact row: view, age, tiers, order, search. Places, sources and companies are for search. */
+export function FilterBar({ search, onChange, onView }: FilterBarProps) {
   const view = search.view ?? 'feed'
   const age = search.age ?? DEFAULT_AGE
+  const sort = search.sort ?? defaultSort(search.view)
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-2">
-        {view !== 'applied' && (
-          <Segmented label="View" value={view} options={VIEW_OPTIONS} onChange={onView} />
-        )}
+    <div className="flex flex-wrap items-center gap-2">
+      {view !== 'applied' && (
+        <Segmented label="View" value={view} options={VIEW_OPTIONS} onChange={onView} />
+      )}
+      <Segmented
+        label="Age"
+        value={age}
+        options={AGE_OPTIONS}
+        onChange={(a) => onChange({ age: a === DEFAULT_AGE ? undefined : a })}
+      />
+      <TierToggle
+        selected={search.tier}
+        onChange={(tier) => onChange({ tier })}
+        fallback={view === 'feed' ? 'your tracked tiers' : 'every tier'}
+      />
+      <span title="Best weighs freshness, a new-grad title, the company's tier and a named place; ties go to the newest">
         <Segmented
-          label="Age"
-          value={age}
-          options={AGE_OPTIONS}
-          onChange={(a) => onChange({ age: a === DEFAULT_AGE ? undefined : a })}
+          label="Order"
+          value={sort}
+          options={view === 'applied' ? APPLIED_SORT_OPTIONS : SORT_OPTIONS}
+          onChange={(s) => onChange({ sort: s === defaultSort(search.view) ? undefined : s })}
         />
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls="feed-filters"
-          onClick={() => setOpen((o) => !o)}
-          className={cn(
-            'inline-flex h-[2.15rem] items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors duration-200 pointer-coarse:h-11',
-            open || active
-              ? 'border-line-strong bg-raised text-paper'
-              : 'border-line text-dim hover:text-paper',
-          )}
-        >
-          <SlidersHorizontal className="size-4" />
-          Filters
-          {active > 0 && (
-            <span className="animate-pop-in rounded bg-signal px-1 font-mono text-[0.65rem] font-semibold text-signal-ink">
-              {active}
-            </span>
-          )}
-          <ChevronDown
-            className={cn(
-              'size-3.5 text-faint transition-transform duration-200',
-              open && 'rotate-180',
-            )}
-          />
-        </button>
-        <SearchField value={search.q} onChange={(q) => onChange({ q })} />
-        {active > 0 && (
-          <button
-            type="button"
-            onClick={() => onChange(CLEARED_FILTERS)}
-            className="inline-flex animate-fade-in items-center gap-1 rounded-md px-1.5 py-1 text-sm text-faint transition-colors hover:text-paper pointer-coarse:h-11 pointer-coarse:px-3"
-          >
-            <X className="size-3.5" /> Clear
-          </button>
-        )}
-      </div>
-
-      <div
-        id="feed-filters"
-        inert={!open}
-        className={cn(
-          'grid transition-[grid-template-rows,opacity] duration-300 ease-(--ease-out)',
-          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
-        )}
-      >
-        <div className="min-h-0 overflow-hidden">
-          <div className="mt-3 grid gap-4 rounded-xl border border-line bg-panel/70 p-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-              <span>
-                <span className="block text-sm font-medium">Order</span>
-                <span className="block text-xs text-dim">
-                  Best first weighs freshness, a new-grad title, the company’s tier, and a named
-                  place; ties go to the newest.
-                </span>
-              </span>
-              <div className="shrink-0 self-start sm:self-auto">
-                <Segmented
-                  label="Order"
-                  value={search.sort ?? defaultSort(search.view)}
-                  options={view === 'applied' ? APPLIED_SORT_OPTIONS : SORT_OPTIONS}
-                  onChange={(s) =>
-                    onChange({ sort: s === defaultSort(search.view) ? undefined : s })
-                  }
-                />
-              </div>
-            </div>
-            <ChipGroup
-              label="Location"
-              options={locations.map((l) => ({ id: l, label: l }))}
-              selected={search.location}
-              onChange={(location) => onChange({ location })}
-              hint="any"
-            />
-            <ChipGroup
-              label="Tier"
-              options={TIER_FILTERS.map((t) => ({ id: t, label: t }))}
-              selected={search.tier}
-              onChange={(tier) => onChange({ tier: tier as FeedSearch['tier'] })}
-              hint={view === 'feed' ? 'tracked tiers' : 'any'}
-            />
-            <ChipGroup
-              label="Source"
-              options={sources}
-              selected={search.source}
-              onChange={(source) => onChange({ source })}
-              hint="any"
-            />
-            <div>
-              <label
-                htmlFor="company-filter"
-                className="mb-1.5 block font-mono text-[0.68rem] tracking-wider text-faint uppercase"
-              >
-                Company
-              </label>
-              <NativeSelect
-                id="company-filter"
-                value={search.company?.[0] ?? ''}
-                onChange={(e) =>
-                  onChange({ company: e.target.value ? [e.target.value] : undefined })
-                }
-              >
-                <option value="">All companies</option>
-                <option value="unlisted">Unlisted (not in your list)</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-          </div>
-        </div>
-      </div>
+      </span>
+      <SearchField value={search.q} onChange={(q) => onChange({ q })} />
     </div>
   )
 }

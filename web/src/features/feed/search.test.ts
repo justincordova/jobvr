@@ -11,26 +11,25 @@ import {
 } from './search'
 
 describe('feed search params', () => {
-  it('validates and normalizes', () => {
+  it('validates and normalizes, dropping the old place, source and company filters', () => {
     expect(
       parseFeedSearch({ view: 'saved', age: 'nope', tier: ['Mid', 'X'], location: 'NYC,PA' }),
     ).toEqual({
       view: 'saved',
       age: undefined,
-      location: ['NYC', 'PA'],
       tier: ['Mid'],
-      source: undefined,
-      company: undefined,
       sort: undefined,
       q: undefined,
     })
+    expect(parseFeedSearch({ age: '1w' }).age).toBe('1w')
   })
 
   it('builds a compact API query', () => {
-    expect(toJobQuery({ age: '1h', tier: ['Mid', 'Startup'], source: [] })).toEqual({
+    expect(toJobQuery({ age: '1h', tier: ['Mid', 'Startup'] })).toEqual({
       age: '1h',
       tier: 'Mid,Startup',
     })
+    expect(toJobQuery({ tier: [] })).toEqual({})
   })
 
   it('implies the view on the Applied page and sorts it by applied date', () => {
