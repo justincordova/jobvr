@@ -142,7 +142,7 @@ Companies whose new-grad SWE roles in NYC/NJ/PA/Remote-US showed up on the
 before adding: SeatGeek (`seatgeek`), Clear Street (`clearstreet`), Garner
 Health (`garnerhealth`), DV Trading (`dvtrading`), Five Rings
 (`fiveringsllc`), HelloFresh (`hellofresh`), TeleTracking
-(`teletrackingtechnologiesinc`), Abnormal Security (`abnormalsecurity`),
+(`teletrackingtechnologiesinc`), Abnormal AI (`abnormalsecurity`),
 Smartsheet (`smartsheet`), Affirm (`affirm`), StubHub (`stubhubinc`) on
 Greenhouse; Meow (`meow`), Spruce (`spruceid`), Quora (`quora`), Madhive
 (`madhive`) on Ashby. Lumos (Ashby `lumos`) was skipped: its only nearby role
@@ -209,9 +209,9 @@ from 174 to 262 rows (89 new: 66 Unlisted, 10 Corporate, 5 S, 5 A, 3 Mid; 51
 with a Jobright row, 41 with a SpeedyApply row). Most Unlisted ones are mid-size and large
 companies not on the list yet (Palantir, American Express, Pinterest, IBM,
 BMO, D. E. Shaw, Priceline, Vanguard, Highmark Health); they show under
-Suggested, and tiering them is what makes "Mid" jobs show as Mid. Known
-leftover: a renamed company ("Abnormal Security" vs "Abnormal AI") doesn't
-match, so those copies don't merge.
+Suggested, and tiering them is what makes "Mid" jobs show as Mid. Abnormal
+Security is now listed as Abnormal AI (its new name, which the lists use; the
+Greenhouse slug is still `abnormalsecurity`).
 
 vanshb03 was measured and left out: its titles are rewritten ("New Grad 2027:
 Junior Forward Deployed Software Engineer"), so they don't dedupe by title;
