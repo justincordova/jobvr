@@ -247,10 +247,12 @@ describe("jobs routes", () => {
     expect(
       (await client.api.jobs[":id"].$patch({ param, json: { state: "applied" } })).status,
     ).toBe(200);
-    const appliedView = await body<{ data: { jobs: { id: string }[] } }>(
+    const appliedView = await body<{ data: { jobs: { id: string; appliedAt: string }[] } }>(
       await client.api.jobs.$get({ query: { view: "applied" } }),
     );
-    expect(appliedView.data.jobs.map((j) => j.id)).toEqual(["gh:1"]);
+    expect(appliedView.data.jobs.map((j) => [j.id, j.appliedAt])).toEqual([
+      ["gh:1", ctx.clock.toISOString()],
+    ]);
     const feedWhileApplied = await body<{ data: { jobs: unknown[] } }>(
       await client.api.jobs.$get({ query: {} }),
     );
@@ -260,7 +262,32 @@ describe("jobs routes", () => {
     const feed = await body<{ data: { jobs: { id: string; state: string }[] } }>(
       await client.api.jobs.$get({ query: {} }),
     );
-    expect(feed.data.jobs[0]).toMatchObject({ id: "gh:1", state: "new" });
+    expect(feed.data.jobs[0]).toMatchObject({ id: "gh:1", state: "new", appliedAt: null });
+  });
+
+  it("lists applied jobs latest applied first, keeping the date on a repeat", async () => {
+    await insertJob("gh:old", { effectiveAt: at(48) });
+    await insertJob("gh:fresh");
+    const apply = (id: string) =>
+      client.api.jobs[":id"].$patch({ param: { id }, json: { state: "applied" } });
+    const first = ctx.clock;
+    await apply("gh:fresh");
+    ctx.clock = new Date(first.getTime() + HOUR);
+    await apply("gh:old");
+    ctx.clock = new Date(first.getTime() + 2 * HOUR);
+    // Marking an applied job applied again (a repost) keeps its date
+    await apply("gh:fresh");
+    const list = async (sort?: "newest") =>
+      (
+        await body<{ data: { jobs: { id: string; appliedAt: string }[] } }>(
+          await client.api.jobs.$get({ query: { view: "applied", sort } }),
+        )
+      ).data.jobs.map((j) => [j.id, j.appliedAt]);
+    expect(await list()).toEqual([
+      ["gh:old", new Date(first.getTime() + HOUR).toISOString()],
+      ["gh:fresh", first.toISOString()],
+    ]);
+    expect((await list("newest")).map(([id]) => id)).toEqual(["gh:fresh", "gh:old"]);
   });
 });
 

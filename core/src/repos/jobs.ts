@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNull, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, type SQL, sql } from "drizzle-orm";
 import type { JobState, TierFilter } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { companies, type JobRow, jobSources, jobs } from "../db/schema";
@@ -34,7 +34,10 @@ export interface JobQuery {
   source?: string[];
   /** "entry": only entry-level jobs (see `entryLevel`). */
   level?: "entry";
-  /** "best" (see `rankScore`; the feed's default) or "newest" (other views' default). */
+  /**
+   * "best" (see `rankScore`; the feed's default), "applied" (latest applied
+   * first; the applied view's default) or "newest" (the other views' default).
+   */
   sort?: JobSort;
   /** Text search: every word must appear in the title, company or locations. */
   q?: string;
@@ -42,7 +45,7 @@ export interface JobQuery {
   limit?: number;
 }
 
-export const JOB_SORTS = ["best", "newest"] as const;
+export const JOB_SORTS = ["best", "newest", "applied"] as const;
 export type JobSort = (typeof JOB_SORTS)[number];
 
 export interface JobSourceView {
@@ -68,6 +71,7 @@ export interface JobRecord {
   salaryMinUsd: number | null;
   salaryMaxUsd: number | null;
   state: JobState;
+  appliedAt: Date | null;
   baseline: boolean;
   closedAt: Date | null;
   notifiedAt: Date | null;
@@ -201,6 +205,7 @@ const toView = (job: JobRow, tier: TierFilter, sources: JobSourceView[]): JobRec
   salaryMinUsd: job.salaryMinUsd,
   salaryMaxUsd: job.salaryMaxUsd,
   state: job.state as JobState,
+  appliedAt: job.appliedAt,
   baseline: job.baseline,
   closedAt: job.closedAt,
   notifiedAt: job.notifiedAt,
@@ -266,6 +271,9 @@ export const scoreJob = (
   );
 };
 
+export const defaultJobSort = (view: JobViewName): JobSort =>
+  view === "feed" ? "best" : view === "applied" ? "applied" : "newest";
+
 export const listJobs = async (
   db: DbOrTx,
   registry: Registry,
@@ -325,13 +333,17 @@ export const listJobs = async (
     newSinceLastVisit = candidates.filter(isNew).length;
   }
 
-  const sort = query.sort ?? (view === "feed" ? "best" : "newest");
+  const sort = query.sort ?? defaultJobSort(view);
   const scored = collapseReposts(filtered).map((j) => ({
     ...j,
     score: scoreJob(j, s, kindOf, now),
   }));
   // Already newest first from the query
   if (sort === "best") scored.sort(byRank);
+  // Stable, so equal (or missing) dates stay newest first
+  else if (sort === "applied") {
+    scored.sort((a, b) => (b.appliedAt?.getTime() ?? 0) - (a.appliedAt?.getTime() ?? 0));
+  }
 
   return {
     total: scored.length,
@@ -349,16 +361,20 @@ export const listJobs = async (
 export const markVisit = (db: DbOrTx, now: Date): Promise<void> =>
   setSettingsTimestamp(db, "lastVisitAt", now);
 
-/** Moves a job between new / saved / hidden / applied. */
+/**
+ * Moves a job between new / saved / hidden / applied. Marking applied stamps
+ * `applied_at` (kept if it already is applied); any other state clears it.
+ */
 export const setJobState = async (
   db: DbOrTx,
   id: string,
   state: JobState,
   now: Date,
 ): Promise<void> => {
+  const appliedAt = state === "applied" ? sql`coalesce(${jobs.appliedAt}, ${now})` : null;
   const [row] = await db
     .update(jobs)
-    .set({ state, updatedAt: now })
+    .set({ state, appliedAt, updatedAt: now })
     .where(eq(jobs.id, id))
     .returning({ id: jobs.id });
   if (!row) throw new NotFoundError("Job not found");

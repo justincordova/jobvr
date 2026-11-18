@@ -104,6 +104,8 @@ export const jobs = pgTable(
     salaryMinUsd: integer("salary_min_usd"),
     salaryMaxUsd: integer("salary_max_usd"),
     state: text("state").notNull().default("new"),
+    /** When it was marked applied; null in every other state. */
+    appliedAt: ts("applied_at"),
     baseline: boolean("baseline").notNull().default(false),
     notifiedAt: ts("notified_at"),
     closedAt: ts("closed_at"),

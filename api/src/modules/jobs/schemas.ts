@@ -34,6 +34,8 @@ export const JobSchema = z
     salaryMinUsd: z.number().int().nullable(),
     salaryMaxUsd: z.number().int().nullable(),
     state: z.enum(JOB_STATES),
+    /** When it was marked applied (null unless `state` is applied). */
+    appliedAt: isoNullable,
     baseline: z.boolean(),
     closedAt: isoNullable,
     isNew: z.boolean(),
@@ -57,7 +59,7 @@ export const JobListQuery = z.object({
   source: csv(z.string()).openapi({ example: "greenhouse,simplify" }),
   /** `entry`: only jobs flagged entry level. */
   level: z.enum(["entry"]).optional(),
-  /** `best` (feed default) or `newest` (default elsewhere). */
+  /** `best` (feed default), `applied` (latest applied first; applied default) or `newest`. */
   sort: z.enum(JOB_SORTS).optional(),
   /** Text search: every word must start a word of the title, company or locations. */
   q: z.string().trim().max(200).optional(),

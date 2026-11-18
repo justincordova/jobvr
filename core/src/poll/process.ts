@@ -289,21 +289,27 @@ const RAISES: Record<string, JobState[]> = {
  * like the delete above.
  */
 const carryMark = async (tx: Tx, ws: WorkingSet, fromId: string, toId: string, now: Date) => {
-  const removed = await tx.execute<{ state: JobState }>(sql`
+  const removed = await tx.execute<{ state: JobState; applied_at: string | Date | null }>(sql`
     DELETE FROM jobs
     WHERE id = ${fromId} AND state IN ('saved', 'applied', 'hidden')
       AND NOT EXISTS (SELECT 1 FROM job_sources WHERE job_id = ${fromId})
-    RETURNING state`);
+    RETURNING state, applied_at`);
   const state = removed.rows[0]?.state;
   if (!state) return;
   ws.remove(fromId);
   const lower = RAISES[state] ?? [];
+  const appliedAt = removed.rows[0]?.applied_at;
   const raised = await tx
     .update(jobs)
-    .set({ state, updatedAt: now })
+    .set({
+      state,
+      appliedAt: state === "applied" ? (appliedAt ? new Date(appliedAt) : now) : null,
+      updatedAt: now,
+    })
     .where(and(eq(jobs.id, toId), inArray(jobs.state, lower)))
-    .returning({ state: jobs.state });
-  if (raised.length > 0) ws.touch(toId).job.state = state;
+    .returning({ appliedAt: jobs.appliedAt });
+  const [to] = raised;
+  if (to) Object.assign(ws.touch(toId).job, { state, appliedAt: to.appliedAt });
 };
 
 const merge = async (p: PreparedListing, match: MemJob, ctx: ProcessContext) => {
@@ -406,6 +412,7 @@ const insert = async (p: PreparedListing, ctx: ProcessContext, baseline: boolean
     salaryMinUsd: salary.min,
     salaryMaxUsd: salary.max,
     state: "new",
+    appliedAt: null,
     baseline,
     notifiedAt: null,
     closedAt: null,

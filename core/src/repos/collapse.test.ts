@@ -15,6 +15,7 @@ const job = (id: string, extra: Partial<JobRecord> = {}): JobRecord => ({
   salaryMinUsd: null,
   salaryMaxUsd: null,
   state: "new",
+  appliedAt: null,
   baseline: false,
   closedAt: null,
   notifiedAt: null,

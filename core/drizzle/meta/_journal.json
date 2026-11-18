@@ -71,6 +71,13 @@
       "when": 1794959624730,
       "tag": "0009_company_suffixes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795002877205,
+      "tag": "0010_applied_at",
+      "breakpoints": true
     }
   ]
 }

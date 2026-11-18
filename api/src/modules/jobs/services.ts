@@ -17,6 +17,7 @@ export const toJobDto = (j: JobWithFlags): z.infer<typeof JobSchema> => ({
   salaryMinUsd: j.salaryMinUsd,
   salaryMaxUsd: j.salaryMaxUsd,
   state: j.state,
+  appliedAt: isoOrNull(j.appliedAt),
   baseline: j.baseline,
   closedAt: isoOrNull(j.closedAt),
   isNew: j.isNew,
