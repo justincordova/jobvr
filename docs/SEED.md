@@ -240,3 +240,38 @@ The 42 open suggestions were triaged:
   Techstra Solutions and All Lines Technology (staffing/consulting).
 - Left open (unclear): Lumaril, Multi Media, Natuvion, neurohire.ai, Orbis
   Operations.
+
+## Tier list (Nov 2026)
+
+Tiers follow a personal S/A/B/C list: **Mid is the B tier** (solid product,
+enterprise and fintech SWE companies) and **Corporate is the C tier**
+(traditional enterprise, less tech-centric). Where the list names a company
+twice, the higher tier wins, except where it is placed explicitly (Twilio,
+Workday, Duolingo, Toast and Chime are A; Affirm is B). Names follow the
+new-grad lists ("Expedia Group", "Veeva Systems", "IMC Trading", "Perplexity
+AI") so their jobs match by name.
+
+- Re-tiered: Microsoft, Amazon, Airbnb, Ramp, Susquehanna/SIG → S; Affirm,
+  ADP → Mid. The seed is insert-only, so the PC database was updated by hand.
+- Added and tracked (board checked live): Databricks, xAI, Scale AI,
+  Cloudflare, Figma, Roblox, Jump Trading, IMC Trading (`imc`) on Greenhouse;
+  Perplexity AI, Snowflake on Ashby (S). Twilio, Pinterest, Okta, Vercel,
+  Gusto, Samsara, Toast, Chime, Anduril (`andurilindustries`) on Greenhouse;
+  Spotify on Lever (A). Dropbox, Asana, Box (`boxinc`), New Relic, Elastic,
+  GoDaddy, SoFi, Block, Riot Games, Epic Games, Nasdaq on Greenhouse; Bumble
+  (`bumbleinc`), Snyk on Ashby; Match Group, Veeva Systems (`veeva`), Wattpad
+  on Lever (Mid).
+- Added as manual only (no supported board; tiered so list jobs get a tier):
+  Meta, Apple, Netflix, Google DeepMind, Uber, LinkedIn, Optiver, Citadel
+  Securities (S); Adobe, Atlassian, HubSpot, Shopify, Snap, Workday,
+  ServiceNow, Palo Alto Networks, CrowdStrike, Rippling, Hugging Face (A);
+  Etsy, Zillow, Wayfair, Expedia Group, Chewy, Indeed, Yelp, Shutterstock,
+  Zoom, Zendesk, Oracle, IBM, F5, Dynatrace, Confluent, Autodesk, Docusign,
+  Pegasystems, SAS, Verisk, PayPal, Marqeta, Remitly, BILL, LendingClub,
+  Fiserv, Global Payments, NCR Voyix, Fidelity Investments, Current,
+  Electronic Arts, Zynga, S&P Global, Moody's, FactSet, Broadridge (Mid);
+  Chubb, BlackRock, American Express (Corporate).
+- Rejected `discover` hits: Lever `linkedin` (a test board), Greenhouse
+  `current` (a digital agency) and `sas` (security hardware); Greenhouse
+  `optiver` and `indeed`, Ashby `confluent` and Lever `docusign` have no jobs,
+  so they can't be confirmed.

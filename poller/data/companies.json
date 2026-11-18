@@ -635,7 +635,7 @@
     "name": "Susquehanna/SIG",
     "city": null,
     "state": null,
-    "tier": "Corporate",
+    "tier": "S",
     "ats": "other",
     "slug": null,
     "notes": "iCIMS (unsupported); manual only"
@@ -707,7 +707,7 @@
     "name": "ADP",
     "city": null,
     "state": null,
-    "tier": "Corporate",
+    "tier": "Mid",
     "ats": "other",
     "slug": null,
     "notes": "Own careers site (jobs.adp.com, blocks automated requests); manual only"
@@ -808,7 +808,7 @@
     "name": "Ramp",
     "city": null,
     "state": null,
-    "tier": "A",
+    "tier": "S",
     "ats": "ashby",
     "slug": "ramp",
     "track": false
@@ -932,7 +932,7 @@
     "name": "Affirm",
     "city": "NYC/Remote",
     "state": "NY",
-    "tier": "A",
+    "tier": "Mid",
     "ats": "greenhouse",
     "slug": "affirm"
   },
@@ -964,7 +964,7 @@
     "name": "Airbnb",
     "city": "Remote",
     "state": "US",
-    "tier": "A",
+    "tier": "S",
     "ats": "greenhouse",
     "slug": "airbnb",
     "notes": "Added from the New-Grad-Jobs board list (Nov 2026)"
@@ -1320,7 +1320,7 @@
   },
   {
     "name": "Amazon",
-    "tier": "A",
+    "tier": "S",
     "ats": "other",
     "slug": null,
     "notes": "Added from the Suggested backlog (Nov 2026)"
@@ -1425,7 +1425,7 @@
   },
   {
     "name": "Microsoft",
-    "tier": "A",
+    "tier": "S",
     "ats": "other",
     "slug": null,
     "notes": "Added from the Suggested backlog (Nov 2026)"
@@ -1464,5 +1464,663 @@
     "ats": "ashby",
     "slug": "shield",
     "notes": "Added from the Suggested backlog (Nov 2026)"
+  },
+  {
+    "name": "Meta",
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Apple",
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Netflix",
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Databricks",
+    "tier": "S",
+    "ats": "greenhouse",
+    "slug": "databricks",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Google DeepMind",
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "xAI",
+    "tier": "S",
+    "ats": "greenhouse",
+    "slug": "xai",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Perplexity AI",
+    "tier": "S",
+    "ats": "ashby",
+    "slug": "perplexity",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Scale AI",
+    "tier": "S",
+    "ats": "greenhouse",
+    "slug": "scaleai",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Uber",
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "LinkedIn",
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026). The Lever \"linkedin\" board is a test board"
+  },
+  {
+    "name": "Snowflake",
+    "tier": "S",
+    "ats": "ashby",
+    "slug": "snowflake",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Cloudflare",
+    "tier": "S",
+    "ats": "greenhouse",
+    "slug": "cloudflare",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Figma",
+    "tier": "S",
+    "ats": "greenhouse",
+    "slug": "figma",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Roblox",
+    "tier": "S",
+    "ats": "greenhouse",
+    "slug": "roblox",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Jump Trading",
+    "tier": "S",
+    "ats": "greenhouse",
+    "slug": "jumptrading",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Optiver",
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026). The Greenhouse \"optiver\" board has no jobs"
+  },
+  {
+    "name": "IMC Trading",
+    "tier": "S",
+    "ats": "greenhouse",
+    "slug": "imc",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Citadel Securities",
+    "tier": "S",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Adobe",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Atlassian",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "HubSpot",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Shopify",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Twilio",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "twilio",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Pinterest",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "pinterest",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Snap",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Spotify",
+    "tier": "A",
+    "ats": "lever",
+    "slug": "spotify",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Okta",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "okta",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Workday",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "ServiceNow",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Palo Alto Networks",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "CrowdStrike",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Rippling",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Vercel",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "vercel",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Gusto",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "gusto",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Samsara",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "samsara",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Toast",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "toast",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Chime",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "chime",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Anduril",
+    "tier": "A",
+    "ats": "greenhouse",
+    "slug": "andurilindustries",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Hugging Face",
+    "tier": "A",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Etsy",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Zillow",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Wayfair",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Expedia Group",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Chewy",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Indeed",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026). The Greenhouse \"indeed\" board has no jobs"
+  },
+  {
+    "name": "Yelp",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Bumble",
+    "tier": "Mid",
+    "ats": "ashby",
+    "slug": "bumbleinc",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Match Group",
+    "tier": "Mid",
+    "ats": "lever",
+    "slug": "matchgroup",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Shutterstock",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Zoom",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Dropbox",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "dropbox",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Asana",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "asana",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Box",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "boxinc",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Zendesk",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Oracle",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "IBM",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "F5",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Dynatrace",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "New Relic",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "newrelic",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Elastic",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "elastic",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Confluent",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026). The Ashby \"confluent\" board has no jobs"
+  },
+  {
+    "name": "Snyk",
+    "tier": "Mid",
+    "ats": "ashby",
+    "slug": "snyk",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Autodesk",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Docusign",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026). The Lever \"docusign\" board has no jobs"
+  },
+  {
+    "name": "Veeva Systems",
+    "tier": "Mid",
+    "ats": "lever",
+    "slug": "veeva",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Pegasystems",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "GoDaddy",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "godaddy",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "SAS",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026). The Greenhouse \"sas\" board is a different company"
+  },
+  {
+    "name": "Verisk",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "PayPal",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "SoFi",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "sofi",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Block",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "block",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Marqeta",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Remitly",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "BILL",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "LendingClub",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Fiserv",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Global Payments",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "NCR Voyix",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Fidelity Investments",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Current",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026). The fintech; the Greenhouse \"current\" board is a different company"
+  },
+  {
+    "name": "Riot Games",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "riotgames",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Epic Games",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "epicgames",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Electronic Arts",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Zynga",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Wattpad",
+    "tier": "Mid",
+    "ats": "lever",
+    "slug": "wattpad",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "S&P Global",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Moody's",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "FactSet",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Nasdaq",
+    "tier": "Mid",
+    "ats": "greenhouse",
+    "slug": "nasdaq",
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Broadridge",
+    "tier": "Mid",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "Chubb",
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "BlackRock",
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
+  },
+  {
+    "name": "American Express",
+    "tier": "Corporate",
+    "ats": "other",
+    "slug": null,
+    "notes": "Added from the tier list (Nov 2026)"
   }
 ]
