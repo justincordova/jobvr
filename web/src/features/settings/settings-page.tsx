@@ -501,7 +501,11 @@ function ListsSection({ payload }: { payload: SettingsPayload }) {
       </Row>
       <Row
         label="Add companies automatically"
-        hint="Companies with matching roles on the lists are polled from then on (as Startup) once their Greenhouse, Lever or Ashby board answers."
+        hint={
+          payload.tierModel
+            ? `Companies with matching roles on the lists are polled from then on once their Greenhouse, Lever or Ashby board answers. ${payload.tierModel} rates their tier.`
+            : 'Companies with matching roles on the lists are polled from then on once their Greenhouse, Lever or Ashby board answers. They start as Startup; set OPENAI_API_KEY to rate their tier automatically.'
+        }
       >
         <Switch
           checked={draft.suggestCompanies}

@@ -1,61 +1,83 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  AlertTriangle,
   Building2,
+  Check,
+  ExternalLink,
   MoreHorizontal,
-  Pencil,
   Plus,
   Search,
+  Sparkles,
   Trash2,
 } from 'lucide-react'
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { useToast } from '@/components/toast'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input'
-import { Segmented } from '@/components/ui/segmented'
-import { Switch } from '@/components/ui/switch'
+import { Input } from '@/components/ui/input'
 import { api, queryKeys, unwrap } from '@/lib/api'
+import { cn } from '@/lib/cn'
 import { companiesQuery, pendingDeletes } from '@/lib/companies-query'
-import { relative, shortAge } from '@/lib/format'
+import { safeHref, shortAge } from '@/lib/format'
 import { type Company, TIERS, type Tier } from '@/lib/types'
 
-type Status = Company['status']
-type CompanyPatch = Partial<{
-  name: string
-  city: string | null
-  state: string | null
-  tier: Tier
-  track: boolean
-  ats: string
-  slug: string | null
-  careersUrl: string | null
-  notes: string | null
-  status: Status
-}>
+type CompanyPatch = { tier: Tier } | { autoTier: true }
 
-const STATUS_TONE = { ok: 'go', needs_review: 'signal', manual_only: 'neutral' } as const
-const STATUS_LABEL: Record<Status, string> = {
-  ok: 'ok',
-  needs_review: 'needs review',
-  manual_only: 'manual only',
+/** How jobvr keeps up with a company, in plain words. */
+type Watch = 'direct' | 'lists' | 'trouble' | 'paused'
+
+const watchOf = (c: Company, trackedTiers: ReadonlySet<string>): Watch =>
+  c.status === 'needs_review' || (c.health?.consecutiveFailures ?? 0) > 0
+    ? 'trouble'
+    : c.status === 'manual_only' || c.ats === 'other' || !c.slug || !c.track
+      ? 'lists'
+      : trackedTiers.has(c.tier)
+        ? 'direct'
+        : 'paused'
+
+const WATCH: Record<Watch, { label: string; dot: string; hint: (c: Company) => string }> = {
+  direct: {
+    label: 'Checked directly',
+    dot: 'bg-go',
+    hint: () => 'Its job board is checked on every poll.',
+  },
+  lists: {
+    label: 'Via job lists',
+    dot: 'bg-dim',
+    hint: () =>
+      "jobvr can't read its careers site, so its jobs come from the new-grad lists (SimplifyJobs and others).",
+  },
+  trouble: {
+    label: 'Having trouble',
+    dot: 'bg-signal',
+    hint: (c) =>
+      `Its job board stopped answering${c.health?.lastError ? ` (${c.health.lastError})` : ''}. jobvr is looking for a new one; after 3 days it falls back to the job lists.`,
+  },
+  paused: {
+    label: 'Paused',
+    dot: 'bg-line-strong',
+    hint: (c) => `${c.tier} isn’t in Tiers to track (Settings), so it isn’t checked.`,
+  },
 }
 
-/** Why a company can't be tracked, or null when it can. */
-const trackBlocker = (c: Pick<Company, 'ats' | 'slug' | 'status'>) =>
-  c.ats === 'other'
-    ? 'Unsupported ATS: check this company manually'
-    : !c.slug
-      ? 'Add a slug to track this company'
-      : null
+const tierHint = (c: Company, model: string | null | undefined) =>
+  c.tierSource === 'auto'
+    ? `Rated by AI: ${c.tierReason ?? ''}`
+    : c.tierSource === 'manual'
+      ? 'Picked by you'
+      : c.tierSource === 'seed'
+        ? 'From the starter list'
+        : model
+          ? 'Not rated yet: it will be within a few minutes'
+          : 'Not rated: set OPENAI_API_KEY to rate new companies automatically'
 
 function useCompanyMutations() {
   const qc = useQueryClient()
@@ -70,9 +92,13 @@ function useCompanyMutations() {
     onMutate: async ({ id, json }) => {
       await qc.cancelQueries({ queryKey: queryKeys.companies })
       const prev = qc.getQueryData<Company[]>(queryKeys.companies)
-      qc.setQueryData<Company[]>(queryKeys.companies, (list) =>
-        list?.map((c) => (c.id === id ? { ...c, ...json } : c)),
-      )
+      if ('tier' in json) {
+        qc.setQueryData<Company[]>(queryKeys.companies, (list) =>
+          list?.map((c) =>
+            c.id === id ? { ...c, tier: json.tier, tierSource: 'manual', tierReason: null } : c,
+          ),
+        )
+      }
       return { prev }
     },
     onError: (err, _v, ctx) => {
@@ -99,7 +125,7 @@ function useCompanyMutations() {
     qc.setQueryData<Company[]>(queryKeys.companies, (list) =>
       list?.filter((c) => c.id !== company.id),
     )
-    toast.undoable(`Deleted ${company.name}`, {
+    toast.undoable(`Removed ${company.name}`, {
       undo: () => {
         pendingDeletes.delete(company.id)
         qc.setQueryData<Company[]>(queryKeys.companies, (list) =>
@@ -114,168 +140,63 @@ function useCompanyMutations() {
   return { patch, removeWithUndo, invalidate }
 }
 
-function Roles({ c }: { c: Company }) {
-  const { roles30d, lastRoleAt } = c.stats
-  if (!lastRoleAt) return <span className="text-faint">none yet</span>
-  return (
-    <span className="tabular-nums">
-      <span className={roles30d > 0 ? 'text-paper' : 'text-faint'}>{roles30d}</span>
-      <span className="text-faint"> · newest {shortAge(lastRoleAt)}</span>
-    </span>
-  )
-}
-
-function Health({ c }: { c: Company }) {
-  if (c.ats === 'other') return <span className="text-faint">n/a</span>
-  if (!c.health) return <span className="text-faint">not polled yet</span>
-  const failing = c.health.consecutiveFailures > 0
-  return (
-    <span className="inline-flex items-center gap-1.5" title={c.health.lastError ?? undefined}>
-      {failing && <AlertTriangle className="size-3.5 text-stop" />}
-      <span className={failing ? 'text-stop' : 'text-dim'}>
-        {relative(c.health.lastSuccessAt)}
-        {failing && ` · ${c.health.consecutiveFailures} failed`}
-      </span>
-    </span>
-  )
-}
-
-function CompanyDialog({
-  open,
-  onOpenChange,
-  editing,
-  atsOptions,
-}: {
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  editing: Company | null
-  atsOptions: { id: string; label: string }[]
-}) {
+/** One field: a careers link or a name. jobvr finds the board and rates the tier. */
+function AddDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const toast = useToast()
   const { invalidate } = useCompanyMutations()
   const [error, setError] = useState<string | null>(null)
-  // Until picked, follows the first board option: the options load with settings, possibly after mount
-  const [picked, setAts] = useState<string | null>(editing?.ats ?? null)
-  const ats = picked ?? atsOptions[0]?.id ?? 'other'
-
-  const save = useMutation({
-    mutationFn: (json: CompanyPatch & { name: string; tier: Tier; ats: string }) =>
-      editing
-        ? unwrap(api.api.companies[':id'].$patch({ param: { id: editing.id }, json }))
-        : unwrap(api.api.companies.$post({ json })),
+  const add = useMutation({
+    mutationFn: (query: string) => unwrap(api.api.companies.add.$post({ json: { query } })),
     onSuccess: (c) => {
       invalidate()
-      toast(editing ? `${c.name} saved` : `${c.name} added`)
+      toast(
+        c.ats === 'other'
+          ? `${c.name} added: no job board found, so its jobs come from the job lists`
+          : `${c.name} added`,
+      )
+      setError(null)
       onOpenChange(false)
     },
     onError: (err) => setError(err.message),
   })
-
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
-    const f = new FormData(e.currentTarget)
-    const str = (k: string) => String(f.get(k) ?? '').trim()
-    const other = ats === 'other'
-    const slug = other ? null : str('slug') || null
-    const status = (str('status') || undefined) as Status | undefined
-    save.mutate({
-      name: str('name'),
-      city: str('city') || null,
-      state: str('state') || null,
-      tier: str('tier') as Tier,
-      ats,
-      slug,
-      careersUrl: str('careersUrl') || null,
-      notes: str('notes') || null,
-      ...(other ? { status: 'manual_only', track: false } : status ? { status } : {}),
-      ...(!other && !slug ? { track: false } : {}),
-    })
+    add.mutate(String(new FormData(e.currentTarget).get('query') ?? '').trim())
   }
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) setError(null)
+        onOpenChange(o)
+      }}
+    >
       <DialogContent
-        title={editing ? `Edit ${editing.name}` : 'Add a company'}
-        description="Changing the ATS or slug resets polling: the next poll is a silent baseline."
+        title="Add a company"
+        description="Paste its careers page or type its name. jobvr finds its job board and rates its tier."
       >
-        <form key={editing?.id ?? 'new'} onSubmit={submit} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" name="name" required defaultValue={editing?.name} autoFocus />
-            </div>
-            <div>
-              <Label htmlFor="city">City</Label>
-              <Input id="city" name="city" defaultValue={editing?.city ?? ''} placeholder="NYC" />
-            </div>
-            <div>
-              <Label htmlFor="state">State</Label>
-              <Input id="state" name="state" defaultValue={editing?.state ?? ''} placeholder="NY" />
-            </div>
-            <div>
-              <Label htmlFor="tier">Tier</Label>
-              <NativeSelect id="tier" name="tier" defaultValue={editing?.tier ?? 'Startup'}>
-                {TIERS.map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </NativeSelect>
-            </div>
-            <div>
-              <Label htmlFor="ats">ATS</Label>
-              <NativeSelect id="ats" value={ats} onChange={(e) => setAts(e.target.value)}>
-                {atsOptions.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.label}
-                  </option>
-                ))}
-                <option value="other">Other (manual only)</option>
-              </NativeSelect>
-            </div>
-            {ats !== 'other' && (
-              <div>
-                <Label htmlFor="slug">Board slug</Label>
-                <Input
-                  id="slug"
-                  name="slug"
-                  defaultValue={editing?.slug ?? ''}
-                  placeholder="exact case, e.g. BlueMatrix"
-                  className="font-mono"
-                />
-              </div>
-            )}
-            {ats !== 'other' && editing && (
-              <div>
-                <Label htmlFor="status">Status</Label>
-                <NativeSelect id="status" name="status" defaultValue={editing.status}>
-                  <option value="ok">ok</option>
-                  <option value="needs_review">needs review</option>
-                  <option value="manual_only">manual only</option>
-                </NativeSelect>
-              </div>
-            )}
-            <div className="sm:col-span-2">
-              <Label htmlFor="careersUrl">Careers page</Label>
-              <Input
-                id="careersUrl"
-                name="careersUrl"
-                type="url"
-                defaultValue={editing?.careersUrl ?? ''}
-                placeholder="https://"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea id="notes" name="notes" defaultValue={editing?.notes ?? ''} />
-            </div>
-          </div>
+        <form onSubmit={submit} className="space-y-4">
+          <Input
+            name="query"
+            required
+            autoFocus
+            autoComplete="off"
+            aria-label="Careers link or company name"
+            placeholder="https://jobs.lever.co/acme or Acme"
+          />
           {error && <p className="animate-fade-in text-sm text-stop">{error}</p>}
-          <div className="flex justify-end gap-2">
+          <div className="flex items-center justify-end gap-2">
+            {add.isPending && (
+              <span className="mr-auto animate-fade-in text-sm text-dim">
+                Looking for its job board…
+              </span>
+            )}
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" pending={save.isPending}>
-              {editing ? 'Save changes' : 'Add company'}
+            <Button type="submit" variant="primary" pending={add.isPending}>
+              Add
             </Button>
           </div>
         </form>
@@ -283,8 +204,6 @@ function CompanyDialog({
     </Dialog>
   )
 }
-
-type Quick = 'all' | 'polled' | 'quiet' | 'review' | 'manual'
 
 function SkeletonTable() {
   return (
@@ -295,27 +214,68 @@ function SkeletonTable() {
             <Skeleton className="h-4 w-32" />
           </td>
           <td className="px-2 py-3">
-            <Skeleton className="h-7 w-24" />
+            <Skeleton className="h-5 w-16" />
           </td>
           <td className="px-2 py-3">
-            <Skeleton className="h-5 w-9 rounded-full" />
+            <Skeleton className="h-4 w-10" />
           </td>
-          <td className="hidden px-2 py-3 md:table-cell">
-            <Skeleton className="h-4 w-28" />
+          <td className="hidden px-2 py-3 sm:table-cell">
+            <Skeleton className="h-4 w-12" />
           </td>
           <td className="px-2 py-3">
-            <Skeleton className="h-4 w-16" />
-          </td>
-          <td className="hidden px-2 py-3 lg:table-cell">
-            <Skeleton className="h-4 w-20" />
-          </td>
-          <td className="hidden px-2 py-3 md:table-cell">
-            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-24" />
           </td>
           <td />
         </tr>
       ))}
     </tbody>
+  )
+}
+
+function RowMenu({
+  c,
+  onTier,
+  onAuto,
+  onRemove,
+}: {
+  c: Company
+  onTier: (t: Tier) => void
+  onAuto: () => void
+  onRemove: () => void
+}) {
+  const careers = c.careersUrl ? safeHref(c.careersUrl) : undefined
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="icon" variant="ghost" aria-label={`Options for ${c.name}`}>
+          <MoreHorizontal />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="min-w-48">
+        <DropdownMenuLabel>Tier</DropdownMenuLabel>
+        {TIERS.map((t) => (
+          <DropdownMenuItem key={t} onSelect={() => t !== c.tier && onTier(t)}>
+            <Check className={cn(t === c.tier ? 'opacity-100' : 'opacity-0')} /> {t}
+          </DropdownMenuItem>
+        ))}
+        {c.tierSource === 'manual' && (
+          <DropdownMenuItem onSelect={onAuto}>
+            <Sparkles /> Let jobvr rate it
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        {careers && (
+          <DropdownMenuItem asChild>
+            <a href={careers} target="_blank" rel="noreferrer">
+              <ExternalLink /> Careers page
+            </a>
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem className="text-stop data-[highlighted]:bg-stop/10" onSelect={onRemove}>
+          <Trash2 className="!text-stop" /> Remove
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -327,11 +287,7 @@ export function CompaniesPage() {
   })
   const { patch, removeWithUndo } = useCompanyMutations()
   const [filter, setFilter] = useState('')
-  const [quick, setQuick] = useState<Quick>('all')
-  const [dialog, setDialog] = useState<{ open: boolean; editing: Company | null }>({
-    open: false,
-    editing: null,
-  })
+  const [adding, setAdding] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
   // "/" jumps to search, like most list UIs
@@ -346,86 +302,51 @@ export function CompaniesPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const atsOptions = (settings.data?.sources ?? []).filter((s) => s.kind === 'ats')
-  const atsLabel = (id: string) => atsOptions.find((a) => a.id === id)?.label ?? 'Other'
   const tiersToTrack = settings.data?.settings.tiersToTrack
-  const tracked = useMemo(() => new Set(tiersToTrack ?? []), [tiersToTrack])
-
-  const isPolled = (c: Company) =>
-    c.track && !trackBlocker(c) && c.status !== 'manual_only' && tracked.has(c.tier)
-  // Polled, but nothing matching in 30 days: worth re-tiering or untracking
-  const isQuiet = (c: Company) => isPolled(c) && c.stats.roles30d === 0
-  const matchesQuick = (c: Company) =>
-    quick === 'all' ||
-    (quick === 'polled' && isPolled(c)) ||
-    (quick === 'quiet' && isQuiet(c)) ||
-    (quick === 'review' && c.status === 'needs_review') ||
-    (quick === 'manual' && c.status === 'manual_only')
+  const tracked = useMemo(() => new Set<string>(tiersToTrack ?? []), [tiersToTrack])
+  const model = settings.data?.tierModel
 
   const all = companies.data ?? []
   const q = filter.trim().toLowerCase()
   const rows = all.filter(
-    (c) =>
-      matchesQuick(c) &&
-      (!q || [c.name, c.city, c.slug, c.ats, c.tier].some((v) => v?.toLowerCase().includes(q))),
-  )
-  const counts = {
-    all: all.length,
-    polled: all.filter(isPolled).length,
-    quiet: all.filter(isQuiet).length,
-    review: all.filter((c) => c.status === 'needs_review').length,
-    manual: all.filter((c) => c.status === 'manual_only').length,
-  }
-  const count = (n: number) => (
-    <span className="ml-1 font-mono text-[0.7rem] text-faint tabular-nums">{n}</span>
+    (c) => !q || [c.name, c.city, c.tier].some((v) => v?.toLowerCase().includes(q)),
   )
 
   return (
     <section>
       <PageHeader
         title="Companies"
-        description="Your watchlist. Tracked companies in a tracked tier are polled on every run."
+        description={
+          companies.data
+            ? `${all.length} companies. New ones are found and rated automatically.`
+            : 'New companies are found and rated automatically.'
+        }
         actions={
-          <Button variant="primary" onClick={() => setDialog({ open: true, editing: null })}>
+          <Button variant="primary" onClick={() => setAdding(true)}>
             <Plus /> Add
           </Button>
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:w-72">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />
-          <Input
-            ref={searchRef}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setFilter('')
-                e.currentTarget.blur()
-              }
-            }}
-            placeholder="Search name, city, slug, tier"
-            aria-label="Search companies"
-            className="pr-9 pl-9"
-          />
-          <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-line px-1.5 font-mono text-[0.65rem] text-faint sm:block">
-            /
-          </kbd>
-        </div>
-        <Segmented
-          label="Show"
-          value={quick}
-          onChange={setQuick}
-          className="scrollbar-none max-w-full overflow-x-auto"
-          options={[
-            { id: 'all', label: <>All{count(counts.all)}</> },
-            { id: 'polled', label: <>Polled{count(counts.polled)}</> },
-            { id: 'quiet', label: <>Quiet{count(counts.quiet)}</> },
-            { id: 'review', label: <>Needs review{count(counts.review)}</> },
-            { id: 'manual', label: <>Manual{count(counts.manual)}</> },
-          ]}
+      <div className="relative mb-4 w-full sm:w-72">
+        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />
+        <Input
+          ref={searchRef}
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setFilter('')
+              e.currentTarget.blur()
+            }
+          }}
+          placeholder="Search companies"
+          aria-label="Search companies"
+          className="pr-9 pl-9"
         />
+        <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-line px-1.5 font-mono text-[0.65rem] text-faint sm:block">
+          /
+        </kbd>
       </div>
 
       {companies.isError && !companies.data ? (
@@ -440,24 +361,16 @@ export function CompaniesPage() {
           title={all.length === 0 ? 'No companies yet' : 'No matches'}
           body={
             all.length === 0
-              ? 'Add a company to start polling its job board.'
-              : q
-                ? `Nothing matches “${filter.trim()}”.`
-                : 'No companies in this group.'
+              ? 'Companies show up here as jobvr finds them on the new-grad lists.'
+              : `Nothing matches “${filter.trim()}”.`
           }
           action={
             all.length === 0 ? (
-              <Button size="sm" onClick={() => setDialog({ open: true, editing: null })}>
+              <Button size="sm" onClick={() => setAdding(true)}>
                 <Plus /> Add company
               </Button>
             ) : (
-              <Button
-                size="sm"
-                onClick={() => {
-                  setFilter('')
-                  setQuick('all')
-                }}
-              >
+              <Button size="sm" onClick={() => setFilter('')}>
                 Show all companies
               </Button>
             )
@@ -465,23 +378,20 @@ export function CompaniesPage() {
         />
       ) : (
         <div className="relative -mx-4 overflow-x-auto sm:mx-0 sm:rounded-xl sm:border sm:border-line">
-          <table className="w-full min-w-[34rem] text-sm md:min-w-[52rem]">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left font-mono text-[0.68rem] tracking-wider text-faint uppercase">
                 <th className="px-4 py-2.5 font-medium">Company</th>
                 <th className="px-2 py-2.5 font-medium">Tier</th>
-                <th className="px-2 py-2.5 font-medium">Track</th>
-                <th className="hidden px-2 py-2.5 font-medium md:table-cell">ATS / slug</th>
-                <th className="px-2 py-2.5 font-medium">Status</th>
-                <th
-                  className="hidden px-2 py-2.5 font-medium lg:table-cell"
-                  title="Matching roles posted in the last 30 days, and how long ago the newest was posted"
-                >
+                <th className="px-2 py-2.5 font-medium" title="Matching roles in the last 30 days">
                   Roles · 30d
                 </th>
-                <th className="hidden px-2 py-2.5 font-medium md:table-cell">Last good poll</th>
+                <th className="hidden px-2 py-2.5 font-medium sm:table-cell">Newest</th>
+                <th className="px-2 py-2.5 font-medium">
+                  <span className="sr-only sm:not-sr-only">Status</span>
+                </th>
                 <th className="w-10 px-2 py-2.5">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">Options</span>
                 </th>
               </tr>
             </thead>
@@ -490,96 +400,58 @@ export function CompaniesPage() {
             ) : (
               <tbody>
                 {rows.map((c) => {
-                  const blocker = trackBlocker(c)
-                  const edit = () => setDialog({ open: true, editing: c })
+                  const watch = WATCH[watchOf(c, tracked)]
+                  const place = [c.city, c.state].filter(Boolean).join(' · ')
                   return (
                     <tr
                       key={c.id}
                       className="border-b border-line/60 transition-colors duration-150 last:border-0 hover:bg-panel/60"
                     >
-                      <td className="px-4 py-2.5">
-                        <button
-                          type="button"
-                          onClick={edit}
-                          className="rounded-sm text-left font-medium decoration-signal/60 underline-offset-4 hover:underline"
-                        >
-                          {c.name}
-                        </button>
-                        <p className="text-xs text-faint">
-                          {[c.city, c.state].filter(Boolean).join(' · ')}
-                          <span className="md:hidden">
-                            {(c.city || c.state) && ' · '}
-                            {atsLabel(c.ats)}
-                          </span>
-                        </p>
-                      </td>
-                      <td className="px-2 py-2.5">
-                        <NativeSelect
-                          aria-label={`Tier for ${c.name}`}
-                          value={c.tier}
-                          onChange={(e) =>
-                            patch.mutate({ id: c.id, json: { tier: e.target.value as Tier } })
-                          }
-                          className="h-8 w-[7.5rem] py-1 text-xs"
-                        >
-                          {TIERS.map((t) => (
-                            <option key={t}>{t}</option>
-                          ))}
-                        </NativeSelect>
-                      </td>
-                      <td className="px-2 py-2.5">
-                        <span
-                          title={
-                            blocker ??
-                            (tracked.has(c.tier) ? undefined : `${c.tier} isn’t in Tiers to track`)
-                          }
-                        >
-                          <Switch
-                            aria-label={`Track ${c.name}`}
-                            checked={c.track}
-                            disabled={Boolean(blocker)}
-                            onCheckedChange={(track) => patch.mutate({ id: c.id, json: { track } })}
-                          />
-                        </span>
-                      </td>
-                      <td className="hidden px-2 py-2.5 md:table-cell">
-                        <span className="text-dim">{atsLabel(c.ats)}</span>
-                        {c.slug && (
-                          <span className="ml-1.5 font-mono text-xs text-paper/80">{c.slug}</span>
+                      <td className="max-w-0 px-4 py-2.5 sm:w-[45%]">
+                        <p className="truncate font-medium">{c.name}</p>
+                        {(c.tierReason || place) && (
+                          <p className="truncate text-xs text-faint">{c.tierReason ?? place}</p>
                         )}
                       </td>
+                      <td className="px-2 py-2.5 whitespace-nowrap">
+                        <span
+                          title={tierHint(c, model)}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-md bg-raised px-1.5 py-0.5 text-xs ring-1 ring-line',
+                            c.tierSource === 'pending' ? 'text-faint' : 'text-paper',
+                          )}
+                        >
+                          {c.tier}
+                          {c.tierSource === 'auto' && (
+                            <Sparkles aria-label="rated by AI" className="size-3 text-faint" />
+                          )}
+                          {c.tierSource === 'pending' && <span aria-label="not rated yet">?</span>}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2.5 font-mono text-xs tabular-nums">
+                        <span className={c.stats.roles30d > 0 ? 'text-paper' : 'text-faint'}>
+                          {c.stats.roles30d}
+                        </span>
+                      </td>
+                      <td className="hidden px-2 py-2.5 font-mono text-xs text-faint sm:table-cell">
+                        {c.stats.lastRoleAt ? shortAge(c.stats.lastRoleAt) : '—'}
+                      </td>
+                      <td className="px-2 py-2.5 whitespace-nowrap">
+                        <span
+                          title={watch.hint(c)}
+                          className="inline-flex items-center gap-2 text-xs text-dim"
+                        >
+                          <span className={cn('size-2 shrink-0 rounded-full', watch.dot)} />
+                          <span className="sr-only sm:not-sr-only">{watch.label}</span>
+                        </span>
+                      </td>
                       <td className="px-2 py-2.5">
-                        <Badge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</Badge>
-                      </td>
-                      <td className="hidden px-2 py-2.5 font-mono text-xs lg:table-cell">
-                        <Roles c={c} />
-                      </td>
-                      <td className="hidden px-2 py-2.5 font-mono text-xs md:table-cell">
-                        <Health c={c} />
-                      </td>
-                      <td className="px-2 py-2.5">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              aria-label={`Actions for ${c.name}`}
-                            >
-                              <MoreHorizontal />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            <DropdownMenuItem onSelect={edit}>
-                              <Pencil /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-stop data-[highlighted]:bg-stop/10"
-                              onSelect={() => void removeWithUndo(c)}
-                            >
-                              <Trash2 className="!text-stop" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <RowMenu
+                          c={c}
+                          onTier={(tier) => patch.mutate({ id: c.id, json: { tier } })}
+                          onAuto={() => patch.mutate({ id: c.id, json: { autoTier: true } })}
+                          onRemove={() => void removeWithUndo(c)}
+                        />
                       </td>
                     </tr>
                   )
@@ -590,13 +462,7 @@ export function CompaniesPage() {
         </div>
       )}
 
-      <CompanyDialog
-        key={dialog.editing?.id ?? 'new'}
-        open={dialog.open}
-        editing={dialog.editing}
-        atsOptions={atsOptions}
-        onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
-      />
+      <AddDialog open={adding} onOpenChange={setAdding} />
     </section>
   )
 }
