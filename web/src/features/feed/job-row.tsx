@@ -8,6 +8,7 @@ import {
   PanelRightOpen,
   Undo2,
 } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
@@ -29,6 +30,32 @@ interface JobRowProps {
   onFocusRow?: () => void
   /** Opens the detail panel. */
   onDetails?: () => void
+}
+
+/** An icon-only row action; the label is its accessible name and tooltip. */
+function IconAction({
+  label,
+  ghost,
+  className,
+  ...props
+}: {
+  label: string
+  ghost?: boolean
+  className?: string
+  onClick: () => void
+  disabled: boolean
+  children: ReactNode
+}) {
+  return (
+    <Button
+      size="icon"
+      variant={ghost ? 'ghost' : 'secondary'}
+      aria-label={label}
+      title={label}
+      className={className}
+      {...props}
+    />
+  )
 }
 
 /** Matching places first ("King of Prussia, PA" before "Farmington Hills, MI"), then a count. */
@@ -168,41 +195,38 @@ export function JobRow({
 
       <div className="col-start-2 mt-2.5 flex items-center gap-1.5 sm:col-start-3 sm:mt-0 sm:self-center lg:col-start-5 lg:justify-end">
         {job.state === 'applied' ? (
-          <Button size="sm" variant="ghost" onClick={() => onState('new')} disabled={busy}>
-            <Undo2 /> Not applied
-          </Button>
+          <IconAction label="Not applied" onClick={() => onState('new')} disabled={busy} ghost>
+            <Undo2 />
+          </IconAction>
         ) : (
           <>
-            <Button
-              size="sm"
+            <IconAction
+              label="Applied"
               onClick={() => onState('applied')}
               disabled={busy}
               className="hover:border-go/50 hover:text-go"
             >
-              <Check /> Applied
-            </Button>
+              <Check />
+            </IconAction>
             {job.state === 'saved' ? (
-              <Button size="sm" onClick={() => onState('new')} disabled={busy}>
+              <IconAction label="Unsave" onClick={() => onState('new')} disabled={busy}>
                 <BookmarkCheck className="text-signal" />
-                <span className="max-sm:sr-only">Unsave</span>
-              </Button>
+              </IconAction>
             ) : (
               job.state !== 'hidden' && (
-                <Button size="sm" onClick={() => onState('saved')} disabled={busy}>
+                <IconAction label="Save" onClick={() => onState('saved')} disabled={busy}>
                   <Bookmark />
-                  <span className="max-sm:sr-only">Save</span>
-                </Button>
+                </IconAction>
               )
             )}
             {job.state === 'hidden' ? (
-              <Button size="sm" variant="ghost" onClick={() => onState('new')} disabled={busy}>
-                <Eye /> Unhide
-              </Button>
+              <IconAction label="Unhide" onClick={() => onState('new')} disabled={busy} ghost>
+                <Eye />
+              </IconAction>
             ) : (
-              <Button size="sm" variant="ghost" onClick={() => onState('hidden')} disabled={busy}>
+              <IconAction label="Hide" onClick={() => onState('hidden')} disabled={busy} ghost>
                 <EyeOff />
-                <span className="max-sm:sr-only">Hide</span>
-              </Button>
+              </IconAction>
             )}
           </>
         )}
