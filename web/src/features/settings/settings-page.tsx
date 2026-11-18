@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useBlocker } from '@tanstack/react-router'
-import { Plus, Trash2 } from 'lucide-react'
+import { Link, useBlocker } from '@tanstack/react-router'
+import { Plus, ScrollText, Trash2 } from 'lucide-react'
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react'
 import { ErrorState, PageHeader, Section, Skeleton } from '@/components/page'
 import { useToast } from '@/components/toast'
@@ -688,6 +688,13 @@ export function SettingsPage() {
         <PageHeader
           title="Settings"
           description="Changes apply from the next poll. Each section saves on its own."
+          actions={
+            <Button size="sm" variant="ghost" asChild>
+              <Link to="/logs">
+                <ScrollText /> Logs
+              </Link>
+            </Button>
+          }
         />
         {settings.isError && !settings.data ? (
           <ErrorState

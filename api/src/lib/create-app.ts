@@ -3,6 +3,7 @@ import type { Database, Registry } from "@jobvr/core";
 import type { RequestIdVariables } from "hono/request-id";
 import type { PinoLogger } from "hono-pino";
 import { HTTP_STATUS } from "@/constants";
+import type { ActivityLog } from "@/lib/activity-log";
 import { fail, validationMessage } from "@/utils/response";
 
 /** Runtime dependencies injected into every request (so tests can swap them). */
@@ -10,6 +11,8 @@ export interface AppDeps {
   database: Database;
   registry: Registry;
   now: () => Date;
+  /** Recent log lines for GET /api/logs. */
+  activity: ActivityLog;
 }
 
 export interface AppBindings {

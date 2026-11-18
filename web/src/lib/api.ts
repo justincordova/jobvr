@@ -47,4 +47,5 @@ export const queryKeys = {
   companies: ['companies'] as const,
   suggestions: ['suggestions'] as const,
   settings: ['settings'] as const,
+  logs: ['logs'] as const,
 }

@@ -1,6 +1,7 @@
 import type { Database } from "@jobvr/core";
 import { createTestDatabase } from "@jobvr/core/testing";
 import { adapters } from "@jobvr/poller";
+import { createActivityLog } from "@/lib/activity-log";
 import type { AppDeps } from "@/lib/create-app";
 
 type Hook = (fn: () => unknown) => void;
@@ -14,7 +15,12 @@ export const setupTestDeps = (before: Hook, after: Hook) => {
   };
   before(async () => {
     ctx.database = await createTestDatabase();
-    ctx.deps = { database: ctx.database, registry: adapters, now: () => ctx.clock };
+    ctx.deps = {
+      database: ctx.database,
+      registry: adapters,
+      now: () => ctx.clock,
+      activity: createActivityLog(),
+    };
   });
   after(() => ctx.database.close());
   return ctx;

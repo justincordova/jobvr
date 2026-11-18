@@ -140,6 +140,8 @@ docker compose up -d
   with `lastPollAt`.
 - In the app, Settings shows the last poll, push and backup; Companies shows
   boards that need review.
+- Settings → Logs shows the server's recent log lines live (info and above,
+  the last 1000 since it started, secrets removed), from any tailnet device.
 
 ### Roll back an update
 

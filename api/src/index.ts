@@ -4,7 +4,7 @@ import { createDatabase, formatDuration, runMigrations } from "@jobvr/core";
 import { adapters } from "@jobvr/poller";
 import { createApp } from "@/app";
 import { env } from "@/config/env";
-import { logger } from "@/lib/logger";
+import { activityLog, logger } from "@/lib/logger";
 import { startScheduler } from "@/scheduler";
 
 // Must stay below the orchestrator's kill timeout (Docker/compose default: 10s)
@@ -46,7 +46,7 @@ log.info(
 );
 
 const app = createApp(
-  { database, registry: adapters, now: () => new Date() },
+  { database, registry: adapters, now: () => new Date(), activity: activityLog },
   { webDistDir: env.WEB_DIST_DIR, schedulerEnabled: env.SCHEDULER_ENABLED },
 );
 

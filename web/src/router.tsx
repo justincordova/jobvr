@@ -3,6 +3,7 @@ import { AppShell } from '@/components/app-shell'
 import { CompaniesPage } from '@/features/companies/companies-page'
 import { AppliedPage, FeedPage } from '@/features/feed/feed-page'
 import { parseAppliedSearch, parseFeedSearch } from '@/features/feed/search'
+import { LogsPage } from '@/features/logs/logs-page'
 import { SettingsPage } from '@/features/settings/settings-page'
 import { SuggestedPage } from '@/features/suggested/suggested-page'
 
@@ -46,12 +47,19 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 })
 
+const logsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/logs',
+  component: LogsPage,
+})
+
 const routeTree = rootRoute.addChildren([
   feedRoute,
   appliedRoute,
   companiesRoute,
   suggestedRoute,
   settingsRoute,
+  logsRoute,
 ])
 
 export const router = createRouter({

@@ -23,6 +23,7 @@ import { rateLimit } from "@/middleware/rate-limit";
 import { crossSiteGuard, requestGuards, securityHeaders } from "@/middleware/security";
 import companiesRouter from "@/modules/companies";
 import jobsRouter from "@/modules/jobs";
+import logsRouter from "@/modules/logs";
 import settingsRouter from "@/modules/settings";
 import suggestionsRouter from "@/modules/suggestions";
 import { fail, validationMessage } from "@/utils/response";
@@ -167,7 +168,8 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
     .route("/api/jobs", jobsRouter)
     .route("/api/companies", companiesRouter)
     .route("/api/suggestions", suggestionsRouter)
-    .route("/api/settings", settingsRouter);
+    .route("/api/settings", settingsRouter)
+    .route("/api/logs", logsRouter);
 
   const webDist = options.webDistDir ? path.resolve(options.webDistDir) : null;
   if (webDist && !existsSync(path.join(webDist, "index.html"))) {

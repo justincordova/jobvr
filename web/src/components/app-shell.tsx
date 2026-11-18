@@ -167,7 +167,9 @@ export function AppShell() {
 
   useEffect(() => {
     const page = NAV.find((n) => isActive(n.to, pathname))
-    document.title = page && page.to !== '/' ? `${page.label} · jobvr` : 'jobvr'
+    // Logs is reached from Settings, not the nav
+    const label = pathname.startsWith('/logs') ? 'Logs' : page && page.to !== '/' && page.label
+    document.title = label ? `${label} · jobvr` : 'jobvr'
   }, [pathname])
 
   return (
