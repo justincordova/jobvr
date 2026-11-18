@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
-import { Link, useNavigate, useSearch } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import {
   Bookmark,
   CloudOff,
@@ -26,6 +26,9 @@ import {
   CLEARED_FILTERS,
   DEFAULT_AGE,
   type FeedSearch,
+  recallSearch,
+  rememberSearch,
+  searchFor,
   toJobQuery,
   type View,
 } from './search'
@@ -51,7 +54,7 @@ const EMPTY_COPY: Record<
   applied: {
     icon: Send,
     title: 'Nothing marked applied',
-    body: 'Hit Applied on a role once you’ve applied and it moves here, out of your feed.',
+    body: 'Hit Applied on a role once you’ve applied and it moves here, out of your feed, latest first.',
   },
   hidden: {
     icon: EyeOff,
@@ -89,14 +92,24 @@ function SkeletonRows() {
 
 const PAGE_SIZE = 500
 
+const pathOf = (view: View) => (view === 'applied' ? '/applied' : '/')
+
 export function FeedPage() {
-  const search = useSearch({ from: '/' })
-  const navigate = useNavigate({ from: '/' })
+  return <JobsPage search={useSearch({ from: '/' })} />
+}
+
+export function AppliedPage() {
+  return <JobsPage search={{ ...useSearch({ from: '/applied' }), view: 'applied' }} />
+}
+
+function JobsPage({ search }: { search: FeedSearch }) {
+  const navigate = useNavigate()
   const [bannerOpen, setBannerOpen] = useState(true)
   const [helpOpen, setHelpOpen] = useState(false)
   const [detailsId, setDetailsId] = useState<string | null>(null)
   const baseQuery = toJobQuery(search)
   const view = search.view ?? 'feed'
+  useEffect(() => rememberSearch(view, search))
   // "Show more" raises the page size; any other change of query starts over
   const queryId = JSON.stringify(baseQuery)
   const [paging, setPaging] = useState({ queryId, limit: PAGE_SIZE })
@@ -137,9 +150,11 @@ export function FeedPage() {
   const locations = (settings.data?.settings.locations ?? [])
     .filter((l) => l.enabled)
     .map((l) => l.label)
-  // A view switch is a place you can go Back from; filter and search tweaks aren't
+  // Filter and search tweaks replace the entry; a view switch is a place you can go Back from
   const update = (next: Partial<FeedSearch>) =>
-    navigate({ search: (prev) => ({ ...prev, ...next }), replace: !('view' in next) })
+    navigate({ to: pathOf(view), search: searchFor(view, { ...search, ...next }), replace: true })
+  // Each view opens with its own last filters (see `recallSearch`)
+  const goView = (next: View) => navigate({ to: pathOf(next), search: recallSearch(next) })
 
   const newCount = sessionNewCount()
   const list = (jobs.data?.jobs ?? []).filter((j) =>
@@ -151,7 +166,7 @@ export function FeedPage() {
   const keys = useFeedKeys({
     list,
     onState: act,
-    onView: (v) => update({ view: v === 'feed' ? undefined : v }),
+    onView: (v) => v !== view && goView(v),
     onHelp: () => setHelpOpen(true),
     onDetails: (job) => setDetailsId(job.id),
   })
@@ -239,6 +254,7 @@ export function FeedPage() {
       <FilterBar
         search={search}
         onChange={update}
+        onView={goView}
         locations={locations}
         sources={sources.map((s) => ({ id: s.id, label: s.label }))}
         companies={companies.data ?? []}
@@ -275,10 +291,8 @@ export function FeedPage() {
                   </Button>
                 )}
                 {view !== 'feed' && !filtered && (
-                  <Button size="sm" variant="ghost" asChild>
-                    <Link to="/" search={{}}>
-                      Back to the feed
-                    </Link>
+                  <Button size="sm" variant="ghost" onClick={() => goView('feed')}>
+                    Back to the feed
                   </Button>
                 )}
               </>

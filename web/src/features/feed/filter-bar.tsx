@@ -64,16 +64,21 @@ function ChipGroup({
   )
 }
 
+// Applied is its own page
 const VIEW_OPTIONS: { id: View; label: string }[] = [
   { id: 'feed', label: 'Feed' },
   { id: 'saved', label: 'Saved' },
-  { id: 'applied', label: 'Applied' },
   { id: 'hidden', label: 'Hidden' },
 ]
 
 const SORT_OPTIONS: { id: Sort; label: string }[] = [
   { id: 'best', label: 'Best first' },
   { id: 'newest', label: 'Newest first' },
+]
+
+const APPLIED_SORT_OPTIONS: { id: Sort; label: string }[] = [
+  { id: 'applied', label: 'Latest applied' },
+  ...SORT_OPTIONS,
 ]
 
 const AGE_OPTIONS: { id: Age; label: string }[] = [
@@ -153,12 +158,20 @@ function SearchField({
 interface FilterBarProps {
   search: FeedSearch
   onChange: (next: Partial<FeedSearch>) => void
+  onView: (view: View) => void
   locations: string[]
   sources: { id: string; label: string }[]
   companies: Company[]
 }
 
-export function FilterBar({ search, onChange, locations, sources, companies }: FilterBarProps) {
+export function FilterBar({
+  search,
+  onChange,
+  onView,
+  locations,
+  sources,
+  companies,
+}: FilterBarProps) {
   const active = activeFilterCount(search)
   const [open, setOpen] = useState(active > 0)
   const view = search.view ?? 'feed'
@@ -167,12 +180,9 @@ export function FilterBar({ search, onChange, locations, sources, companies }: F
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        <Segmented
-          label="View"
-          value={view}
-          options={VIEW_OPTIONS}
-          onChange={(v) => onChange({ view: v === 'feed' ? undefined : v })}
-        />
+        {view !== 'applied' && (
+          <Segmented label="View" value={view} options={VIEW_OPTIONS} onChange={onView} />
+        )}
         <Segmented
           label="Age"
           value={age}
@@ -239,7 +249,7 @@ export function FilterBar({ search, onChange, locations, sources, companies }: F
                 <Segmented
                   label="Order"
                   value={search.sort ?? defaultSort(search.view)}
-                  options={SORT_OPTIONS}
+                  options={view === 'applied' ? APPLIED_SORT_OPTIONS : SORT_OPTIONS}
                   onChange={(s) =>
                     onChange({ sort: s === defaultSort(search.view) ? undefined : s })
                   }

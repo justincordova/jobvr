@@ -2,7 +2,7 @@ import { TIER_FILTERS, type TierFilter } from '@/lib/types'
 
 export const VIEWS = ['feed', 'saved', 'applied', 'hidden'] as const
 export const AGES = ['1h', 'today', '3d', 'all'] as const
-export const SORTS = ['best', 'newest'] as const
+export const SORTS = ['best', 'newest', 'applied'] as const
 export type View = (typeof VIEWS)[number]
 export type Age = (typeof AGES)[number]
 export type Sort = (typeof SORTS)[number]
@@ -16,14 +16,49 @@ export interface FeedSearch {
   company?: string[]
   /** Only jobs flagged entry level. */
   level?: 'entry'
-  /** Unset: best first in the feed, newest first in the other views. */
+  /** Unset: best first in the feed, latest applied first in Applied, else newest first. */
   sort?: Sort
   /** Text search (title, company, places). */
   q?: string
 }
 
 export const defaultSort = (view: View | undefined): Sort =>
-  (view ?? 'feed') === 'feed' ? 'best' : 'newest'
+  (view ?? 'feed') === 'feed' ? 'best' : view === 'applied' ? 'applied' : 'newest'
+
+/** Applied is its own page (`/applied`), so `view` there is implied. */
+export function parseAppliedSearch(raw: Record<string, unknown>): FeedSearch {
+  return withoutView(parseFeedSearch(raw))
+}
+
+export function withoutView(s: FeedSearch): FeedSearch {
+  const out = { ...s }
+  delete out.view
+  return out
+}
+
+/** The URL search for a view's page: Saved and Hidden are views of `/`. */
+export const searchFor = (view: View, s: FeedSearch): FeedSearch =>
+  view === 'saved' || view === 'hidden' ? { ...withoutView(s), view } : withoutView(s)
+
+/**
+ * Each view keeps its own filters for the session: narrowing the feed to Mid
+ * and Startup doesn't narrow Applied, and coming back restores them.
+ */
+const remembered = new Map<View, FeedSearch>()
+
+export function rememberSearch(view: View, search: FeedSearch) {
+  remembered.set(view, search)
+}
+
+/** The search to open a view with: its last filters, or none. */
+export function recallSearch(view: View): FeedSearch {
+  return searchFor(view, remembered.get(view) ?? {})
+}
+
+/** Test helper. */
+export function forgetSearches() {
+  remembered.clear()
+}
 
 const strings = (v: unknown): string[] | undefined => {
   const list = Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : []

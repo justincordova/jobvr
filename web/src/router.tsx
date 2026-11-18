@@ -1,8 +1,8 @@
-import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
 import { AppShell } from '@/components/app-shell'
 import { CompaniesPage } from '@/features/companies/companies-page'
-import { FeedPage } from '@/features/feed/feed-page'
-import { parseFeedSearch } from '@/features/feed/search'
+import { AppliedPage, FeedPage } from '@/features/feed/feed-page'
+import { parseAppliedSearch, parseFeedSearch } from '@/features/feed/search'
 import { SettingsPage } from '@/features/settings/settings-page'
 import { SuggestedPage } from '@/features/suggested/suggested-page'
 
@@ -12,7 +12,20 @@ const feedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   validateSearch: parseFeedSearch,
+  // Applied used to be a view of the feed; old links and bookmarks still work
+  beforeLoad: ({ search }) => {
+    if (search.view === 'applied') {
+      throw redirect({ to: '/applied', search: { ...search, view: undefined }, replace: true })
+    }
+  },
   component: FeedPage,
+})
+
+const appliedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/applied',
+  validateSearch: parseAppliedSearch,
+  component: AppliedPage,
 })
 
 const companiesRoute = createRoute({
@@ -33,7 +46,13 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 })
 
-const routeTree = rootRoute.addChildren([feedRoute, companiesRoute, suggestedRoute, settingsRoute])
+const routeTree = rootRoute.addChildren([
+  feedRoute,
+  appliedRoute,
+  companiesRoute,
+  suggestedRoute,
+  settingsRoute,
+])
 
 export const router = createRouter({
   routeTree,

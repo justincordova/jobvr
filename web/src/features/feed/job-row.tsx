@@ -11,7 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
-import { safeHref, salaryRange, shortAge } from '@/lib/format'
+import { relative, safeHref, salaryRange, shortAge } from '@/lib/format'
 import { vtName } from '@/lib/motion'
 import type { Job } from '@/lib/types'
 import { FEED_GRID } from './columns'
@@ -154,7 +154,14 @@ export function JobRow({
             </span>
           )}
           {job.state === 'saved' && <Badge tone="signal">Saved</Badge>}
-          {job.state === 'applied' && <Badge tone="go">Applied</Badge>}
+          {job.state === 'applied' && (
+            <Badge
+              tone="go"
+              title={job.appliedAt ? new Date(job.appliedAt).toLocaleString() : undefined}
+            >
+              Applied{job.appliedAt && ` ${relative(job.appliedAt)}`}
+            </Badge>
+          )}
           {closed && <Badge tone="stop">Closed</Badge>}
         </div>
       </div>

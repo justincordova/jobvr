@@ -58,7 +58,14 @@ export function useJobActions() {
             ? {
                 ...list,
                 jobs: list.jobs.map((j) =>
-                  j.id === id || also.includes(j.id) ? { ...j, state } : j,
+                  j.id === id || also.includes(j.id)
+                    ? {
+                        ...j,
+                        state,
+                        appliedAt:
+                          state === 'applied' ? (j.appliedAt ?? new Date().toISOString()) : null,
+                      }
+                    : j,
                 ),
               }
             : list,

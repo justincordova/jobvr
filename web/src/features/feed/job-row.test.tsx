@@ -18,6 +18,7 @@ const job = (extra: Partial<Job> = {}): Job => ({
   salaryMinUsd: 120000,
   salaryMaxUsd: 150000,
   state: 'new',
+  appliedAt: null,
   baseline: false,
   closedAt: null,
   isNew: false,
@@ -112,8 +113,15 @@ describe('JobRow', () => {
 
   it('marks closed and applied jobs, and can unmark applied', async () => {
     const user = userEvent.setup()
-    const { onState } = renderRow(job({ state: 'applied', closedAt: new Date().toISOString() }))
+    const { onState } = renderRow(
+      job({
+        state: 'applied',
+        appliedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+        closedAt: new Date().toISOString(),
+      }),
+    )
     expect(screen.getByText('Closed')).toBeInTheDocument()
+    expect(screen.getByText('Applied 3 d ago')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /not applied/i }))
     expect(onState).toHaveBeenCalledWith('new')
   })
