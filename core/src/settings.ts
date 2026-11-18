@@ -39,10 +39,7 @@ const fields = {
         });
       }
     }),
-  /** Companies in these tiers are polled. */
   tiersToTrack: z.array(z.enum(TIER_FILTERS)).transform((t) => [...new Set(t)]),
-  /** The feed's default tier filter; only these tiers push and count as new. */
-  feedTiers: z.array(z.enum(TIER_FILTERS)).transform((t) => [...new Set(t)]),
   /** Feed and pushes: only titles that say entry level, plus everything on the new-grad lists. */
   entryLevelOnly: z.boolean(),
   roleKeywords: z.array(keyword).min(1).max(100),
@@ -93,7 +90,6 @@ export const DEFAULT_SETTINGS: Settings = {
     { label: REMOTE_US_LABEL, aliases: [], enabled: true, builtin: "remote_us" },
   ],
   tiersToTrack: ["S", "A", "Mid", "Startup", "Corporate", "Unlisted"],
-  feedTiers: ["S", "A", "Mid", "Startup", "Corporate", "Unlisted"],
   entryLevelOnly: false,
   roleKeywords: [
     "software",
@@ -239,8 +235,6 @@ export const parseStoredSettings = (data: unknown): Settings => {
     const parsed = schema.safeParse(raw[key]);
     if (parsed.success) out[key] = parsed.data;
   }
-  // Before Nov 2026 "Tiers to track" also chose the feed's and the pushes' tiers
-  if (!("feedTiers" in raw)) out.feedTiers = structuredClone(out.tiersToTrack);
   return out as Settings;
 };
 

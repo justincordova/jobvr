@@ -267,7 +267,7 @@ export function FilterBar({
               options={TIER_FILTERS.map((t) => ({ id: t, label: t }))}
               selected={search.tier}
               onChange={(tier) => onChange({ tier: tier as FeedSearch['tier'] })}
-              hint={view === 'feed' ? 'feed tiers (Settings)' : 'any'}
+              hint={view === 'feed' ? 'tracked tiers' : 'any'}
             />
             <ChipGroup
               label="Source"

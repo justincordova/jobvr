@@ -381,29 +381,40 @@ function MatchingSection({ settings }: { settings: Settings }) {
   )
 }
 
-function TierChips({
-  label,
-  hint,
-  value,
-  onChange,
-}: {
-  label: string
-  hint: string
-  value: Settings['tiersToTrack']
-  onChange: (next: Settings['tiersToTrack']) => void
-}) {
-  const on = new Set(value)
+function TiersSection({ settings }: { settings: Settings }) {
+  const { draft, set, dirty, reset } = useDraft('Tiers', settings, [
+    'tiersToTrack',
+    'entryLevelOnly',
+  ] as const)
+  const { save, pending, error } = useSave('Tiers')
+  const on = new Set(draft.tiersToTrack)
   return (
-    <fieldset>
-      <legend className="text-sm font-medium">{label}</legend>
-      <p className="mb-2 text-xs text-dim">{hint}</p>
+    <Section
+      title="Tiers to track"
+      dirty={dirty}
+      description="Decides which companies are polled, which jobs push, and the feed’s default tier filter. Unlisted = roles from the new-grad lists at companies not in your list."
+      footer={
+        <SaveBar
+          dirty={dirty}
+          onSave={() => save(draft)}
+          onReset={reset}
+          pending={pending}
+          error={error}
+        />
+      }
+    >
       <div className="flex flex-wrap gap-2">
         {TIER_FILTERS.map((t) => (
           <button
             key={t}
             type="button"
             aria-pressed={on.has(t)}
-            onClick={() => onChange(on.has(t) ? value.filter((x) => x !== t) : [...value, t])}
+            onClick={() =>
+              set(
+                'tiersToTrack',
+                on.has(t) ? draft.tiersToTrack.filter((x) => x !== t) : [...draft.tiersToTrack, t],
+              )
+            }
             className={cn(
               'rounded-full border px-3 py-1 text-sm transition-[color,background-color,border-color,scale] duration-150 active:scale-95',
               on.has(t)
@@ -415,44 +426,6 @@ function TierChips({
           </button>
         ))}
       </div>
-    </fieldset>
-  )
-}
-
-function TiersSection({ settings }: { settings: Settings }) {
-  const { draft, set, dirty, reset } = useDraft('Tiers & feed', settings, [
-    'tiersToTrack',
-    'feedTiers',
-    'entryLevelOnly',
-  ] as const)
-  const { save, pending, error } = useSave('Tiers & feed')
-  return (
-    <Section
-      title="Tiers & feed"
-      dirty={dirty}
-      description="Unlisted = roles from the new-grad lists at companies not in your list."
-      footer={
-        <SaveBar
-          dirty={dirty}
-          onSave={() => save(draft)}
-          onReset={reset}
-          pending={pending}
-          error={error}
-        />
-      }
-    >
-      <TierChips
-        label="Poll"
-        hint="Companies in these tiers are polled, so their jobs are stored and you can filter to them."
-        value={draft.tiersToTrack}
-        onChange={(v) => set('tiersToTrack', v)}
-      />
-      <TierChips
-        label="Feed and pushes"
-        hint="The feed shows these tiers unless you pick others in Filters; only these push and count as new."
-        value={draft.feedTiers}
-        onChange={(v) => set('feedTiers', v)}
-      />
       <Row
         label="Entry level only"
         hint="Feed and pushes: titles that say new grad, junior, I and so on, plus everything on the new-grad lists. Hides plain “Software Engineer” board roles."
@@ -528,16 +501,7 @@ function ListsSection({ payload }: { payload: SettingsPayload }) {
       </Row>
       <Row
         label="Add companies automatically"
-        hint={
-          <>
-            Companies with matching roles on the lists are polled from then on (as Startup) once
-            their Greenhouse, Lever or Ashby board answers. The rest stay{' '}
-            <Link to="/suggested" className="text-signal underline-offset-4 hover:underline">
-              in Suggested
-            </Link>
-            .
-          </>
-        }
+        hint="Companies with matching roles on the lists are polled from then on (as Startup) once their Greenhouse, Lever or Ashby board answers."
       >
         <Switch
           checked={draft.suggestCompanies}

@@ -221,7 +221,7 @@ export const isEntryLevelJob = (
   isEntryLevelTitle(job.title, s) || job.sources.some((src) => kindOf(src.source) === "aggregator");
 
 /**
- * The pushable rule without `notified_at`: non-baseline, new/saved, a feed
+ * The pushable rule without `notified_at`: non-baseline, new/saved, tracked
  * tier, entry level when the feed is entry-level only, within max age,
  * visible. Shared by pushes and "new since last visit".
  */
@@ -233,7 +233,7 @@ export const isFreshMatch = (
 ): boolean =>
   !job.baseline &&
   (job.state === "new" || job.state === "saved") &&
-  s.feedTiers.includes(job.tier) &&
+  s.tiersToTrack.includes(job.tier) &&
   (!s.entryLevelOnly || isEntryLevelJob(job, s, kindOf)) &&
   now.getTime() - job.effectiveAt.getTime() <= s.maxJobAgeHours * HOUR &&
   isVisible(job, s, kindOf);
@@ -294,7 +294,7 @@ export const listJobs = async (
   const kindOf = kindLookup(registry);
   const view = query.view ?? "feed";
   const age = query.age ?? "all";
-  const tiers = query.tier ?? (view === "feed" ? s.feedTiers : undefined);
+  const tiers = query.tier ?? (view === "feed" ? s.tiersToTrack : undefined);
   const entryOnly = query.level === "entry" || (view === "feed" && s.entryLevelOnly);
   const applyV = view === "feed" || view === "hidden";
 

@@ -105,10 +105,9 @@ describe("selectPushable", () => {
     await addJob("closed", { closedAt: ago(0.1) });
     await addJob("far", { locations: ["Austin, TX"] });
 
-    // Pushes follow the feed's tiers, not the polled ones
     const withoutS = {
       ...DEFAULT_SETTINGS,
-      feedTiers: DEFAULT_SETTINGS.feedTiers.filter((t) => t !== "S"),
+      tiersToTrack: DEFAULT_SETTINGS.tiersToTrack.filter((t) => t !== "S"),
     };
     const ids = (await selectPushable(database, registry, withoutS, NOW)).map((j) => j.id);
     expect(ids.sort()).toEqual(["corp", "ok", "saved"]);

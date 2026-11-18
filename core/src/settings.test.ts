@@ -28,16 +28,6 @@ describe("settings", () => {
     ).toEqual([]);
   });
 
-  it("starts the feed's tiers at the polled tiers when they were never saved", () => {
-    expect(parseStoredSettings({ tiersToTrack: ["Mid", "Unlisted"] }).feedTiers).toEqual([
-      "Mid",
-      "Unlisted",
-    ]);
-    expect(
-      parseStoredSettings({ tiersToTrack: ["S", "Mid"], feedTiers: ["Mid"] }).feedTiers,
-    ).toEqual(["Mid"]);
-  });
-
   it("rejects duplicate labels, no enabled location, and a removed Remote-US entry", () => {
     const base = DEFAULT_SETTINGS.locations;
     const dup = [...base, { label: "nj", aliases: ["x"], enabled: true }];
