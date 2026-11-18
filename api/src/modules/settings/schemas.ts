@@ -21,6 +21,8 @@ export const SettingsPayload = z
   .object({
     settings: SettingsSchema,
     lastPollAt: isoNullable,
+    /** When the last poll finished and was saved; the web app refetches jobs when it moves. */
+    lastPollOkAt: isoNullable,
     lastPushAt: isoNullable,
     lastVisitAt: isoNullable,
     /** Recorded by the PC's backup service; both null where none runs. */

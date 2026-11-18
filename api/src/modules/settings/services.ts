@@ -27,6 +27,7 @@ export const loadSettingsPayload = async (
   return {
     settings: state.settings,
     lastPollAt: isoOrNull(state.lastPollAt),
+    lastPollOkAt: isoOrNull(state.lastPollOkAt),
     lastPushAt: isoOrNull(state.lastPushAt),
     lastVisitAt: isoOrNull(state.lastVisitAt),
     sourceOutages: Object.entries(state.sourceOutages).map(([source, o]) => ({

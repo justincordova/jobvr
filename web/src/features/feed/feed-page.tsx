@@ -11,7 +11,7 @@ import {
   Sparkle,
   X,
 } from 'lucide-react'
-import { type ComponentType, useEffect, useState } from 'react'
+import { type ComponentType, useEffect, useRef, useState } from 'react'
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys, unwrap } from '@/lib/api'
@@ -27,6 +27,7 @@ import {
   CLEARED_FILTERS,
   DEFAULT_AGE,
   type FeedSearch,
+  isBlankSearch,
   recallSearch,
   rememberSearch,
   searchFor,
@@ -110,7 +111,19 @@ function JobsPage({ search }: { search: FeedSearch }) {
   const [detailsId, setDetailsId] = useState<string | null>(null)
   const baseQuery = toJobQuery(search)
   const view = search.view ?? 'feed'
-  useEffect(() => rememberSearch(view, search))
+  // A bare page (the home-screen icon, a reload) opens with the filters last used here
+  const opening = useRef(true)
+  useEffect(() => {
+    if (opening.current) {
+      opening.current = false
+      const saved = recallSearch(view)
+      if (isBlankSearch(search) && !isBlankSearch(saved)) {
+        void navigate({ to: pathOf(view), search: saved, replace: true })
+        return
+      }
+    }
+    rememberSearch(view, search)
+  })
   // "Show more" raises the page size; any other change of query starts over
   const queryId = JSON.stringify(baseQuery)
   const [paging, setPaging] = useState({ queryId, limit: PAGE_SIZE })
@@ -120,7 +133,7 @@ function JobsPage({ search }: { search: FeedSearch }) {
   const jobs = useQuery({
     queryKey: queryKeys.jobs(query),
     queryFn: () => unwrap(api.api.jobs.$get({ query })),
-    refetchInterval: 120_000,
+    // No timer: the app shell refetches job lists when a poll finishes.
     // Keep the current list on screen while a new filter loads
     placeholderData: keepPreviousData,
   })
@@ -135,10 +148,11 @@ function JobsPage({ search }: { search: FeedSearch }) {
   const { setState } = useJobActions()
 
   // Only the plain feed counts as a visit: opening on Saved (a home-screen
-  // shortcut) or a filtered list would record it and lose the feed's highlights
+  // shortcut) or a filtered list would record it and lose the feed's highlights.
+  // Tiers don't count as a filter: they're remembered, so the feed usually opens with some
   const plainFeed =
     view === 'feed' &&
-    activeFilterCount(search) === 0 &&
+    activeFilterCount({ ...search, tier: undefined }) === 0 &&
     !search.q &&
     (search.age ?? DEFAULT_AGE) === DEFAULT_AGE
   useEffect(() => {

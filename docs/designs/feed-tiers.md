@@ -1,32 +1,34 @@
-# Feed tiers and entry level as settings
+# Feed filters that stick; entry level as a setting
 
 ## Problem
 
-"Tiers to track" decided three things at once: which companies are polled,
-which jobs push, and the feed's default tier filter. To keep S and A polled
-(useful to see) but out of the way day to day, the feed's Tier filter had to be
-set to Mid, Startup, Corporate and Unlisted again on every visit (filters live
-in the URL and in memory, so a reload or the home-screen app starts over).
+Feed filters lived in the URL and in memory, so a reload or the home-screen
+app opened the feed with no filters, and the tiers had to be picked again
+(Mid, Startup, Corporate and Unlisted, with S and A still polled).
 
-The feed's "Entry level only" switch had the same problem, and it hides plain
-"Software Engineer" board roles that are often new-grad friendly anyway.
+The feed's "Entry level only" switch hid plain "Software Engineer" board
+roles that are often new-grad friendly anyway, and had to be turned on again
+each time too.
+
+A separate "feed and pushes" tier setting was tried and dropped: two tier
+settings (poll vs feed) were confusing. "Tiers to track" still decides
+polling, pushes and the feed's default tier filter.
 
 ## Design
 
-- **`tiersToTrack`** ("Poll"): only which companies are polled.
-- **`feedTiers`** ("Feed and pushes"), new: the feed's default tier filter
-  (when Filters → Tier is empty), and the tiers that push and count as new
-  (`isFreshMatch`). Picking tiers in Filters still overrides it, so S and A
-  stay one tap away. Saved, Applied and Hidden ignore it, as before.
-- **`entryLevelOnly`**, new, default off: the feed and pushes keep only
+- **Filters stick per browser**: each view's filters (tiers, places, sources,
+  company, age, order; not the text search) are saved in `localStorage`
+  (`jobvr.filters`). Opening a view bare (reload, home-screen icon, nav link)
+  restores them; "Clear" clears them. Per browser, so each person or device
+  keeps its own.
+- A remembered tier filter doesn't stop the feed from counting as a visit (the
+  "new since last visit" mark), since the feed usually opens with one now.
+- **`entryLevelOnly`**, a setting, default off: the feed and pushes keep only
   entry-level jobs (an entry-level title, or on a new-grad list). Replaces the
   feed's switch; `level=entry` still works on the API.
-- Stored settings without `feedTiers` start it at `tiersToTrack`, so an
-  existing database behaves as before until it's changed.
-- Settings: the "Tiers to track" section becomes "Tiers & feed" with the two
-  tier rows and the switch.
-
-## Also
-
+- **Refresh after a poll, not on a timer**: job lists used to refetch every
+  2 min. The app shell already checks settings every minute; when
+  `lastPollOkAt` (new in `GET /api/settings`) moves, it invalidates the job
+  lists. Nothing else changes them between polls except your own actions.
 - Feed row actions (Applied, Save/Unsave, Hide/Unhide, Not applied) are
   icon-only; each keeps its name as `aria-label` and tooltip.

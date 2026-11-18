@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   defaultSort,
   forgetSearches,
+  isBlankSearch,
   parseAppliedSearch,
   parseFeedSearch,
   recallSearch,
@@ -40,6 +41,7 @@ describe('feed search params', () => {
   })
 
   it('keeps filters per view, so the feed’s tiers never narrow Applied', () => {
+    localStorage.clear()
     forgetSearches()
     rememberSearch('feed', { tier: ['Mid', 'Startup'], q: 'backend' })
     expect(recallSearch('applied')).toEqual({})
@@ -47,5 +49,23 @@ describe('feed search params', () => {
     rememberSearch('saved', { view: 'saved', age: '3d' })
     expect(recallSearch('feed')).toEqual({ tier: ['Mid', 'Startup'], q: 'backend' })
     expect(recallSearch('saved')).toEqual({ age: '3d', view: 'saved' })
+  })
+
+  it('keeps filters across a reload, without the text search', () => {
+    localStorage.clear()
+    forgetSearches()
+    rememberSearch('feed', { tier: ['Mid', 'Startup', 'Corporate', 'Unlisted'], q: 'backend' })
+    forgetSearches()
+    expect(recallSearch('feed')).toEqual({ tier: ['Mid', 'Startup', 'Corporate', 'Unlisted'] })
+    localStorage.setItem('jobvr.filters', 'not json')
+    forgetSearches()
+    expect(recallSearch('feed')).toEqual({})
+  })
+
+  it('treats a search with only a view as blank', () => {
+    expect(isBlankSearch({ view: 'saved' })).toBe(true)
+    expect(isBlankSearch({ tier: [] })).toBe(true)
+    expect(isBlankSearch({ tier: ['Mid'] })).toBe(false)
+    expect(isBlankSearch({ age: '3d' })).toBe(false)
   })
 })

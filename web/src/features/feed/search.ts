@@ -38,24 +38,59 @@ export function withoutView(s: FeedSearch): FeedSearch {
 export const searchFor = (view: View, s: FeedSearch): FeedSearch =>
   view === 'saved' || view === 'hidden' ? { ...withoutView(s), view } : withoutView(s)
 
+const STORAGE_KEY = 'jobvr.filters'
+
+/** Filters saved in this browser; text searches are left out (they're one-off). */
+function loadSaved(): Map<View, FeedSearch> {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    if (!raw || typeof raw !== 'object') return new Map()
+    return new Map(
+      Object.entries(raw)
+        .filter((e): e is [View, Record<string, unknown>] => VIEWS.includes(e[0] as View))
+        .map(([view, s]) => [view, withoutView(parseFeedSearch(s ?? {}))]),
+    )
+  } catch {
+    return new Map()
+  }
+}
+
 /**
- * Each view keeps its own filters for the session: narrowing the feed to Mid
- * and Startup doesn't narrow Applied, and coming back restores them.
+ * Each view keeps its own filters: narrowing the feed to Mid and Startup
+ * doesn't narrow Applied, and coming back restores them. They're kept in this
+ * browser too, so a reload or the home-screen app opens with them.
  */
-const remembered = new Map<View, FeedSearch>()
+let remembered: Map<View, FeedSearch> | null = null
+// Loaded on first use: the parsers below aren't defined yet when this module starts
+const store = () => (remembered ??= loadSaved())
 
 export function rememberSearch(view: View, search: FeedSearch) {
-  remembered.set(view, search)
+  store().set(view, search)
+  try {
+    const saved = Object.fromEntries(
+      [...store()].map(([v, s]) => [v, { ...withoutView(s), q: undefined }]),
+    )
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved))
+  } catch {
+    // Private mode or full storage: the filters still last for this session
+  }
 }
 
 /** The search to open a view with: its last filters, or none. */
 export function recallSearch(view: View): FeedSearch {
-  return searchFor(view, remembered.get(view) ?? {})
+  return searchFor(view, store().get(view) ?? {})
 }
 
-/** Test helper. */
+/** No filters, search, age or order (the view itself doesn't count). */
+export function isBlankSearch(s: FeedSearch): boolean {
+  return Object.values(withoutView(s)).every(
+    (v) => v === undefined || (Array.isArray(v) && v.length === 0),
+  )
+}
+
+/** Test helper: drops the in-memory copy, as a reload would (the browser copy stays). */
 export function forgetSearches() {
-  remembered.clear()
+  remembered = null
 }
 
 const strings = (v: unknown): string[] | undefined => {

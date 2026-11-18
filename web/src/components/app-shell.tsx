@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { Building2, CloudOff, Radar, Send, Settings2 } from 'lucide-react'
-import { type ComponentType, useEffect } from 'react'
+import { type ComponentType, useEffect, useRef } from 'react'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { recallSearch } from '@/features/feed/search'
 import { cn } from '@/lib/cn'
@@ -141,17 +141,35 @@ function MobileNav({ pathname }: { pathname: string }) {
   )
 }
 
+/**
+ * Job lists refetch when a poll finishes (seen through the settings check the
+ * header already makes every minute), not on a timer: nothing changes between polls.
+ */
+function useRefreshAfterPoll() {
+  const qc = useQueryClient()
+  const { data } = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: () => unwrap(api.api.settings.$get()),
+    refetchInterval: 60_000,
+  })
+  const finished = data?.lastPollOkAt
+  const seen = useRef(finished)
+  useEffect(() => {
+    if (finished && seen.current && finished !== seen.current) {
+      void qc.invalidateQueries({ queryKey: queryKeys.allJobs })
+    }
+    seen.current = finished
+  }, [finished, qc])
+}
+
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  useRefreshAfterPoll()
 
   useEffect(() => {
     const page = NAV.find((n) => isActive(n.to, pathname))
-    // Logs and Suggested are reached from Settings, not the nav
-    const label = pathname.startsWith('/logs')
-      ? 'Logs'
-      : pathname.startsWith('/suggested')
-        ? 'Suggested'
-        : page && page.to !== '/' && page.label
+    // Logs is reached from Settings, not the nav
+    const label = pathname.startsWith('/logs') ? 'Logs' : page && page.to !== '/' && page.label
     document.title = label ? `${label} · jobvr` : 'jobvr'
   }, [pathname])
 
