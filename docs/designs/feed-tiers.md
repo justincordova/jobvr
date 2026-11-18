@@ -33,8 +33,11 @@ polling, pushes and the feed's default tier filter.
 - Feed row actions (Applied, Save/Unsave, Hide/Unhide, Not applied) are
   icon-only; each keeps its name as `aria-label` and tooltip.
 - **One compact filter row**, no Filters panel: view, age (All, Today, 1h,
-  3 days, 1 week; `1w` is new in the API), tiers (a multi-select pill; none
-  picked = tracked tiers) and order (Best / Newest, plus Applied on the
-  Applied page), then search. The place, source and company filters are gone
+  3 days, 1 week; `1w` is new in the API), order (Best / Newest, plus Applied
+  on the Applied page), then a single "Tiers" button that opens a checklist
+  (like GitHub's and Linear's filter menus; it reads "Mid +3" when set, none
+  picked = tracked tiers), then search ("Search jobs", so it fits).
+- **Header**: the poll status ("polled 3 min ago") opens Logs; Settings is a
+  cog next to it, so the nav is Feed, Applied, Companies (3 tabs on phones). The place, source and company filters are gone
   from the UI: places are set in Settings, and search covers companies,
   places and titles. The API still accepts them; saved filters drop them.

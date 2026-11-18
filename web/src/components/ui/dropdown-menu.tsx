@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react'
 import { DropdownMenu as Menu } from 'radix-ui'
 import type { ComponentProps } from 'react'
 import { cn } from '@/lib/cn'
@@ -34,6 +35,38 @@ export function DropdownMenuItem({ className, ...props }: ComponentProps<typeof 
       )}
       {...props}
     />
+  )
+}
+
+/** A toggle row with a check; stays open on select so several can be picked. */
+export function DropdownMenuCheckboxItem({
+  className,
+  children,
+  onSelect,
+  ...props
+}: ComponentProps<typeof Menu.CheckboxItem>) {
+  return (
+    <Menu.CheckboxItem
+      className={cn(
+        'flex cursor-pointer items-center gap-2.5 rounded-md py-1.5 pr-3 pl-2 text-sm text-paper outline-none select-none data-[highlighted]:bg-line pointer-coarse:py-2.5',
+        className,
+      )}
+      onSelect={(e) => {
+        e.preventDefault()
+        onSelect?.(e)
+      }}
+      {...props}
+    >
+      <span
+        aria-hidden
+        className="grid size-4 shrink-0 place-items-center rounded border border-line-strong transition-colors in-data-[state=checked]:border-signal in-data-[state=checked]:bg-signal"
+      >
+        <Menu.ItemIndicator>
+          <Check className="size-3 text-signal-ink" strokeWidth={3} />
+        </Menu.ItemIndicator>
+      </span>
+      {children}
+    </Menu.CheckboxItem>
   )
 }
 

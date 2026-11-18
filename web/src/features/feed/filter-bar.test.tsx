@@ -22,18 +22,39 @@ describe('FilterBar', () => {
     expect(ages.map((a) => a.textContent)).toEqual(['All', 'Today', '1h', '3 days', '1 week'])
   })
 
-  it('toggles tiers in tier order and clears them', async () => {
+  it('picks tiers from one menu, in tier order, and clears them', async () => {
     const onChange = vi.fn()
     const { rerender } = render(<FilterBar search={{}} onChange={onChange} onView={vi.fn()} />)
-    const tiers = screen.getByRole('group', { name: 'Tiers' })
-    await userEvent.click(within(tiers).getByRole('button', { name: 'Unlisted' }))
+    const trigger = screen.getByRole('button', { name: 'Tiers: tracked tiers' })
+    trigger.focus()
+    await userEvent.keyboard('{Enter}')
+    await userEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Unlisted' }))
     expect(onChange).toHaveBeenLastCalledWith({ tier: ['Unlisted'] })
 
     rerender(<FilterBar search={{ tier: ['Unlisted'] }} onChange={onChange} onView={vi.fn()} />)
-    await userEvent.click(within(tiers).getByRole('button', { name: 'Mid' }))
+    // The menu stays open while picking
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Mid' }))
     expect(onChange).toHaveBeenLastCalledWith({ tier: ['Mid', 'Unlisted'] })
-    await userEvent.click(screen.getByRole('button', { name: 'Clear tiers' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Clear/ }))
     expect(onChange).toHaveBeenLastCalledWith({ tier: undefined })
+  })
+
+  it('names the picked tiers on the button', () => {
+    render(
+      <FilterBar
+        search={{ tier: ['Mid', 'Startup', 'Corporate', 'Unlisted'] }}
+        onChange={vi.fn()}
+        onView={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('button', { name: /^Tiers: Mid, Startup/ })).toHaveTextContent('Mid +3')
+  })
+
+  it('puts the order toggle before the tiers', () => {
+    render(<FilterBar search={{}} onChange={vi.fn()} onView={vi.fn()} />)
+    const order = screen.getByRole('radiogroup', { name: 'Order' })
+    const tiers = screen.getByRole('button', { name: /^Tiers/ })
+    expect(order.compareDocumentPosition(tiers) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('has no place, source or company filters', () => {
