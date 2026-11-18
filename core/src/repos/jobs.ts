@@ -212,9 +212,18 @@ const toView = (job: JobRow, tier: TierFilter, sources: JobSourceView[]): JobRec
   sources,
 });
 
+/** The title says entry level, or a new-grad list has the job. */
+export const isEntryLevelJob = (
+  job: JobRecord,
+  s: Settings,
+  kindOf: (source: string) => SourceKind | undefined,
+): boolean =>
+  isEntryLevelTitle(job.title, s) || job.sources.some((src) => kindOf(src.source) === "aggregator");
+
 /**
- * The pushable rule without `notified_at`: non-baseline, new/saved, tracked
- * tier, within max age, visible. Shared by pushes and "new since last visit".
+ * The pushable rule without `notified_at`: non-baseline, new/saved, a feed
+ * tier, entry level when the feed is entry-level only, within max age,
+ * visible. Shared by pushes and "new since last visit".
  */
 export const isFreshMatch = (
   job: JobRecord,
@@ -224,7 +233,8 @@ export const isFreshMatch = (
 ): boolean =>
   !job.baseline &&
   (job.state === "new" || job.state === "saved") &&
-  s.tiersToTrack.includes(job.tier) &&
+  s.feedTiers.includes(job.tier) &&
+  (!s.entryLevelOnly || isEntryLevelJob(job, s, kindOf)) &&
   now.getTime() - job.effectiveAt.getTime() <= s.maxJobAgeHours * HOUR &&
   isVisible(job, s, kindOf);
 
@@ -284,7 +294,8 @@ export const listJobs = async (
   const kindOf = kindLookup(registry);
   const view = query.view ?? "feed";
   const age = query.age ?? "all";
-  const tiers = query.tier ?? (view === "feed" ? s.tiersToTrack : undefined);
+  const tiers = query.tier ?? (view === "feed" ? s.feedTiers : undefined);
+  const entryOnly = query.level === "entry" || (view === "feed" && s.entryLevelOnly);
   const applyV = view === "feed" || view === "hidden";
 
   const conds: SQL[] = [inArray(jobs.state, VIEW_STATES[view])];
@@ -292,8 +303,7 @@ export const listJobs = async (
   if (cutoff) conds.push(gte(jobs.effectiveAt, cutoff));
   if (applyV) conds.push(isNull(jobs.closedAt));
 
-  const entryLevel = (j: JobRecord) =>
-    isEntryLevelTitle(j.title, s) || j.sources.some((src) => kindOf(src.source) === "aggregator");
+  const entryLevel = (j: JobRecord) => isEntryLevelJob(j, s, kindOf);
   const isNew = (j: JobRecord) =>
     lastVisitAt !== null && j.firstSeenAt > lastVisitAt && isFreshMatch(j, s, kindOf, now);
 
@@ -313,7 +323,7 @@ export const listJobs = async (
     if (query.source?.length && !j.sources.some((src) => query.source?.includes(src.source))) {
       return false;
     }
-    if (query.level === "entry" && !entryLevel(j)) return false;
+    if (entryOnly && !entryLevel(j)) return false;
     if (!matchesSearch(j, words)) return false;
     return true;
   });

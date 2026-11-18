@@ -121,6 +121,31 @@ describe("jobs routes", () => {
     expect(bad.status).toBe(400);
   });
 
+  it("defaults the feed to the feed tiers and, when set, to entry-level jobs", async () => {
+    await insertJob("gh:grad");
+    await insertJob(
+      "gh:plain",
+      {},
+      { source: "greenhouse", title: "Software Engineer, Payments", category: null },
+    );
+    const ids = async (query: Record<string, string> = {}) =>
+      (
+        await body<{ data: { jobs: { id: string }[] } }>(
+          await client.api.jobs.$get({ query: { sort: "newest", ...query } }),
+        )
+      ).data.jobs
+        .map((j) => j.id)
+        .sort();
+
+    await client.api.settings.$patch({ json: { feedTiers: ["Mid", "Startup"] } });
+    expect(await ids()).toEqual([]);
+    // Picking a tier in Filters still shows it
+    expect(await ids({ tier: "Unlisted" })).toEqual(["gh:grad", "gh:plain"]);
+
+    await client.api.settings.$patch({ json: { feedTiers: ["Unlisted"], entryLevelOnly: true } });
+    expect(await ids()).toEqual(["gh:grad"]);
+  });
+
   it("shows a role posted several times as one row (H2O.ai posted the same role 3 times)", async () => {
     const same = { source: "simplify", title: "Software Engineer", category: "Software" };
     await insertJob("sj:a", { effectiveAt: at(3) }, same);

@@ -2,7 +2,6 @@ import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { Input, NativeSelect } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
-import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/cn'
 import { TIER_FILTERS, type Company } from '@/lib/types'
 import {
@@ -256,20 +255,6 @@ export function FilterBar({
                 />
               </div>
             </div>
-            <label className="flex cursor-pointer items-center justify-between gap-4 sm:col-span-2">
-              <span>
-                <span className="block text-sm font-medium">Entry level only</span>
-                <span className="block text-xs text-dim">
-                  Titles that say new grad, junior, I, and so on, plus everything on the new-grad
-                  lists. Hides plain “Software Engineer” board roles.
-                </span>
-              </span>
-              <Switch
-                checked={search.level === 'entry'}
-                onCheckedChange={(on) => onChange({ level: on ? 'entry' : undefined })}
-                aria-label="Entry level only"
-              />
-            </label>
             <ChipGroup
               label="Location"
               options={locations.map((l) => ({ id: l, label: l }))}
@@ -282,7 +267,7 @@ export function FilterBar({
               options={TIER_FILTERS.map((t) => ({ id: t, label: t }))}
               selected={search.tier}
               onChange={(tier) => onChange({ tier: tier as FeedSearch['tier'] })}
-              hint={view === 'feed' ? 'tracked tiers' : 'any'}
+              hint={view === 'feed' ? 'feed tiers (Settings)' : 'any'}
             />
             <ChipGroup
               label="Source"
