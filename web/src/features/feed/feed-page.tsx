@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { companiesQuery } from '@/lib/companies-query'
 import { cn } from '@/lib/cn'
+import { AppliedOverview } from './applied-overview'
 import { FEED_GRID } from './columns'
 import { FilterBar } from './filter-bar'
 import { JobDetailsDialog } from './job-details'
@@ -250,6 +251,8 @@ function JobsPage({ search }: { search: FeedSearch }) {
           </button>
         </div>
       )}
+
+      {view === 'applied' && <AppliedOverview />}
 
       <FilterBar
         search={search}
