@@ -56,11 +56,17 @@ const CONTRACT_TAG =
   /[([]\s*contract(?:or|ual)?(?:\s+(?:position|role|basis))?\s*[)\]]|[-,|/]\s*contract(?:or|ual)?(?:\s+(?:position|role|basis))?\s*(?:$|[([])/i;
 const GENERIC_ENGINEERING = ["engineer", "engineering", "developer", "programmer"];
 
+/** Level codes read as their number: "L2", "IC3", "P2", "SDE2", "SWE3" → "2", "3", ... */
+const LEVEL_CODE = /^(?:l|ic|p|sde|swe)(\d)$/;
+
 /**
  * Tokens for the level checks, without dotted codes: Amazon's "Software Dev
  * Engineer II - AMZ27480.1" would otherwise read as level 1 (entry).
  */
-const levelTokens = (title: string) => tokenize(title.replace(/\b[a-z]*\d+\w*(?:\.\d+)+\b/gi, " "));
+const levelTokens = (title: string) =>
+  tokenize(title.replace(/\b[a-z]*\d+\w*(?:\.\d+)+\b/gi, " ")).map(
+    (t) => LEVEL_CODE.exec(t)?.[1] ?? t,
+  );
 
 /** True when the title says it's entry level (a level keyword, or "I" / "1"). */
 export const isEntryLevelTitle = (title: string, settings: Pick<Settings, "levelKeywords">) => {

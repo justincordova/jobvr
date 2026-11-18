@@ -41,6 +41,7 @@ describe("keyword rule", () => {
       "Forward Deployed Software Engineer, New Grad - Warp Speed",
       "Software Engineer, Smart Contracts",
       "Software Engineer, Contracts Platform",
+      "Software Engineer (L1)",
     ]) {
       expect(ats(t), t).toBe(true);
     }
@@ -53,6 +54,10 @@ describe("keyword rule", () => {
       "Software Engineer 3",
       // A requisition code isn't a level ("AMZ27480.1" isn't "1")
       "Software Dev Engineer II - AMZ27480.1",
+      // Level codes count like numbers (Twilio's L2 isn't entry level)
+      "Software Engineer, Platform Access (L2)",
+      "Software Engineer - IC3",
+      "SDE2, Payments",
       "Staff Software Engineer (AI Agents)",
       "Field Engineer, Healthcare",
       "Analytics Engineer",
