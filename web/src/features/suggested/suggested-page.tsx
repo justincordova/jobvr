@@ -157,7 +157,7 @@ export function SuggestedPage() {
             </span>
           )
         }
-        description="Companies hiring new grads on the lists (SimplifyJobs, SpeedyApply) that aren’t in your list yet."
+        description="Companies hiring new grads on the lists that aren’t in your list yet. Ones on Greenhouse, Lever or Ashby are added automatically; these are left over (other job sites, or not checked yet)."
       />
       {suggestions.isError && !suggestions.data ? (
         <ErrorState

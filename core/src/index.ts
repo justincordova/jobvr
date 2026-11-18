@@ -1,3 +1,4 @@
+export * from "./auto-add";
 export * from "./backup-check";
 export * from "./constants";
 export * from "./db/client";

@@ -5,6 +5,7 @@ import {
   formatDuration,
   type Logger,
   type Registry,
+  runAutoAddCompanies,
   runBackupCheck,
   runCleanup,
   runNotify,
@@ -33,6 +34,8 @@ export const startScheduler = (options: SchedulerOptions) => {
   const log = logger.child({ module: "scheduler" });
   const http = createHttpClient();
   const notifier = options.ntfyUrl ? createNtfyNotifier(options.ntfyUrl) : null;
+  // Boards that failed the auto-add check, so each is retried once a day, not every tick
+  const autoAddFailures = new Map<string, number>();
   let running: number | null = null;
   let current: Promise<void> = Promise.resolve();
   const stopping = new AbortController();
@@ -61,6 +64,10 @@ export const startScheduler = (options: SchedulerOptions) => {
         runPoll({ database, registry, http, logger, signal: stopping.signal }),
       );
       // After a stop, nothing new starts (a push mid-send still finishes and is marked)
+      if (stopping.signal.aborted) return;
+      await step("auto-add", () =>
+        runAutoAddCompanies({ database, registry, http, logger, failures: autoAddFailures }),
+      );
       if (stopping.signal.aborted) return;
       await step("notify", () =>
         runNotify({ database, registry, notifier, publicUrl: options.publicUrl, logger }),

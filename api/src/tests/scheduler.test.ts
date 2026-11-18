@@ -73,6 +73,7 @@ describe("scheduler", () => {
     await scheduler.stop();
     expect(errors).toEqual([
       "poll crashed; the next tick tries again",
+      "auto-add crashed; the next tick tries again",
       "notify crashed; the next tick tries again",
       "cleanup crashed; the next tick tries again",
       "backup check crashed; the next tick tries again",

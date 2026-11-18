@@ -20,13 +20,14 @@ export const addSuggestion = (
   registry: Registry,
   id: string,
   tier: Tier,
+  notes: string | null = null,
 ): Promise<CompanyRow> =>
   db.transaction(async (tx) => {
     const [s] = await tx.select().from(suggestions).where(eq(suggestions.id, id)).for("update");
     if (!s) throw new NotFoundError("Suggestion not found");
     if (s.state === "added") throw new ConflictError("Suggestion was already added");
     const supported = getAdapter(registry, s.ats)?.kind === "ats";
-    const base = { name: s.displayName, city: null, state: null, tier };
+    const base = { name: s.displayName, city: null, state: null, tier, notes };
     const company = !supported
       ? await createCompany(tx, {
           ...base,

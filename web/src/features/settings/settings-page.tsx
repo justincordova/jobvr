@@ -527,13 +527,22 @@ function ListsSection({ payload }: { payload: SettingsPayload }) {
         />
       </Row>
       <Row
-        label="Suggest companies"
-        hint="List unlisted companies with matching roles under Suggested."
+        label="Add companies automatically"
+        hint={
+          <>
+            Companies with matching roles on the lists are polled from then on (as Startup) once
+            their Greenhouse, Lever or Ashby board answers. The rest stay{' '}
+            <Link to="/suggested" className="text-signal underline-offset-4 hover:underline">
+              in Suggested
+            </Link>
+            .
+          </>
+        }
       >
         <Switch
           checked={draft.suggestCompanies}
           onCheckedChange={(v) => set('suggestCompanies', v)}
-          aria-label="Suggest companies from the lists"
+          aria-label="Add companies from the lists automatically"
         />
       </Row>
     </Section>

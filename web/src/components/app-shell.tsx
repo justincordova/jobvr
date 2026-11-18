@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { Building2, CloudOff, Radar, Send, Settings2, Sparkles } from 'lucide-react'
+import { Building2, CloudOff, Radar, Send, Settings2 } from 'lucide-react'
 import { type ComponentType, useEffect } from 'react'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { recallSearch } from '@/features/feed/search'
@@ -13,7 +13,6 @@ const NAV: { to: string; label: string; icon: ComponentType<{ className?: string
   { to: '/', label: 'Feed', icon: Radar },
   { to: '/applied', label: 'Applied', icon: Send },
   { to: '/companies', label: 'Companies', icon: Building2 },
-  { to: '/suggested', label: 'Suggested', icon: Sparkles },
   { to: '/settings', label: 'Settings', icon: Settings2 },
 ]
 
@@ -80,14 +79,6 @@ function PollStatus() {
   )
 }
 
-function useSuggestionCount() {
-  const { data } = useQuery({
-    queryKey: queryKeys.suggestions,
-    queryFn: () => unwrap(api.api.suggestions.$get()),
-  })
-  return data?.length ?? 0
-}
-
 /** Feed and Applied reopen with the filters they last had (see `recallSearch`). */
 const navSearch = (to: string) =>
   to === '/'
@@ -100,7 +91,6 @@ const isActive = (to: string, pathname: string) =>
   to === '/' ? pathname === '/' : pathname.startsWith(to)
 
 function DesktopNav({ pathname }: { pathname: string }) {
-  const suggestions = useSuggestionCount()
   const { ref, style } = useIndicator<HTMLElement>('[data-status="active"]', pathname)
   return (
     <nav ref={ref} className="relative hidden items-center gap-0.5 md:flex" aria-label="Main">
@@ -118,11 +108,6 @@ function DesktopNav({ pathname }: { pathname: string }) {
           className="relative flex items-center rounded-md px-3 py-1.5 text-sm text-dim transition-colors duration-200 hover:text-paper data-[status=active]:text-paper"
         >
           {label}
-          {to === '/suggested' && suggestions > 0 && (
-            <span className="ml-1.5 rounded-full bg-signal-soft px-1.5 font-mono text-[0.65rem] text-signal">
-              {suggestions}
-            </span>
-          )}
         </Link>
       ))}
     </nav>
@@ -130,13 +115,12 @@ function DesktopNav({ pathname }: { pathname: string }) {
 }
 
 function MobileNav({ pathname }: { pathname: string }) {
-  const suggestions = useSuggestionCount()
   const { ref, style } = useIndicator<HTMLElement>('[data-status="active"]', pathname)
   return (
     <nav
       ref={ref}
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-panel/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-line bg-panel/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg md:hidden"
     >
       <span aria-hidden className="absolute top-0 left-0 flex justify-center" style={style}>
         <span className="h-0.5 w-8 rounded-b-full bg-signal" />
@@ -149,12 +133,7 @@ function MobileNav({ pathname }: { pathname: string }) {
           activeOptions={{ exact: to === '/', includeSearch: false }}
           className="group relative flex flex-col items-center gap-1 pt-2.5 pb-2 text-[0.65rem] text-faint transition-colors duration-200 data-[status=active]:text-paper"
         >
-          <span className="relative">
-            <Icon className="size-5 transition-[color,scale] duration-200 group-active:scale-90 group-data-[status=active]:text-signal" />
-            {to === '/suggested' && suggestions > 0 && (
-              <span className="absolute -top-0.5 -right-1 size-2 rounded-full bg-signal ring-2 ring-panel" />
-            )}
-          </span>
+          <Icon className="size-5 transition-[color,scale] duration-200 group-active:scale-90 group-data-[status=active]:text-signal" />
           {label}
         </Link>
       ))}
@@ -167,8 +146,12 @@ export function AppShell() {
 
   useEffect(() => {
     const page = NAV.find((n) => isActive(n.to, pathname))
-    // Logs is reached from Settings, not the nav
-    const label = pathname.startsWith('/logs') ? 'Logs' : page && page.to !== '/' && page.label
+    // Logs and Suggested are reached from Settings, not the nav
+    const label = pathname.startsWith('/logs')
+      ? 'Logs'
+      : pathname.startsWith('/suggested')
+        ? 'Suggested'
+        : page && page.to !== '/' && page.label
     document.title = label ? `${label} · jobvr` : 'jobvr'
   }, [pathname])
 
