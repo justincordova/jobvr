@@ -216,7 +216,7 @@ function SkeletonTable() {
           <td className="px-2 py-3">
             <Skeleton className="h-5 w-16" />
           </td>
-          <td className="px-2 py-3">
+          <td className="hidden px-2 py-3 sm:table-cell">
             <Skeleton className="h-4 w-10" />
           </td>
           <td className="hidden px-2 py-3 sm:table-cell">
@@ -383,7 +383,10 @@ export function CompaniesPage() {
               <tr className="border-b border-line text-left font-mono text-[0.68rem] tracking-wider text-faint uppercase">
                 <th className="px-4 py-2.5 font-medium">Company</th>
                 <th className="px-2 py-2.5 font-medium">Tier</th>
-                <th className="px-2 py-2.5 font-medium" title="Matching roles in the last 30 days">
+                <th
+                  className="hidden px-2 py-2.5 font-medium sm:table-cell"
+                  title="Matching roles in the last 30 days"
+                >
                   Roles · 30d
                 </th>
                 <th className="hidden px-2 py-2.5 font-medium sm:table-cell">Newest</th>
@@ -428,7 +431,7 @@ export function CompaniesPage() {
                           {c.tierSource === 'pending' && <span aria-label="not rated yet">?</span>}
                         </span>
                       </td>
-                      <td className="px-2 py-2.5 font-mono text-xs tabular-nums">
+                      <td className="hidden px-2 py-2.5 font-mono text-xs tabular-nums sm:table-cell">
                         <span className={c.stats.roles30d > 0 ? 'text-paper' : 'text-faint'}>
                           {c.stats.roles30d}
                         </span>
