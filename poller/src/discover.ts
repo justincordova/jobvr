@@ -1,37 +1,6 @@
-import type { HttpClient, Registry } from "@jobvr/core";
+import { type HttpClient, type Registry, slugCandidates } from "@jobvr/core";
 
-const STRIP_SUFFIXES = new Set(["ai", "labs", "inc", "technologies", "software", "robotics", "hq"]);
-const LOWER_SUFFIXES = ["hq", "-hq", "-io", "inc"];
-
-/** "EliseAI Labs" → ["Elise", "AI", "Labs"]. */
-export const splitWords = (name: string): string[] =>
-  name
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .split(/[^A-Za-z0-9]+/)
-    .filter(Boolean);
-
-/** Board slug guesses for a company name, most likely first. */
-export const slugCandidates = (name: string): string[] => {
-  const all = splitWords(name);
-  const bases = [all];
-  const trimmed = [...all];
-  while (trimmed.length > 0 && STRIP_SUFFIXES.has(trimmed.at(-1)?.toLowerCase() ?? "")) {
-    trimmed.pop();
-  }
-  if (trimmed.length > 0 && trimmed.length !== all.length) bases.push(trimmed);
-
-  const out: string[] = [];
-  const lowerForms: string[] = [];
-  for (const words of bases) {
-    const lower = words.map((w) => w.toLowerCase());
-    out.push(words.join(""), lower.join(""), lower.join("-"));
-    lowerForms.push(lower.join(""), lower.join("-"));
-  }
-  for (const form of lowerForms) {
-    for (const suffix of LOWER_SUFFIXES) out.push(form + suffix);
-  }
-  return [...new Set(out.filter(Boolean))];
-};
+export { slugCandidates, splitWords } from "@jobvr/core";
 
 export interface DiscoverHit {
   ats: string;

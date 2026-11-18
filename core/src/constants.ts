@@ -54,12 +54,19 @@ export const TIMEZONE = "America/New_York";
 export const TIERS = ["S", "A", "Mid", "Startup", "Corporate"] as const;
 export const TIER_FILTERS = [...TIERS, "Unlisted"] as const;
 
+/**
+ * Where a company's tier came from: the seed list, the AI rater, a person
+ * (never overwritten), or nobody yet (`pending`: the AI rates it when it can).
+ */
+export const TIER_SOURCES = ["seed", "auto", "manual", "pending"] as const;
+
 export const JOB_STATES = ["new", "saved", "hidden", "applied"] as const;
 export const COMPANY_STATUSES = ["ok", "needs_review", "manual_only"] as const;
 export const SUGGESTION_STATES = ["open", "dismissed", "added"] as const;
 
 export type Tier = (typeof TIERS)[number];
 export type TierFilter = (typeof TIER_FILTERS)[number];
+export type TierSource = (typeof TIER_SOURCES)[number];
 export type JobState = (typeof JOB_STATES)[number];
 export type CompanyStatus = (typeof COMPANY_STATUSES)[number];
 export type SuggestionState = (typeof SUGGESTION_STATES)[number];

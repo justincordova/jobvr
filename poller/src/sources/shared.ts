@@ -12,6 +12,21 @@ export const decodeSlug = (segment: string): string | null => {
   }
 };
 
+/**
+ * The board slug in a board or job link on one of `hosts` (the first path
+ * segment, as in `jobs.lever.co/acme` or `jobs.lever.co/acme/<id>`), or null.
+ */
+export const boardSlugOn = (raw: string, hosts: ReadonlySet<string>): string | null => {
+  if (!URL.canParse(raw)) return null;
+  const url = new URL(raw);
+  if (!hosts.has(url.hostname.toLowerCase())) return null;
+  // Greenhouse's embedded board: /embed/job_board?for=acme
+  const embedded = url.searchParams.get("for");
+  if (embedded) return embedded;
+  const [first] = url.pathname.split("/").filter(Boolean);
+  return first && first !== "embed" ? decodeSlug(first) : null;
+};
+
 /** GET a board for `discover`/`seed`: 404 means "no board with that slug". */
 export const probeBoard = async (
   url: string,

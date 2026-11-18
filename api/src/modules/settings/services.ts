@@ -17,6 +17,7 @@ export const loadSettingsPayload = async (
   db: Db,
   registry: Registry,
   now: Date,
+  tierModel: string | null = null,
 ): Promise<z.infer<typeof SettingsPayload>> => {
   const state = await getSettingsState(db);
   const aggregators = aggregatorAdapters(registry);
@@ -51,6 +52,7 @@ export const loadSettingsPayload = async (
       };
     }),
     sources: sourceInfo(registry),
+    tierModel,
   };
 };
 

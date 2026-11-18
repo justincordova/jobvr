@@ -40,6 +40,8 @@ export const SettingsPayload = z
     ),
     sourceHealth: z.array(SourceHealthSchema),
     sources: z.array(SourceInfoSchema),
+    /** The AI model that rates new companies' tiers; null when OPENAI_API_KEY is unset. */
+    tierModel: z.string().nullable(),
   })
   .openapi("SettingsPayload");
 

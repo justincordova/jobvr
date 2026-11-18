@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { COMPANY_STATUSES, TIERS } from "@jobvr/core";
+import { COMPANY_STATUSES, TIER_SOURCES, TIERS } from "@jobvr/core";
 import { envelope, isoNullable } from "@/lib/routes";
 
 const text = (max: number) => z.string().trim().max(max).nullish();
@@ -18,6 +18,10 @@ export const CompanySchema = z
     city: z.string().nullable(),
     state: z.string().nullable(),
     tier: z.enum(TIERS),
+    /** seed (the starter list), auto (the AI rater), manual (picked by you), pending (not rated yet). */
+    tierSource: z.enum(TIER_SOURCES),
+    /** Why it has this tier, when the AI rater set it. */
+    tierReason: z.string().nullable(),
     track: z.boolean(),
     ats: z.string(),
     slug: z.string().nullable(),
@@ -71,9 +75,19 @@ export const UpdateCompanyBody = z
       .nullish(),
     notes: text(5000),
     status: z.enum(COMPANY_STATUSES).optional(),
+    /** Hand the tier back to jobvr: the AI rater rates it again (when configured). */
+    autoTier: z.literal(true).optional(),
   })
   .refine((b) => Object.keys(b).length > 0, { error: "Provide at least one field to update" })
+  .refine((b) => !(b.autoTier && b.tier), { error: "Pick a tier or autoTier, not both" })
   .openapi("UpdateCompanyBody");
+
+export const AddCompanyBody = z
+  .object({
+    /** A careers or job-board link, or the company's name. */
+    query: z.string().trim().min(1).max(2000).openapi({ example: "https://jobs.lever.co/acme" }),
+  })
+  .openapi("AddCompanyBody");
 
 export const CompanyParams = z.object({
   id: z.uuid().openapi({ param: { name: "id", in: "path" } }),

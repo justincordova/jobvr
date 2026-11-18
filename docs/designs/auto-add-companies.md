@@ -35,3 +35,31 @@ page's filters): the total, this week vs last week, the current streak (a day
 without an application yet today doesn't break it), a 16-week heatmap of
 applications per day in the amber signal colour, and the mix by tier.
 Applications from before `applied_at` was recorded count in the total only.
+
+## Hands-off companies (automatic tiers, self-healing boards)
+
+Nothing on the Companies page needs a person.
+
+- **Tiers rate themselves.** `companies.tier_source` says where a tier came from:
+  `seed` (the starter list), `auto` (the AI rater), `manual` (picked by a
+  person, never overwritten) or `pending`. Auto-added and hand-added
+  companies start `pending` as Startup; the scheduler's `tiers` step
+  (`runAutoTier`) rates them with OpenAI (`OPENAI_API_KEY`, model
+  `OPENAI_MODEL`, default `gpt-5-mini` with minimal reasoning) using the name,
+  careers link and a few recent titles, and stores a one-line `tier_reason`.
+  At most 10 a run and 50 calls a day (about $0.0003 each); a failure is
+  retried after an hour. Without a key they stay Startup and say "not rated".
+- **Broken boards heal.** The `heal` step (`runHealCompanies`) searches every
+  ATS by name for companies in `needs_review` (3 per run, each every 6 h). A
+  board with jobs found: the company moves to it. Nothing after 3 days: it
+  becomes `manual_only` and its jobs keep coming from the lists.
+- **No Track switch.** Every company with a working board is polled (the
+  migration turned on the 8 S/A boards the seed had left off).
+- **Add by one line.** `POST /api/companies/add { query }` takes a board or
+  careers link or a name, finds the board (`boardSlug` on each ATS adapter,
+  then slug guesses), and rates the tier right away.
+- **Web.** Companies is a read-only list: name (with the AI's reason), tier,
+  roles in 30 days, newest role, and one status dot (Checked directly, Via job
+  lists, Having trouble, Paused when the tier isn't tracked). The row menu
+  changes the tier, hands it back to the AI, opens the careers page or removes
+  the company.

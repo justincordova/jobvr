@@ -58,6 +58,13 @@ export const EnvSchema = z.object({
         })
         .optional(),
     ),
+  /** Optional: rates new companies' tiers with OpenAI (secret). Unset: they start as Startup. */
+  OPENAI_API_KEY: z
+    .string()
+    .optional()
+    .transform((v) => v?.trim() || undefined),
+  /** The model that rates tiers. */
+  OPENAI_MODEL: z.string().trim().min(1).default("gpt-5-mini"),
   /** Push click target, e.g. https://jobvr.<tailnet>.ts.net */
   PUBLIC_URL: z.url({ protocol: /^https?$/ }).default("http://localhost:5173"),
   /** The tailnet is the auth boundary in the MVP. */

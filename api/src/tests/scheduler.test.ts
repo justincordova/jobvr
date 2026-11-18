@@ -74,6 +74,8 @@ describe("scheduler", () => {
     expect(errors).toEqual([
       "poll crashed; the next tick tries again",
       "auto-add crashed; the next tick tries again",
+      // No AI rater configured: the tiers step has nothing to do
+      "heal crashed; the next tick tries again",
       "notify crashed; the next tick tries again",
       "cleanup crashed; the next tick tries again",
       "backup check crashed; the next tick tries again",

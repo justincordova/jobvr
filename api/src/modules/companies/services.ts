@@ -8,6 +8,7 @@ import {
   OTHER_ATS_ID,
   type Registry,
   type Tier,
+  type TierSource,
 } from "@jobvr/core";
 import { iso, isoOrNull } from "@/lib/routes";
 import type { CompanySchema, CreateCompanyBody } from "./schemas";
@@ -22,6 +23,8 @@ export const toCompanyDto = (
   city: c.city,
   state: c.state,
   tier: c.tier as Tier,
+  tierSource: c.tierSource as TierSource,
+  tierReason: c.tierReason,
   track: c.track,
   ats: c.ats,
   slug: c.slug,

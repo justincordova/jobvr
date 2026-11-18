@@ -96,6 +96,8 @@ export interface SourceAdapter {
   indirectLinks?: boolean;
   /** ATS adapters only. */
   parseUrl?(url: string): ParsedUrl | null;
+  /** ATS adapters only: the board slug in a board or job link on this ATS, else null. */
+  boardSlug?(url: string): string | null;
   /** ATS adapters only; used by `discover` and `seed`. */
   probe?(slug: string, ctx: ProbeCtx): Promise<{ found: boolean; jobCount: number }>;
 }

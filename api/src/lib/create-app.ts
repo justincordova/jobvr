@@ -1,5 +1,5 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import type { Database, Registry } from "@jobvr/core";
+import type { AutoTierState, Database, HttpClient, Registry, TierRater } from "@jobvr/core";
 import type { RequestIdVariables } from "hono/request-id";
 import type { PinoLogger } from "hono-pino";
 import { HTTP_STATUS } from "@/constants";
@@ -13,6 +13,12 @@ export interface AppDeps {
   now: () => Date;
   /** Recent log lines for GET /api/logs. */
   activity: ActivityLog;
+  /** For finding a company's board when one is added by hand. */
+  http: HttpClient;
+  /** Rates new companies' tiers; null without OPENAI_API_KEY. */
+  tierRater: TierRater | null;
+  /** Shared with the scheduler, so the daily cap counts every AI call. */
+  tierState: AutoTierState;
 }
 
 export interface AppBindings {

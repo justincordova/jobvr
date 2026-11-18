@@ -1,3 +1,4 @@
+export * from "./add-company";
 export * from "./auto-add";
 export * from "./backup-check";
 export * from "./constants";
@@ -12,7 +13,9 @@ export type {
 export * as schema from "./db/schema";
 export * from "./errors";
 export * from "./experience";
+export * from "./find-board";
 export * from "./freshness";
+export * from "./heal-companies";
 export * from "./http";
 export * from "./key-lines";
 export * from "./lock";
@@ -32,3 +35,4 @@ export * from "./settings";
 export * from "./sources/registry";
 export * from "./sources/types";
 export * from "./sources/validate";
+export * from "./tiering";

@@ -1,4 +1,6 @@
 import {
+  type AutoTierState,
+  createAutoTierState,
   createHttpClient,
   createNtfyNotifier,
   type Database,
@@ -6,13 +8,16 @@ import {
   type Logger,
   type Registry,
   runAutoAddCompanies,
+  runAutoTier,
   runBackupCheck,
   runCleanup,
+  runHealCompanies,
   runNotify,
   runPoll,
   runPollStallCheck,
   SCHEDULER_FIRST_TICK_MS,
   SCHEDULER_TICK_MS,
+  type TierRater,
 } from "@jobvr/core";
 
 export interface SchedulerOptions {
@@ -21,6 +26,9 @@ export interface SchedulerOptions {
   ntfyUrl?: string;
   publicUrl: string;
   logger: Logger;
+  /** Rates new companies' tiers; unset or null without OPENAI_API_KEY. */
+  tierRater?: TierRater | null;
+  tierState?: AutoTierState;
 }
 
 /**
@@ -36,6 +44,9 @@ export const startScheduler = (options: SchedulerOptions) => {
   const notifier = options.ntfyUrl ? createNtfyNotifier(options.ntfyUrl) : null;
   // Boards that failed the auto-add check, so each is retried once a day, not every tick
   const autoAddFailures = new Map<string, number>();
+  // Broken boards searched lately, so each is searched every few hours, not every tick
+  const healAttempts = new Map<string, number>();
+  const tierState = options.tierState ?? createAutoTierState();
   let running: number | null = null;
   let current: Promise<void> = Promise.resolve();
   const stopping = new AbortController();
@@ -67,6 +78,14 @@ export const startScheduler = (options: SchedulerOptions) => {
       if (stopping.signal.aborted) return;
       await step("auto-add", () =>
         runAutoAddCompanies({ database, registry, http, logger, failures: autoAddFailures }),
+      );
+      if (stopping.signal.aborted) return;
+      await step("tiers", () =>
+        runAutoTier({ database, rater: options.tierRater ?? null, state: tierState, logger }),
+      );
+      if (stopping.signal.aborted) return;
+      await step("heal", () =>
+        runHealCompanies({ database, registry, http, logger, attempts: healAttempts }),
       );
       if (stopping.signal.aborted) return;
       await step("notify", () =>

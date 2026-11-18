@@ -1,5 +1,5 @@
 import { asc, eq, inArray, sql } from "drizzle-orm";
-import type { CompanyStatus, Tier } from "../constants";
+import type { CompanyStatus, Tier, TierSource } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { type CompanyRow, companies, jobs, type SourceStateRow, sourceState } from "../db/schema";
 import { ConflictError, InvalidError, isUniqueViolation, NotFoundError } from "../errors";
@@ -12,6 +12,9 @@ export interface CompanyInput {
   city?: string | null;
   state?: string | null;
   tier: Tier;
+  /** Defaults to manual on create: a tier someone picked. */
+  tierSource?: TierSource;
+  tierReason?: string | null;
   track: boolean;
   ats: string;
   slug?: string | null;
@@ -127,6 +130,8 @@ export const createCompany = async (db: DbOrTx, input: CompanyInput): Promise<Co
     city: clean(input.city),
     state: clean(input.state),
     tier: input.tier,
+    tierSource: input.tierSource ?? "manual",
+    tierReason: clean(input.tierReason),
     track: input.track,
     ats: input.ats,
     slug: clean(input.slug),
@@ -167,6 +172,8 @@ export const updateCompany = async (
         city: patch.city !== undefined ? clean(patch.city) : current.city,
         state: patch.state !== undefined ? clean(patch.state) : current.state,
         tier: patch.tier ?? current.tier,
+        tierSource: patch.tierSource ?? current.tierSource,
+        tierReason: patch.tierReason !== undefined ? clean(patch.tierReason) : current.tierReason,
         track: patch.track ?? current.track,
         ats: patch.ats ?? current.ats,
         slug: patch.slug !== undefined ? clean(patch.slug) : current.slug,

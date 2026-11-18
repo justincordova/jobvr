@@ -6,7 +6,7 @@ import {
   validateItems,
 } from "@jobvr/core";
 import { z } from "zod";
-import { decodeSlug, htmlToText, probeBoard, REMOTE_US } from "./shared";
+import { boardSlugOn, decodeSlug, htmlToText, probeBoard, REMOTE_US } from "./shared";
 
 const RawPosting = z.object({
   id: z.string(),
@@ -43,6 +43,7 @@ const INTERVALS: Record<string, Salary["interval"]> = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const HOSTS = new Set(["jobs.lever.co"]);
 
 // Slugs are sent exactly as given: Lever is case-sensitive (BlueMatrix vs bluematrix)
 const postingsUrl = (slug: string) =>
@@ -68,7 +69,7 @@ export const parseLeverUrl = (raw: string): ParsedUrl | null => {
     return null;
   }
   // jobs.eu.lever.co is deliberately not recognized (EU API is out of scope)
-  if (url.hostname.toLowerCase() !== "jobs.lever.co") return null;
+  if (!HOSTS.has(url.hostname.toLowerCase())) return null;
   const parts = url.pathname.split("/").filter(Boolean);
   const [slug, id, extra] = parts;
   if (!slug || !id || !UUID.test(id)) return null;
@@ -128,6 +129,7 @@ export const lever: SourceAdapter = {
   },
 
   parseUrl: parseLeverUrl,
+  boardSlug: (url) => boardSlugOn(url, HOSTS),
 
   probe: (slug, ctx) =>
     probeBoard(postingsUrl(slug), ctx, (data) => z.array(z.unknown()).parse(data).length),

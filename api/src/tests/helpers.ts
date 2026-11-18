@@ -1,5 +1,5 @@
-import type { Database } from "@jobvr/core";
-import { createTestDatabase } from "@jobvr/core/testing";
+import { createAutoTierState, type Database } from "@jobvr/core";
+import { createTestDatabase, fakeHttp } from "@jobvr/core/testing";
 import { adapters } from "@jobvr/poller";
 import { createActivityLog } from "@/lib/activity-log";
 import type { AppDeps } from "@/lib/create-app";
@@ -20,6 +20,10 @@ export const setupTestDeps = (before: Hook, after: Hook) => {
       registry: adapters,
       now: () => ctx.clock,
       activity: createActivityLog(),
+      // No network: every board probe is a 404 unless a test swaps this
+      http: fakeHttp({}).http,
+      tierRater: null,
+      tierState: createAutoTierState(),
     };
   });
   after(() => ctx.database.close());

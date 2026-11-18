@@ -745,8 +745,7 @@
     "state": null,
     "tier": "S",
     "ats": "greenhouse",
-    "slug": "stripe",
-    "track": false
+    "slug": "stripe"
   },
   {
     "name": "Cursor",
@@ -754,8 +753,7 @@
     "state": null,
     "tier": "S",
     "ats": "ashby",
-    "slug": "cursor",
-    "track": false
+    "slug": "cursor"
   },
   {
     "name": "Jane Street",
@@ -763,8 +761,7 @@
     "state": null,
     "tier": "S",
     "ats": "greenhouse",
-    "slug": "janestreet",
-    "track": false
+    "slug": "janestreet"
   },
   {
     "name": "HRT",
@@ -801,8 +798,7 @@
     "state": null,
     "tier": "A",
     "ats": "ashby",
-    "slug": "plaid",
-    "track": false
+    "slug": "plaid"
   },
   {
     "name": "Ramp",
@@ -810,8 +806,7 @@
     "state": null,
     "tier": "S",
     "ats": "ashby",
-    "slug": "ramp",
-    "track": false
+    "slug": "ramp"
   },
   {
     "name": "Brex",
@@ -819,8 +814,7 @@
     "state": null,
     "tier": "A",
     "ats": "greenhouse",
-    "slug": "brex",
-    "track": false
+    "slug": "brex"
   },
   {
     "name": "Datadog",
@@ -828,8 +822,7 @@
     "state": null,
     "tier": "A",
     "ats": "greenhouse",
-    "slug": "datadog",
-    "track": false
+    "slug": "datadog"
   },
   {
     "name": "MongoDB",
@@ -837,8 +830,7 @@
     "state": null,
     "tier": "A",
     "ats": "greenhouse",
-    "slug": "mongodb",
-    "track": false
+    "slug": "mongodb"
   },
   {
     "name": "SeatGeek",

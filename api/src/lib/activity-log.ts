@@ -34,8 +34,13 @@ const PATTERNS: [RegExp, string][] = [
 ];
 
 /** The secret parts of the app's configuration: full NTFY_URL, its topic, the database password. */
-export const secretsFromEnv = (env: { NTFY_URL?: string; DATABASE_URL?: string }): string[] => {
+export const secretsFromEnv = (env: {
+  NTFY_URL?: string;
+  DATABASE_URL?: string;
+  OPENAI_API_KEY?: string;
+}): string[] => {
   const out: string[] = [];
+  if (env.OPENAI_API_KEY) out.push(env.OPENAI_API_KEY);
   if (env.NTFY_URL) {
     out.push(env.NTFY_URL);
     if (URL.canParse(env.NTFY_URL)) out.push(new URL(env.NTFY_URL).pathname.replace(/^\/+/, ""));

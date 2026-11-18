@@ -7,7 +7,7 @@ import {
   validateItems,
 } from "@jobvr/core";
 import { z } from "zod";
-import { decodeSlug, htmlToText, probeBoard } from "./shared";
+import { boardSlugOn, decodeSlug, htmlToText, probeBoard } from "./shared";
 
 const HOSTS = new Set([
   "boards.greenhouse.io",
@@ -128,6 +128,7 @@ export const greenhouse: SourceAdapter = {
   },
 
   parseUrl: parseGreenhouseUrl,
+  boardSlug: (url) => boardSlugOn(url, HOSTS),
 
   probe: (slug, ctx) => probeBoard(boardUrl(slug), ctx, (data) => Response.parse(data).jobs.length),
 };

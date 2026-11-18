@@ -375,6 +375,65 @@ describe("companies routes", () => {
       (await client.api.companies[":id"].$delete({ param: { id: created.data.id } })).status,
     ).toBe(404);
   });
+
+  it("adds from one line, rates the tier, keeps a picked tier and can hand it back", async () => {
+    const rated: string[] = [];
+    ctx.deps.tierRater = {
+      model: "test-model",
+      rate: async ({ name }) => {
+        rated.push(name);
+        return { tier: "A", reason: "Well-known payments company" };
+      },
+    };
+    try {
+      const res = await client.api.companies.add.$post({ json: { query: "Globodyne" } });
+      expect(res.status).toBe(201);
+      const added = await res.json();
+      if (!added.success) throw new Error("expected success");
+      // No network in tests, so no board is found: its jobs come from the lists
+      expect(added).toMatchObject({
+        data: {
+          name: "Globodyne",
+          ats: "other",
+          status: "manual_only",
+          tier: "A",
+          tierSource: "auto",
+          tierReason: "Well-known payments company",
+        },
+        message: expect.stringContaining("no job board found"),
+      });
+      expect((await client.api.companies.add.$post({ json: { query: "globodyne" } })).status).toBe(
+        409,
+      );
+
+      const id = added.data.id;
+      const picked = await client.api.companies[":id"].$patch({
+        param: { id },
+        json: { tier: "Mid" },
+      });
+      expect(await picked.json()).toMatchObject({
+        data: { tier: "Mid", tierSource: "manual", tierReason: null },
+      });
+      const handedBack = await client.api.companies[":id"].$patch({
+        param: { id },
+        json: { autoTier: true },
+      });
+      expect(await handedBack.json()).toMatchObject({ data: { tier: "A", tierSource: "auto" } });
+      expect(rated).toEqual(["Globodyne", "Globodyne"]);
+
+      const both = await client.api.companies[":id"].$patch({
+        param: { id },
+        json: { tier: "S", autoTier: true },
+      });
+      expect(both.status).toBe(400);
+      const settings = await body<{ data: { tierModel: string | null } }>(
+        await client.api.settings.$get(),
+      );
+      expect(settings.data.tierModel).toBe("test-model");
+    } finally {
+      ctx.deps.tierRater = null;
+    }
+  });
 });
 
 describe("suggestions routes", () => {

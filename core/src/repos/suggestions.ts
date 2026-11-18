@@ -1,5 +1,5 @@
 import { and, desc, eq, gt } from "drizzle-orm";
-import type { Tier } from "../constants";
+import type { Tier, TierSource } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { type CompanyRow, type SuggestionRow, suggestions } from "../db/schema";
 import { ConflictError, NotFoundError } from "../errors";
@@ -21,13 +21,14 @@ export const addSuggestion = (
   id: string,
   tier: Tier,
   notes: string | null = null,
+  tierSource: TierSource = "manual",
 ): Promise<CompanyRow> =>
   db.transaction(async (tx) => {
     const [s] = await tx.select().from(suggestions).where(eq(suggestions.id, id)).for("update");
     if (!s) throw new NotFoundError("Suggestion not found");
     if (s.state === "added") throw new ConflictError("Suggestion was already added");
     const supported = getAdapter(registry, s.ats)?.kind === "ats";
-    const base = { name: s.displayName, city: null, state: null, tier, notes };
+    const base = { name: s.displayName, city: null, state: null, tier, tierSource, notes };
     const company = !supported
       ? await createCompany(tx, {
           ...base,

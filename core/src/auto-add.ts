@@ -1,4 +1,5 @@
 import { isNull } from "drizzle-orm";
+import { UNRATED_TIER } from "./add-company";
 import { DAY_MS, type Tier } from "./constants";
 import type { Database } from "./db/client";
 import { sourceState } from "./db/schema";
@@ -10,8 +11,8 @@ import { addSuggestion, listOpenSuggestions } from "./repos/suggestions";
 import { getAdapter } from "./sources/registry";
 import type { Registry } from "./sources/types";
 
-/** Companies added on their own start here; change it on the Companies page. */
-export const AUTO_ADD_TIER: Tier = "Startup";
+/** Companies added on their own start here, until the AI rater (if configured) rates them. */
+export const AUTO_ADD_TIER: Tier = UNRATED_TIER;
 /** Boards checked per run, so a backlog spreads over a few polls. */
 export const AUTO_ADD_PER_RUN = 10;
 /** A board that didn't answer (or had no jobs) is tried again after this long. */
@@ -31,8 +32,9 @@ export interface AutoAddOptions {
  * Grows the polled companies from the new-grad lists: an unlisted company whose
  * matching listings point at a Greenhouse, Lever or Ashby board is added as a
  * tracked company once that board answers with jobs. Its first poll is a
- * silent baseline, like any new company. Runs when "Add companies
- * automatically" (`suggestCompanies`) is on; dismissed suggestions are skipped.
+ * silent baseline, like any new company; `runAutoTier` rates its tier. Runs
+ * when "Add companies automatically" (`suggestCompanies`) is on; dismissed
+ * suggestions are skipped.
  */
 export const runAutoAddCompanies = async (
   options: AutoAddOptions,
@@ -78,6 +80,7 @@ export const runAutoAddCompanies = async (
         s.id,
         AUTO_ADD_TIER,
         `Added automatically from ${lists || "the new-grad lists"} (${adapter?.label} board, ${probe.jobCount} jobs)`,
+        "pending",
       );
       added.push(s.displayName);
       log.info(

@@ -13,7 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { COMPANY_STATUSES, JOB_STATES, SUGGESTION_STATES, TIERS } from "../constants";
+import { COMPANY_STATUSES, JOB_STATES, SUGGESTION_STATES, TIER_SOURCES, TIERS } from "../constants";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 
@@ -56,6 +56,11 @@ export const companies = pgTable(
     city: text("city"),
     state: text("state"),
     tier: text("tier").notNull(),
+    tierSource: text("tier_source").notNull().default("seed"),
+    /** One line on why it has this tier (from the AI rater); null otherwise. */
+    tierReason: text("tier_reason"),
+    /** When the AI rater set the tier. */
+    tieredAt: ts("tiered_at"),
     track: boolean("track").notNull().default(false),
     ats: text("ats").notNull(),
     slug: text("slug"),
@@ -68,6 +73,7 @@ export const companies = pgTable(
   (t) => [
     check("companies_tier_check", oneOf(t.tier, TIERS)),
     check("companies_status_check", oneOf(t.status, COMPANY_STATUSES)),
+    check("companies_tier_source_check", oneOf(t.tierSource, TIER_SOURCES)),
     uniqueIndex("companies_normalized_name_key").on(t.normalizedName),
     uniqueIndex("companies_ats_slug_key")
       .on(t.ats, sql`lower(${t.slug})`)

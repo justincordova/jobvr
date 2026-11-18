@@ -5,6 +5,7 @@ import * as routes from "./routes";
 const companiesRouter = createRouter()
   .openapi(routes.list, handlers.listHandler)
   .openapi(routes.create, handlers.createHandler)
+  .openapi(routes.add, handlers.addHandler)
   .openapi(routes.update, handlers.updateHandler)
   .openapi(routes.remove, handlers.removeHandler);
 

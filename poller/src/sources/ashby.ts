@@ -6,7 +6,7 @@ import {
   validateItems,
 } from "@jobvr/core";
 import { z } from "zod";
-import { decodeSlug, probeBoard, REMOTE_US } from "./shared";
+import { boardSlugOn, decodeSlug, probeBoard, REMOTE_US } from "./shared";
 
 const Address = z
   .object({ postalAddress: z.object({ addressCountry: z.string().nullish() }).nullish() })
@@ -52,6 +52,7 @@ const INTERVALS: Record<string, Salary["interval"]> = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const HOSTS = new Set(["jobs.ashbyhq.com"]);
 
 const boardUrl = (slug: string) =>
   `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(slug)}?includeCompensation=true`;
@@ -76,7 +77,7 @@ export const parseAshbyUrl = (raw: string): ParsedUrl | null => {
   } catch {
     return null;
   }
-  if (url.hostname.toLowerCase() !== "jobs.ashbyhq.com") return null;
+  if (!HOSTS.has(url.hostname.toLowerCase())) return null;
   const parts = url.pathname.split("/").filter(Boolean);
   const [slug, id, extra] = parts;
   if (!slug || !id || !UUID.test(id)) return null;
@@ -128,6 +129,7 @@ export const ashby: SourceAdapter = {
   },
 
   parseUrl: parseAshbyUrl,
+  boardSlug: (url) => boardSlugOn(url, HOSTS),
 
   probe: (slug, ctx) => probeBoard(boardUrl(slug), ctx, (data) => Response.parse(data).jobs.length),
 };

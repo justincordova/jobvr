@@ -1,6 +1,13 @@
 import type { Server } from "node:http";
 import { serve } from "@hono/node-server";
-import { createDatabase, formatDuration, runMigrations } from "@jobvr/core";
+import {
+  createAutoTierState,
+  createDatabase,
+  createHttpClient,
+  createOpenAiTierRater,
+  formatDuration,
+  runMigrations,
+} from "@jobvr/core";
 import { adapters } from "@jobvr/poller";
 import { createApp } from "@/app";
 import { env } from "@/config/env";
@@ -45,8 +52,27 @@ log.info(
   `database ready (${describeDb(env.DATABASE_URL)}, migrations applied in ${formatDuration(performance.now() - migrateStarted)})`,
 );
 
+const tierRater = env.OPENAI_API_KEY
+  ? createOpenAiTierRater({ apiKey: env.OPENAI_API_KEY, model: env.OPENAI_MODEL })
+  : null;
+const tierState = createAutoTierState();
+log.info(
+  { model: tierRater?.model },
+  tierRater
+    ? `new companies are rated by ${tierRater.model}`
+    : "OPENAI_API_KEY unset: new companies start as Startup, unrated",
+);
+
 const app = createApp(
-  { database, registry: adapters, now: () => new Date(), activity: activityLog },
+  {
+    database,
+    registry: adapters,
+    now: () => new Date(),
+    activity: activityLog,
+    http: createHttpClient(),
+    tierRater,
+    tierState,
+  },
   { webDistDir: env.WEB_DIST_DIR, schedulerEnabled: env.SCHEDULER_ENABLED },
 );
 
@@ -57,6 +83,8 @@ const scheduler = env.SCHEDULER_ENABLED
       ntfyUrl: env.NTFY_URL,
       publicUrl: env.PUBLIC_URL,
       logger,
+      tierRater,
+      tierState,
     })
   : null;
 

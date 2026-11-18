@@ -90,6 +90,7 @@ export const seedCompanies = async (
       city: entry.city,
       state: entry.state,
       tier: entry.tier,
+      tierSource: "seed" as const,
       careersUrl: entry.careersUrl,
       notes: entry.notes,
     };
