@@ -24,6 +24,7 @@ describe('appliedStats', () => {
     expect(s.thisWeek).toBe(3)
     expect(s.lastWeek).toBe(2)
     expect(s.streak).toBe(3)
+    expect(s.bestDay).toEqual({ date: '2026-11-18', count: 1 })
     expect(s.tiers).toEqual([
       { tier: 'Mid', count: 2 },
       { tier: 'Startup', count: 2 },

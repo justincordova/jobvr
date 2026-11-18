@@ -18,6 +18,8 @@ export interface AppliedStats {
   lastWeek: number
   /** Days in a row with an application, up to today (or yesterday, if none yet today). */
   streak: number
+  /** The busiest day in the range (null when nothing is dated). */
+  bestDay: { date: string; count: number } | null
   /** One column per week, Monday first; the last column is this week. */
   weeks: HeatDay[][]
   tiers: { tier: TierFilter; count: number }[]
@@ -74,12 +76,18 @@ export function appliedStats(
     }),
   )
 
+  // Ties go to the latest day
+  const busiest = weeks
+    .flat()
+    .reduce<HeatDay | null>((b, d) => (d.count > 0 && d.count >= (b?.count ?? 0) ? d : b), null)
+
   return {
     total: jobs.length,
     undated,
     thisWeek: sumDays(monday, 7),
     lastWeek: sumDays(addDays(monday, -7), 7),
     streak,
+    bestDay: busiest && { date: busiest.date, count: busiest.count },
     weeks,
     tiers: TIER_FILTERS.map((tier) => ({
       tier,

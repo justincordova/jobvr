@@ -1,11 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useLayoutEffect, useMemo, useState } from 'react'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import type { TierFilter } from '@/lib/types'
 import { appliedStats, type HeatDay } from './applied-stats'
 
-const WEEKS = 16
+/** Up to a year, like GitHub; fewer when the card is narrower. */
+const MAX_WEEKS = 53
+const MIN_WEEKS = 12
+const CELL = 13
+const MAX_CELL = 20
+const GAP = 3
+const DAY_LABEL_WIDTH = 28
 // Every applied job, whatever the page's filters, so the overview is the whole story
 const QUERY = { view: 'applied', limit: '5000' } as const
 
@@ -14,10 +20,10 @@ const LEVEL_CLASS: Record<HeatDay['level'], string> = {
   1: 'bg-signal/25',
   2: 'bg-signal/50',
   3: 'bg-signal/75',
-  4: 'bg-signal shadow-[0_0_10px_-2px] shadow-signal/60',
+  4: 'bg-signal',
 }
 
-const TIER_CLASS: Record<TierFilter, string> = {
+const TIER_DOT: Record<TierFilter, string> = {
   S: 'bg-signal',
   A: 'bg-info',
   Mid: 'bg-go',
@@ -28,23 +34,50 @@ const TIER_CLASS: Record<TierFilter, string> = {
 
 const DAY_LABELS = ['Mon', '', 'Wed', '', 'Fri', '', '']
 
-const dayTitle = (d: HeatDay) => {
-  const date = new Date(`${d.date}T12:00:00`).toLocaleDateString(undefined, {
+const longDate = (date: string) =>
+  new Date(`${date}T12:00:00`).toLocaleDateString(undefined, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
   })
-  return `${date}: ${d.count === 0 ? 'none' : `${d.count} applied`}`
-}
 
-/** "Nov" above the first week that starts a month. */
+const dayText = (d: HeatDay) =>
+  `${d.count === 0 ? 'No applications' : `${d.count} applied`} on ${longDate(d.date)}`
+
+/** "Nov" above the first week that starts a month (not on the first column, to avoid clipping). */
 const monthLabels = (weeks: HeatDay[][]) =>
   weeks.map((week, i) => {
-    const first = week.find((d) => d.date.endsWith('-01')) ?? (i === 0 ? week[0] : undefined)
-    return first
+    const first = week.find((d) => d.date.endsWith('-01'))
+    return first && i > 0
       ? new Date(`${first.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short' })
       : ''
   })
+
+/** How many week columns fit the element's width. */
+function useWeeksThatFit() {
+  // A callback ref: the card renders nothing until the data loads, so measure when it appears
+  const [el, ref] = useState<HTMLDivElement | null>(null)
+  const [size, setSize] = useState({ weeks: 26, cell: CELL })
+  useLayoutEffect(() => {
+    if (!el) return
+    // Fewer weeks on narrow screens; once a whole year fits, bigger squares fill the width
+    const measure = () => {
+      const room = el.clientWidth - DAY_LABEL_WIDTH + GAP
+      const fit = Math.floor(room / (CELL + GAP))
+      setSize(
+        fit < MAX_WEEKS
+          ? { weeks: Math.max(MIN_WEEKS, fit), cell: CELL }
+          : { weeks: MAX_WEEKS, cell: Math.min(MAX_CELL, Math.floor(room / MAX_WEEKS) - GAP) },
+      )
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [el])
+  return { ref, ...size }
+}
 
 function Stat({ value, label, tone }: { value: string; label: string; tone?: 'go' | 'stop' }) {
   return (
@@ -57,141 +90,143 @@ function Stat({ value, label, tone }: { value: string; label: string; tone?: 'go
       >
         {value}
       </p>
-      <p className="mt-1 font-mono text-[0.62rem] tracking-wider text-faint uppercase">{label}</p>
+      <p className="mt-1.5 font-mono text-[0.62rem] tracking-wider text-faint uppercase">{label}</p>
     </div>
   )
 }
 
-function Heatmap({ weeks }: { weeks: HeatDay[][] }) {
+/** GitHub-style: one square per day, a tooltip on hover (or tap). */
+function Heatmap({ weeks, cell }: { weeks: HeatDay[][]; cell: number }) {
   const months = monthLabels(weeks)
+  const [tip, setTip] = useState<{ day: HeatDay; x: number; y: number } | null>(null)
+  const show = (day: HeatDay, el: HTMLElement) => {
+    const box = el.parentElement?.getBoundingClientRect()
+    const square = el.getBoundingClientRect()
+    if (!box) return
+    // Kept inside the card at the first and last weeks
+    const x = Math.min(Math.max(square.left - box.left + square.width / 2, 80), box.width - 80)
+    setTip({ day, x, y: square.top - box.top })
+  }
   const total = weeks.flat().reduce((n, d) => n + d.count, 0)
   return (
-    <figure className="min-w-0">
-      <div className="overflow-x-auto scrollbar-none">
-        <div
-          role="img"
-          aria-label={`Applications per day over the last ${weeks.length} weeks: ${total} in all`}
-          className="inline-grid grid-flow-col grid-rows-[auto_repeat(7,0.75rem)] gap-[3px]"
+    <div
+      role="img"
+      aria-label={`Applications per day over the last ${weeks.length} weeks: ${total} in all`}
+      onMouseLeave={() => setTip(null)}
+      className="relative inline-grid grid-flow-col gap-[3px]"
+      style={{
+        gridTemplateRows: `auto repeat(7, ${cell}px)`,
+        gridTemplateColumns: `${DAY_LABEL_WIDTH - GAP}px repeat(${weeks.length}, ${cell}px)`,
+      }}
+    >
+      <span aria-hidden />
+      {DAY_LABELS.map((d, i) => (
+        <span
+          key={i}
+          aria-hidden
+          className="font-mono text-[0.6rem] text-faint"
+          style={{ lineHeight: `${cell}px` }}
         >
-          <span aria-hidden />
-          {DAY_LABELS.map((d, i) => (
-            <span
-              key={i}
-              aria-hidden
-              className="pr-1.5 font-mono text-[0.58rem] leading-3 text-faint"
-            >
-              {d}
-            </span>
-          ))}
-          {weeks.map((week, w) => (
-            <WeekColumn key={week[0]?.date} week={week} month={months[w] ?? ''} index={w} />
-          ))}
-        </div>
-      </div>
-      <figcaption className="mt-2 flex items-center gap-1.5 font-mono text-[0.6rem] text-faint">
-        less
-        {([0, 1, 2, 3, 4] as const).map((l) => (
-          <span key={l} aria-hidden className={cn('size-2.5 rounded-[3px]', LEVEL_CLASS[l])} />
-        ))}
-        more
-      </figcaption>
-    </figure>
+          {d}
+        </span>
+      ))}
+      {weeks.map((week, w) => (
+        <WeekColumn
+          key={week[0]?.date}
+          week={week}
+          month={months[w] ?? ''}
+          active={tip?.day.date}
+          onShow={show}
+        />
+      ))}
+      {tip && (
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md border border-line-strong bg-raised px-2 py-1 text-xs whitespace-nowrap text-paper shadow-lg"
+          style={{ left: tip.x, top: tip.y - 6 }}
+        >
+          {dayText(tip.day)}
+        </span>
+      )}
+    </div>
   )
 }
 
-function WeekColumn({ week, month, index }: { week: HeatDay[]; month: string; index: number }) {
+function WeekColumn({
+  week,
+  month,
+  active,
+  onShow,
+}: {
+  week: HeatDay[]
+  month: string
+  active: string | undefined
+  onShow: (day: HeatDay, el: HTMLElement) => void
+}) {
   return (
     <>
       <span
         aria-hidden
-        className="h-3 font-mono text-[0.58rem] leading-3 whitespace-nowrap text-faint"
+        className="h-4 overflow-visible font-mono text-[0.6rem] leading-3 whitespace-nowrap text-faint"
       >
         {month}
       </span>
-      {week.map((d, i) => (
-        <span
-          key={d.date}
-          title={d.future ? undefined : dayTitle(d)}
-          style={{ animationDelay: `${(index * 7 + i) * 4}ms` }}
-          className={cn(
-            'size-3 animate-fade-in rounded-[3px]',
-            d.future ? 'invisible' : LEVEL_CLASS[d.level],
-          )}
-        />
-      ))}
+      {week.map((d) =>
+        d.future ? (
+          <span key={d.date} aria-hidden />
+        ) : (
+          <span
+            key={d.date}
+            aria-hidden
+            onMouseEnter={(e) => onShow(d, e.currentTarget)}
+            onClick={(e) => onShow(d, e.currentTarget)}
+            className={cn(
+              'rounded-[3px] transition-shadow duration-100',
+              LEVEL_CLASS[d.level],
+              active === d.date && 'ring-2 ring-paper/70 ring-inset',
+            )}
+          />
+        ),
+      )}
     </>
   )
 }
 
-function TierMix({
-  tiers,
-  total,
-}: {
-  tiers: { tier: TierFilter; count: number }[]
-  total: number
-}) {
-  return (
-    <div className="min-w-0">
-      <p className="mb-2 font-mono text-[0.62rem] tracking-wider text-faint uppercase">By tier</p>
-      <div
-        role="img"
-        aria-label={tiers.map((t) => `${t.tier} ${t.count}`).join(', ')}
-        className="flex h-2 overflow-hidden rounded-full bg-raised"
-      >
-        {tiers.map((t) => (
-          <span
-            key={t.tier}
-            className={cn(
-              'h-full transition-[width] duration-500 ease-(--ease-out)',
-              TIER_CLASS[t.tier],
-            )}
-            style={{ width: `${(t.count / total) * 100}%` }}
-          />
-        ))}
-      </div>
-      <ul className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-        {tiers.map((t) => (
-          <li key={t.tier} className="flex items-center gap-1.5 text-dim">
-            <span aria-hidden className={cn('size-2 rounded-full', TIER_CLASS[t.tier])} />
-            {t.tier}
-            <span className="ml-auto font-mono text-paper tabular-nums">{t.count}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-/** The Applied page's header card: total, pace, a 16-week heatmap and the tier mix. */
+/** The Applied page's header card: pace up top, a GitHub-style year of days, the tier mix in one line. */
 export function AppliedOverview() {
   const { data } = useQuery({
     queryKey: queryKeys.jobs(QUERY),
     queryFn: () => unwrap(api.api.jobs.$get({ query: QUERY })),
   })
-  const stats = useMemo(() => (data ? appliedStats(data.jobs, new Date(), WEEKS) : null), [data])
+  const { ref, weeks, cell } = useWeeksThatFit()
+  const stats = useMemo(
+    () => (data ? appliedStats(data.jobs, new Date(), MAX_WEEKS) : null),
+    [data],
+  )
   if (!stats || stats.total === 0) return null
 
+  const shown = stats.weeks.slice(-weeks)
   const delta = stats.thisWeek - stats.lastWeek
   return (
     <section
       aria-label="Applications overview"
-      className="relative mb-5 grid animate-rise gap-6 overflow-hidden rounded-xl border border-line bg-panel/60 p-5 md:grid-cols-[auto_1fr] xl:grid-cols-[auto_auto_minmax(14rem,1fr)]"
+      className="relative mb-5 animate-rise overflow-hidden rounded-xl border border-line bg-panel/60 p-5"
     >
       {/* A low amber glow behind the number, like the page's top light */}
       <span
         aria-hidden
         className="pointer-events-none absolute -top-16 -left-10 size-56 rounded-full bg-signal/10 blur-3xl"
       />
-      <div className="relative flex flex-col justify-between gap-5">
-        <div>
-          <p className="font-mono text-5xl leading-none font-semibold tracking-tight text-signal tabular-nums">
+      <div className="relative flex flex-wrap items-end gap-x-8 gap-y-4">
+        <div className="flex items-baseline gap-3">
+          <p className="font-mono text-4xl leading-none font-semibold tracking-tight text-signal tabular-nums">
             {stats.total}
           </p>
-          <p className="mt-2 font-mono text-[0.68rem] tracking-[0.2em] text-dim uppercase">
+          <p className="font-mono text-[0.68rem] tracking-[0.2em] text-dim uppercase">
             applications
           </p>
         </div>
-        <div className="flex gap-6">
+        <div className="flex flex-wrap gap-x-7 gap-y-3">
           <Stat value={String(stats.thisWeek)} label="this week" />
           <Stat
             value={delta === 0 ? '±0' : delta > 0 ? `+${delta}` : String(delta)}
@@ -199,17 +234,45 @@ export function AppliedOverview() {
             tone={delta > 0 ? 'go' : delta < 0 ? 'stop' : undefined}
           />
           <Stat value={`${stats.streak}d`} label="streak" />
+          {stats.bestDay && (
+            <Stat
+              value={String(stats.bestDay.count)}
+              label={`best day · ${longDate(stats.bestDay.date)}`}
+            />
+          )}
         </div>
       </div>
-      <Heatmap weeks={stats.weeks} />
-      <div className="md:col-span-2 xl:col-span-1">
-        <TierMix tiers={stats.tiers} total={stats.total} />
-        {stats.undated > 0 && (
-          <p className="mt-3 text-xs text-faint">
-            {stats.undated} applied before jobvr kept dates; they count in the total only.
-          </p>
-        )}
+
+      <div ref={ref} className="relative mt-2 pt-6">
+        <Heatmap weeks={shown} cell={cell} />
       </div>
+
+      <div className="relative mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+        <ul aria-label="By tier" className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
+          {stats.tiers.map((t) => (
+            <li key={t.tier} className="flex items-center gap-1.5 text-dim">
+              <span aria-hidden className={cn('size-2 rounded-full', TIER_DOT[t.tier])} />
+              {t.tier}
+              <span className="font-mono text-paper tabular-nums">{t.count}</span>
+            </li>
+          ))}
+        </ul>
+        <p
+          aria-hidden
+          className="ml-auto flex items-center gap-1 font-mono text-[0.6rem] text-faint"
+        >
+          less
+          {([0, 1, 2, 3, 4] as const).map((l) => (
+            <span key={l} className={cn('size-2.5 rounded-[3px]', LEVEL_CLASS[l])} />
+          ))}
+          more
+        </p>
+      </div>
+      {stats.undated > 0 && (
+        <p className="relative mt-2 text-xs text-faint">
+          {stats.undated} applied before jobvr kept dates; they count in the total only.
+        </p>
+      )}
     </section>
   )
 }
