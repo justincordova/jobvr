@@ -13,7 +13,6 @@ const NAV: { to: string; label: string; icon: ComponentType<{ className?: string
   { to: '/', label: 'Feed', icon: Radar },
   { to: '/applied', label: 'Applied', icon: Send },
   { to: '/companies', label: 'Companies', icon: Building2 },
-  { to: '/settings', label: 'Settings', icon: Settings2 },
 ]
 
 function Wordmark() {
@@ -55,10 +54,10 @@ function PollStatus() {
   const down = data.sourceOutages.map((o) => o.label)
   return (
     <Link
-      to="/settings"
+      to="/logs"
       title={
         (data.lastPollAt
-          ? `Last poll ${new Date(data.lastPollAt).toLocaleString()}`
+          ? `Last poll ${new Date(data.lastPollAt).toLocaleString()} · open the logs`
           : 'No poll has run yet') + (down.length ? ` · ${down.join(', ')} looks down` : '')
       }
       className="flex items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[0.7rem] text-faint transition-colors hover:text-dim"
@@ -75,6 +74,28 @@ function PollStatus() {
       {down.length > 0 && (
         <span className="text-signal max-sm:sr-only">· {down.join(', ')} down</span>
       )}
+    </Link>
+  )
+}
+
+/** Pages reached from the header's right side, not the nav: Logs (the poll status) and Settings (the cog). */
+const HEADER_PAGES = [
+  { to: '/logs', label: 'Logs' },
+  { to: '/settings', label: 'Settings' },
+]
+
+function SettingsLink({ active }: { active: boolean }) {
+  return (
+    <Link
+      to="/settings"
+      aria-label="Settings"
+      title="Settings"
+      className={cn(
+        'grid size-8 place-items-center rounded-md transition-colors duration-200 hover:bg-raised hover:text-paper pointer-coarse:size-11',
+        active ? 'bg-raised text-signal' : 'text-dim',
+      )}
+    >
+      <Settings2 className="size-[1.1rem]" />
     </Link>
   )
 }
@@ -120,7 +141,7 @@ function MobileNav({ pathname }: { pathname: string }) {
     <nav
       ref={ref}
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-line bg-panel/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 border-t border-line bg-panel/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg md:hidden"
     >
       <span aria-hidden className="absolute top-0 left-0 flex justify-center" style={style}>
         <span className="h-0.5 w-8 rounded-b-full bg-signal" />
@@ -168,8 +189,9 @@ export function AppShell() {
 
   useEffect(() => {
     const page = NAV.find((n) => isActive(n.to, pathname))
-    // Logs is reached from Settings, not the nav
-    const label = pathname.startsWith('/logs') ? 'Logs' : page && page.to !== '/' && page.label
+    const label =
+      HEADER_PAGES.find((p) => pathname.startsWith(p.to))?.label ??
+      (page && page.to !== '/' && page.label)
     document.title = label ? `${label} · jobvr` : 'jobvr'
   }, [pathname])
 
@@ -178,7 +200,10 @@ export function AppShell() {
       <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center pt-[env(safe-area-inset-top)] justify-between gap-4 border-b border-line/70 bg-ink/80 px-4 backdrop-blur-lg sm:px-6 lg:px-10">
         <Wordmark />
         <DesktopNav pathname={pathname} />
-        <PollStatus />
+        <div className="flex items-center gap-1">
+          <PollStatus />
+          <SettingsLink active={pathname.startsWith('/settings')} />
+        </div>
       </header>
 
       <main
