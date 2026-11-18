@@ -1,6 +1,6 @@
 import { type SourceAdapter, validateItems } from "@jobvr/core";
 import { z } from "zod";
-import { cellLink, cellText, parseTables, withoutTracking } from "./markdown";
+import { cellLink, cellText, parseTables, type TableRow, withoutTracking } from "./markdown";
 import { REMOTE_US } from "./shared";
 
 export const JOBRIGHT_URL =
@@ -65,10 +65,21 @@ export const jobright: SourceAdapter = {
     const now = new Date();
     // "↳" rows are more roles at the company of the row above
     let company = "";
-    const items = rows.map((r) => {
+    const named: TableRow[] = rows.map((r) => {
       const name = cellText(r.company ?? "");
       if (name && name !== "↳") company = name;
       return { ...r, company: name === "↳" ? company : name };
+    });
+    // The list repeats some roles under a second id (51 of ~640 in Nov 2026); keep the
+    // first (newest), or each repeat would show as its own job
+    const seen = new Set<string>();
+    const items = named.filter((r) => {
+      const key = [r.company, cellText(r["job title"] ?? ""), cellText(r.location ?? "")]
+        .join("\u0000")
+        .toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
     const { jobs, invalidCount, invalidIds } = validateItems("jobright", items, RawRow, (r) => {
       const link = cellLink(r["job title"]);

@@ -232,7 +232,9 @@ changed). Its links point at the postings, so board jobs dedupe by URL.
 
 **Jobright** (`raw.githubusercontent.com/jobright-ai/2026-Software-Engineer-New-Grad/master/README.md`,
 ~640 rows, daily): columns Company, Job Title, Location, Work Model, Date
-Posted. A `↳` company cell repeats the row above. `sourceJobId` is the id in
+Posted. A `↳` company cell repeats the row above. The list repeats some
+roles under a second id (51 of ~640 in Nov 2026): only the first row per
+company + title + location is kept. `sourceJobId` is the id in
 the title's `jobright.ai/jobs/info/<id>` link (tracking params removed; that
 link is the job's `url`). Locations are the cell as is (`City, ST, United
 States`; the country suffix is ignored by matching), plus `Remote - US` when

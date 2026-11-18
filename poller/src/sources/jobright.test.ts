@@ -35,6 +35,19 @@ describe("jobright adapter", () => {
     expect(jobright.indirectLinks).toBe(true);
   });
 
+  it("keeps one row per repeated role (same company, title and place)", async () => {
+    const amazon = fixture.split("\n").find((l) => l.includes("[Amazon]")) ?? "";
+    const repeat = amazon.replace("6afcd0bbe8a9612f4e0dbd32", "6afcd0bbe8a9612f4e0dbd99");
+    const { http } = fakeHttp({
+      [JOBRIGHT_URL]: ok(fixture.replace(amazon, `${amazon}\n${repeat}`)),
+    });
+    const res = await jobright.fetch({ http });
+    if (res.status !== "ok") throw new Error("expected ok");
+    expect(res.jobs.filter((j) => j.companyName === "Amazon").map((j) => j.sourceJobId)).toEqual([
+      "6afcd0bbe8a9612f4e0dbd32",
+    ]);
+  });
+
   it("adds Remote - US only for remote roles in the US", () => {
     expect(parseLocations("Fort Walton Beach, FL, United States", "Remote")).toEqual([
       "Fort Walton Beach, FL, United States",
