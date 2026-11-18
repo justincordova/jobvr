@@ -5,7 +5,6 @@ import { AppliedPage, FeedPage } from '@/features/feed/feed-page'
 import { parseAppliedSearch, parseFeedSearch } from '@/features/feed/search'
 import { LogsPage } from '@/features/logs/logs-page'
 import { SettingsPage } from '@/features/settings/settings-page'
-import { SuggestedPage } from '@/features/suggested/suggested-page'
 
 const rootRoute = createRootRoute({ component: AppShell })
 
@@ -35,10 +34,13 @@ const companiesRoute = createRoute({
   component: CompaniesPage,
 })
 
+// Companies are added automatically now; old links to Suggested land on Companies
 const suggestedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/suggested',
-  component: SuggestedPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/companies', replace: true })
+  },
 })
 
 const settingsRoute = createRoute({

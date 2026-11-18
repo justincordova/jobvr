@@ -45,7 +45,6 @@ export const queryKeys = {
   jobs: (params: object) => ['jobs', params] as const,
   allJobs: ['jobs'] as const,
   companies: ['companies'] as const,
-  suggestions: ['suggestions'] as const,
   settings: ['settings'] as const,
   logs: ['logs'] as const,
 }

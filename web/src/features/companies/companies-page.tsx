@@ -63,7 +63,6 @@ function useCompanyMutations() {
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: queryKeys.companies })
     void qc.invalidateQueries({ queryKey: queryKeys.allJobs })
-    void qc.invalidateQueries({ queryKey: queryKeys.suggestions })
   }
   const patch = useMutation({
     mutationFn: ({ id, json }: { id: string; json: CompanyPatch }) =>

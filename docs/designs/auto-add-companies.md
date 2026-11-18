@@ -22,10 +22,11 @@ goal: the polled companies grow on their own, with no manual work.
 - After adding any, the lists' ETags are cleared, so their next poll refetches
   and their Unlisted jobs pick up the new companies and tiers.
 - Skipped: dismissed suggestions, unsupported job sites ("other"), suggestions
-  without a slug, and disabled sources. Those stay on the Suggested page.
-- **Web**: Suggested leaves the nav (the phone bar goes back to 4 tabs, no
-  badge); the page stays at `/suggested`, linked from Settings → New-grad
-  lists, where the switch is now called "Add companies automatically".
+  without a slug, and disabled sources. Their jobs keep showing as Unlisted.
+- **Web**: the Suggested page is gone (the phone bar goes back to 4 tabs, no
+  badge); `/suggested` redirects to Companies. The Settings switch is now
+  "Add companies automatically" (on by default). The suggestions API stays;
+  it's what the auto-add reads.
 
 ## Applied overview
 
