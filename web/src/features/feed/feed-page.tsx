@@ -4,6 +4,7 @@ import { Bookmark, CloudOff, EyeOff, Keyboard, LoaderCircle, Radar, Send } from 
 import { type ComponentType, useEffect, useRef, useState } from 'react'
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { Button } from '@/components/ui/button'
+import { Reveal } from '@/components/ui/reveal'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { AppliedOverview } from './applied-overview'
@@ -11,6 +12,7 @@ import { FEED_GRID } from './columns'
 import { FilterBar } from './filter-bar'
 import { JobDetailsDialog } from './job-details'
 import { JobRow } from './job-row'
+import { NewSinceBanner } from './new-banner'
 import {
   activeFilterCount,
   CLEARED_FILTERS,
@@ -26,7 +28,6 @@ import {
 import { ShortcutsDialog } from './shortcuts-dialog'
 import { useFeedKeys } from './use-feed-keys'
 import { useJobActions } from './use-job-actions'
-import { NewSinceBanner } from './new-banner'
 import {
   captureFirstResponse,
   isSessionNew,
@@ -240,9 +241,12 @@ function JobsPage({ search }: { search: FeedSearch }) {
         />
       )}
 
-      {view === 'applied' && <AppliedOverview />}
-
       <FilterBar search={search} onChange={update} onView={goView} />
+
+      {/* Below the filters, so switching views never moves them; it slides open and shut */}
+      <Reveal open={view === 'applied'} className="mt-4">
+        <AppliedOverview />
+      </Reveal>
 
       {jobs.isPending ? (
         <SkeletonRows />

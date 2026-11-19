@@ -32,15 +32,13 @@ interface JobRowProps {
   onDetails?: () => void
 }
 
-/** An icon-only row action; the label is its accessible name and tooltip. */
+/** An icon-only row action, unboxed like the rest; the label is its accessible name and tooltip. */
 function IconAction({
   label,
-  ghost,
   className,
   ...props
 }: {
   label: string
-  ghost?: boolean
   className?: string
   onClick: () => void
   disabled: boolean
@@ -49,7 +47,7 @@ function IconAction({
   return (
     <Button
       size="icon"
-      variant={ghost ? 'ghost' : 'secondary'}
+      variant="ghost"
       aria-label={label}
       title={label}
       className={className}
@@ -196,7 +194,7 @@ export function JobRow({
 
       <div className="col-start-2 mt-2.5 flex items-center gap-1.5 sm:col-start-3 sm:mt-0 sm:self-center lg:col-start-5 lg:justify-end">
         {job.state === 'applied' ? (
-          <IconAction label="Not applied" onClick={() => onState('new')} disabled={busy} ghost>
+          <IconAction label="Not applied" onClick={() => onState('new')} disabled={busy}>
             <Undo2 />
           </IconAction>
         ) : (
@@ -205,7 +203,7 @@ export function JobRow({
               label="Applied"
               onClick={() => onState('applied')}
               disabled={busy}
-              className="hover:border-go/50 hover:text-go"
+              className="hover:text-go"
             >
               <Check />
             </IconAction>
@@ -221,11 +219,11 @@ export function JobRow({
               )
             )}
             {job.state === 'hidden' ? (
-              <IconAction label="Unhide" onClick={() => onState('new')} disabled={busy} ghost>
+              <IconAction label="Unhide" onClick={() => onState('new')} disabled={busy}>
                 <Eye />
               </IconAction>
             ) : (
-              <IconAction label="Hide" onClick={() => onState('hidden')} disabled={busy} ghost>
+              <IconAction label="Hide" onClick={() => onState('hidden')} disabled={busy}>
                 <EyeOff />
               </IconAction>
             )}

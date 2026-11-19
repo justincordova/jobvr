@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
+import { ChevronDown } from 'lucide-react'
 import { useLayoutEffect, useMemo, useState } from 'react'
+import { Reveal } from '@/components/ui/reveal'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import type { TierFilter } from '@/lib/types'
@@ -77,6 +79,29 @@ function useWeeksThatFit() {
     return () => observer.disconnect()
   }, [el])
   return { ref, ...size }
+}
+
+const GRAPH_KEY = 'jobvr.activity'
+
+/** Whether the heatmap is unfolded; remembered in this browser. */
+function useGraphOpen(): [boolean, () => void] {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(GRAPH_KEY) !== 'closed'
+    } catch {
+      return true
+    }
+  })
+  const toggle = () =>
+    setOpen((was) => {
+      try {
+        localStorage.setItem(GRAPH_KEY, was ? 'closed' : 'open')
+      } catch {
+        // Private mode: it still folds for this visit
+      }
+      return !was
+    })
+  return [open, toggle]
 }
 
 function Stat({ value, label, tone }: { value: string; label: string; tone?: 'go' | 'stop' }) {
@@ -199,6 +224,7 @@ export function AppliedOverview() {
     queryFn: () => unwrap(api.api.jobs.$get({ query: QUERY })),
   })
   const { ref, weeks, cell } = useWeeksThatFit()
+  const [graphOpen, toggleGraph] = useGraphOpen()
   const stats = useMemo(
     () => (data ? appliedStats(data.jobs, new Date(), MAX_WEEKS) : null),
     [data],
@@ -210,7 +236,7 @@ export function AppliedOverview() {
   return (
     <section
       aria-label="Applications overview"
-      className="relative mb-5 animate-rise overflow-hidden rounded-xl border border-line bg-panel/60 p-5"
+      className="relative overflow-hidden rounded-xl border border-line bg-panel/60 p-5"
     >
       {/* A low amber glow behind the number, like the page's top light */}
       <span
@@ -241,38 +267,55 @@ export function AppliedOverview() {
             />
           )}
         </div>
-      </div>
-
-      <div ref={ref} className="relative mt-2 pt-6">
-        <Heatmap weeks={shown} cell={cell} />
-      </div>
-
-      <div className="relative mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-        <ul aria-label="By tier" className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
-          {stats.tiers.map((t) => (
-            <li key={t.tier} className="flex items-center gap-1.5 text-dim">
-              <span aria-hidden className={cn('size-2 rounded-full', TIER_DOT[t.tier])} />
-              {t.tier}
-              <span className="font-mono text-paper tabular-nums">{t.count}</span>
-            </li>
-          ))}
-        </ul>
-        <p
-          aria-hidden
-          className="ml-auto flex items-center gap-1 font-mono text-[0.6rem] text-faint"
+        <button
+          type="button"
+          onClick={toggleGraph}
+          aria-expanded={graphOpen}
+          aria-controls="applied-activity"
+          className="ml-auto inline-flex items-center gap-1 self-start rounded-md px-1.5 py-1 font-mono text-[0.65rem] tracking-wider text-faint uppercase transition-colors hover:bg-raised hover:text-paper pointer-coarse:p-2.5"
         >
-          less
-          {([0, 1, 2, 3, 4] as const).map((l) => (
-            <span key={l} className={cn('size-2.5 rounded-[3px]', LEVEL_CLASS[l])} />
-          ))}
-          more
-        </p>
+          {graphOpen ? 'Hide' : 'Show'} activity
+          <ChevronDown
+            className={cn(
+              'size-3.5 transition-transform duration-300 ease-(--ease-out)',
+              graphOpen && 'rotate-180',
+            )}
+          />
+        </button>
       </div>
-      {stats.undated > 0 && (
-        <p className="relative mt-2 text-xs text-faint">
-          {stats.undated} applied before jobvr kept dates; they count in the total only.
-        </p>
-      )}
+
+      <Reveal open={graphOpen} id="applied-activity">
+        <div ref={ref} className="relative mt-2 pt-6">
+          <Heatmap weeks={shown} cell={cell} />
+        </div>
+
+        <div className="relative mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+          <ul aria-label="By tier" className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
+            {stats.tiers.map((t) => (
+              <li key={t.tier} className="flex items-center gap-1.5 text-dim">
+                <span aria-hidden className={cn('size-2 rounded-full', TIER_DOT[t.tier])} />
+                {t.tier}
+                <span className="font-mono text-paper tabular-nums">{t.count}</span>
+              </li>
+            ))}
+          </ul>
+          <p
+            aria-hidden
+            className="ml-auto flex items-center gap-1 font-mono text-[0.6rem] text-faint"
+          >
+            less
+            {([0, 1, 2, 3, 4] as const).map((l) => (
+              <span key={l} className={cn('size-2.5 rounded-[3px]', LEVEL_CLASS[l])} />
+            ))}
+            more
+          </p>
+        </div>
+        {stats.undated > 0 && (
+          <p className="relative mt-2 text-xs text-faint">
+            {stats.undated} applied before jobvr kept dates; they count in the total only.
+          </p>
+        )}
+      </Reveal>
     </section>
   )
 }
