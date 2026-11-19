@@ -2,9 +2,14 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { addCompanyFrom } from "./add-company";
 import type { Database } from "./db/client";
-import { companies, settings, sourceState } from "./db/schema";
+import { companies, jobSources, jobs, settings, sourceState } from "./db/schema";
 import { ConflictError, InvalidError } from "./errors";
-import { HEAL_GIVE_UP_MS, HEAL_RETRY_MS, runHealCompanies } from "./heal-companies";
+import {
+  HEAL_GIVE_UP_MS,
+  HEAL_RETRY_MS,
+  runFindListBoards,
+  runHealCompanies,
+} from "./heal-companies";
 import { createCompany } from "./repos/companies";
 import type { Registry, SourceAdapter } from "./sources/types";
 import { createTestDatabase, fakeHttp } from "./testing";
@@ -20,6 +25,10 @@ const greenhouse: SourceAdapter = {
   fetch: async () => ({ status: "not_modified" }),
   boardSlug: (url) =>
     url.startsWith("https://boards.greenhouse.io/") ? (url.split("/")[3] ?? null) : null,
+  parseUrl: (url) => {
+    const m = /^https:\/\/boards\.greenhouse\.io\/([^/]+)\/jobs\/(\d+)$/.exec(url);
+    return m?.[1] && m[2] ? { slug: m[1], sourceJobId: m[2] } : null;
+  },
   probe: async (slug) => {
     const n = boards.get(slug);
     return n === undefined ? { found: false, jobCount: 0 } : { found: true, jobCount: n };
@@ -35,6 +44,7 @@ beforeAll(async () => {
 afterAll(() => database.close());
 beforeEach(async () => {
   boards.clear();
+  await database.db.delete(jobs);
   await database.db.delete(sourceState);
   await database.db.delete(companies);
   await database.db.delete(settings);
@@ -119,5 +129,83 @@ describe("runHealCompanies", () => {
       gaveUp: ["Globex"],
     });
     expect(await get(c.id)).toMatchObject({ status: "manual_only", track: false });
+  });
+});
+
+describe("runFindListBoards", () => {
+  const listOnly = (name: string) =>
+    createCompany(database.db, {
+      name,
+      tier: "Startup",
+      track: false,
+      ats: "other",
+      slug: null,
+      status: "manual_only",
+    });
+  const listJob = async (companyId: string, name: string, url: string) => {
+    const id = `sj:${url}`;
+    await database.db.insert(jobs).values({
+      id,
+      companyId,
+      companyName: name,
+      title: "Software Engineer",
+      url,
+      primarySource: "simplify",
+      firstSeenAt: NOW,
+      effectiveAt: NOW,
+    });
+    await database.db.insert(jobSources).values({
+      source: "simplify",
+      sourceJobId: url,
+      jobId: id,
+      url,
+      title: "Software Engineer",
+      postedAt: NOW,
+      postedAtPrecision: "day",
+    });
+  };
+  const get = async (id: string) =>
+    (await database.db.select().from(companies).where(eq(companies.id, id)))[0];
+
+  it("moves a list-only company to the board most of its list jobs link to", async () => {
+    const c = await listOnly("Raydar");
+    await listJob(c.id, "Raydar", "https://boards.greenhouse.io/raydar/jobs/1");
+    await listJob(c.id, "Raydar", "https://boards.greenhouse.io/raydar/jobs/2");
+    await listJob(c.id, "Raydar", "https://boards.greenhouse.io/raydar-old/jobs/3");
+    await listJob(c.id, "Raydar", "https://raydar.com/careers/4");
+    boards.set("raydar", 3);
+    expect(await runFindListBoards({ database, registry, http, now: () => NOW })).toEqual({
+      moved: ["Raydar"],
+    });
+    expect(await get(c.id)).toMatchObject({
+      ats: "greenhouse",
+      slug: "raydar",
+      track: true,
+      status: "ok",
+    });
+  });
+
+  it("leaves it alone when the board has no jobs, and checks again a day later", async () => {
+    const c = await listOnly("Ajaia");
+    await listJob(c.id, "Ajaia", "https://boards.greenhouse.io/ajaia/jobs/1");
+    const attempts = new Map<string, number>();
+    const run = (now: Date) =>
+      runFindListBoards({ database, registry, http, now: () => now, attempts });
+    expect(await run(NOW)).toEqual({ moved: [] });
+    boards.set("ajaia", 2);
+    // Checked an hour ago: skipped
+    expect(await run(new Date(NOW.getTime() + 3_600_000))).toEqual({ moved: [] });
+    expect(await run(new Date(NOW.getTime() + 86_400_000))).toEqual({ moved: ["Ajaia"] });
+  });
+
+  it("skips boards on a source switched off in Settings", async () => {
+    const c = await listOnly("Rokt");
+    await listJob(c.id, "Rokt", "https://boards.greenhouse.io/rokt/jobs/1");
+    boards.set("rokt", 9);
+    await database.db.insert(settings).values({ id: 1, data: { disabledSources: ["greenhouse"] } });
+    expect(await runFindListBoards({ database, registry, http, now: () => NOW })).toEqual({
+      moved: [],
+    });
+    expect(await get(c.id)).toMatchObject({ ats: "other", status: "manual_only" });
   });
 });

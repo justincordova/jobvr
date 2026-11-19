@@ -506,6 +506,8 @@ describe("settings routes", () => {
       "greenhouse",
       "lever",
       "ashby",
+      "smartrecruiters",
+      "workable",
       "simplify",
       "speedyapply",
       "jobright",

@@ -11,6 +11,7 @@ import {
   runAutoTier,
   runBackupCheck,
   runCleanup,
+  runFindListBoards,
   runHealCompanies,
   runNotify,
   runPoll,
@@ -47,6 +48,8 @@ export const startScheduler = (options: SchedulerOptions) => {
   const autoAddFailures = new Map<string, number>();
   // Broken boards searched lately, so each is searched every few hours, not every tick
   const healAttempts = new Map<string, number>();
+  // List-only companies whose board was checked lately (once a day each)
+  const listBoardAttempts = new Map<string, number>();
   const tierState = options.tierState ?? createAutoTierState();
   let running: number | null = null;
   let current: Promise<void> = Promise.resolve();
@@ -87,6 +90,10 @@ export const startScheduler = (options: SchedulerOptions) => {
       if (stopping.signal.aborted) return;
       await step("heal", () =>
         runHealCompanies({ database, registry, http, logger, attempts: healAttempts }),
+      );
+      if (stopping.signal.aborted) return;
+      await step("list boards", () =>
+        runFindListBoards({ database, registry, http, logger, attempts: listBoardAttempts }),
       );
       if (stopping.signal.aborted) return;
       await step("notify", () =>

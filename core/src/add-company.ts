@@ -22,7 +22,7 @@ export interface AddCompanyOptions {
 
 /**
  * Adds a company from one line: a careers or board link, or a name. jobvr
- * looks for its Greenhouse, Lever or Ashby board itself; without one, the
+ * looks for its board on every supported ATS itself; without one, the
  * company is still kept, so its jobs on the new-grad lists get its tier. Its
  * tier is `pending` until the AI rater (if configured) rates it.
  */

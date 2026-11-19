@@ -12,8 +12,8 @@ const http = createHttpClient();
 for (const name of names) {
   const { candidates, hits, errors } = await discover(name, adapters, http);
   console.log(`\n${name}  (${candidates.length} candidates)`);
-  if (hits.length === 0) console.log("  not found on Greenhouse, Lever, or Ashby");
+  if (hits.length === 0) console.log("  not found on any supported ATS");
   for (const h of hits)
-    console.log(`  ${h.ats.padEnd(11)} ${h.slug.padEnd(28)} ${h.jobCount} jobs`);
+    console.log(`  ${h.ats.padEnd(15)} ${h.slug.padEnd(28)} ${h.jobCount} jobs`);
   for (const e of errors) console.log(`  error: ${e}`);
 }

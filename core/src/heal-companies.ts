@@ -1,14 +1,14 @@
 import { and, eq, ne } from "drizzle-orm";
 import { DAY_MS } from "./constants";
 import type { Database } from "./db/client";
-import { companies } from "./db/schema";
+import { companies, jobSources, jobs } from "./db/schema";
 import { ConflictError } from "./errors";
 import { findBoardByName } from "./find-board";
 import type { HttpClient } from "./http";
 import { type Logger, silentLogger } from "./logger";
 import { updateCompany } from "./repos/companies";
 import { getSettingsState } from "./repos/settings";
-import { getAdapter } from "./sources/registry";
+import { getAdapter, OTHER_ATS_ID, parseAtsUrl } from "./sources/registry";
 import type { Registry } from "./sources/types";
 
 /** Companies looked at per run (each search probes a dozen or so slugs per ATS). */
@@ -95,3 +95,82 @@ export const runHealCompanies = async (
   }
   return { moved, gaveUp };
 };
+
+/** List-only companies checked per run (one board request each). */
+export const LIST_BOARDS_PER_RUN = 5;
+
+/**
+ * Companies kept for their list jobs only (no readable board) whose list jobs
+ * link to a board jobvr can read, as when a new ATS is supported: the board
+ * with the most of their links is checked, and with open jobs it's polled.
+ */
+export const runFindListBoards = async (options: HealOptions): Promise<{ moved: string[] }> => {
+  const { database, registry, http } = options;
+  const { db } = database;
+  const log = (options.logger ?? silentLogger).child({ module: "companies" });
+  const now = (options.now ?? (() => new Date()))().getTime();
+  const attempts = options.attempts ?? new Map<string, number>();
+  const { settings } = await getSettingsState(db);
+  const disabled = new Set(settings.disabledSources);
+
+  const links = await db
+    .select({ id: companies.id, name: companies.name, url: jobSources.url })
+    .from(companies)
+    .innerJoin(jobs, eq(jobs.companyId, companies.id))
+    .innerJoin(jobSources, eq(jobSources.jobId, jobs.id))
+    .where(and(eq(companies.ats, OTHER_ATS_ID), eq(companies.status, "manual_only")));
+
+  // Company → board → how many of its links point there
+  const boards = new Map<string, { name: string; counts: Map<string, BoardRef> }>();
+  for (const l of links) {
+    const parsed = parseAtsUrl(registry, l.url);
+    if (!parsed?.slug || !parsed.adapter.probe || disabled.has(parsed.adapter.id)) continue;
+    const entry = boards.get(l.id) ?? { name: l.name, counts: new Map() };
+    boards.set(l.id, entry);
+    const key = `${parsed.adapter.id}:${parsed.slug.toLowerCase()}`;
+    const ref = entry.counts.get(key) ?? { ats: parsed.adapter.id, slug: parsed.slug, links: 0 };
+    ref.links++;
+    entry.counts.set(key, ref);
+  }
+  const due = [...boards]
+    .filter(([id]) => {
+      const at = attempts.get(id);
+      return at === undefined || now - at >= DAY_MS;
+    })
+    .slice(0, LIST_BOARDS_PER_RUN);
+
+  const moved: string[] = [];
+  for (const [id, { name, counts }] of due) {
+    attempts.set(id, now);
+    const best = [...counts.values()].sort((a, b) => b.links - a.links)[0];
+    const adapter = best && getAdapter(registry, best.ats);
+    if (!best || !adapter?.probe) continue;
+    let probe: { found: boolean; jobCount: number };
+    try {
+      probe = await adapter.probe(best.slug, { http });
+    } catch {
+      // No answer: tried again tomorrow
+      continue;
+    }
+    if (!probe.found || probe.jobCount === 0) continue;
+    try {
+      await updateCompany(db, id, { ats: best.ats, slug: best.slug, track: true, status: "ok" });
+      attempts.delete(id);
+      moved.push(name);
+      log.info(
+        { company: name, ats: best.ats, slug: best.slug },
+        `found ${name}'s board from its list jobs: ${adapter.label} ${best.slug} (${probe.jobCount} jobs)`,
+      );
+    } catch (err) {
+      // That board already belongs to another company
+      if (!(err instanceof ConflictError)) throw err;
+    }
+  }
+  return { moved };
+};
+
+interface BoardRef {
+  ats: string;
+  slug: string;
+  links: number;
+}

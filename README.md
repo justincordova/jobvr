@@ -1,7 +1,7 @@
 # jobvr
 
 A personal job radar for new-grad software roles. It polls Greenhouse, Lever,
-and Ashby boards for the companies you track plus three public new-grad lists
+Ashby, SmartRecruiters and Workable boards for the companies you track plus three public new-grad lists
 (SimplifyJobs, SpeedyApply, Jobright), filters and de-duplicates the results, shows them in a web feed, and sends
 one bundled phone push per interval through ntfy.
 
@@ -53,7 +53,7 @@ scripts instead:
 | `pnpm notify`                  | Send the push now (skips the due check and quiet hours)                                                                                                   |
 | `pnpm seed`                    | Insert-only seed from `poller/data/companies.json` (also moves manual-only companies to a board the seed now names); slugs are confirmed via each ATS API |
 | `pnpm match-report`            | Fetch every board now and show which listings pass the matching rules and why the rest are rejected (writes nothing)                                      |
-| `pnpm discover "Company Name"` | Try slug guesses against Greenhouse, Lever, and Ashby; prints hits, writes nothing                                                                        |
+| `pnpm discover "Company Name"` | Try slug guesses against every supported ATS; prints hits, writes nothing                                                                                 |
 
 Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm fix`
 to apply Biome / Prettier fixes. Commits follow Conventional Commits (enforced

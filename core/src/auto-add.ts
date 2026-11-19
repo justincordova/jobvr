@@ -32,7 +32,7 @@ export interface AutoAddOptions {
 
 /**
  * Grows the companies from the new-grad lists, so no job stays Unlisted: an
- * unlisted company whose listings point at a Greenhouse, Lever or Ashby board
+ * unlisted company whose listings point at a supported ATS board
  * with jobs is added and polled (its first poll is a silent baseline); any
  * other is added for its list jobs only (`manual_only`). Either way
  * `runAutoTier` rates its tier. A name that's another company's board slug
