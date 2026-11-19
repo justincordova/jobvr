@@ -80,6 +80,19 @@ describe("http client", () => {
     await expect(client.getJson("https://x.test")).rejects.toThrow(/exceeds/);
   });
 
+  it("lets one request wait longer than the client's timeout", async () => {
+    const slow = (async (_url: string, init: RequestInit) => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      init.signal?.throwIfAborted();
+      return json({ ok: true });
+    }) as unknown as typeof fetch;
+    const client = createHttpClient({ fetch: slow, timeoutMs: 20, sleep: async () => {} });
+    await expect(client.getJson("https://x.test")).rejects.toThrow(/Network error/);
+    expect(await client.getJson("https://x.test", { timeoutMs: 1_000 })).toMatchObject({
+      status: "ok",
+    });
+  });
+
   it("returns text as is, with its etag, retrying a 5xx like JSON", async () => {
     const { client, requests } = scripted(
       new Response("", { status: 503 }),

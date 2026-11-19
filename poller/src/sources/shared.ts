@@ -1,4 +1,4 @@
-import { HttpError, type ProbeCtx } from "@jobvr/core";
+import { BOARD_TIMEOUT_MS, HttpError, type ProbeCtx } from "@jobvr/core";
 
 /** Location appended by adapters to remote US jobs (matched by the Remote-US rule). */
 export const REMOTE_US = "Remote - US";
@@ -34,7 +34,7 @@ export const probeBoard = async (
   count: (data: unknown) => number,
 ): Promise<{ found: boolean; jobCount: number }> => {
   try {
-    const res = await ctx.http.getJson(url, { signal: ctx.signal });
+    const res = await ctx.http.getJson(url, { signal: ctx.signal, timeoutMs: BOARD_TIMEOUT_MS });
     return { found: true, jobCount: res.status === "ok" ? count(res.data) : 0 };
   } catch (err) {
     if (err instanceof HttpError && err.status === 404) return { found: false, jobCount: 0 };

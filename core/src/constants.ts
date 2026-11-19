@@ -1,5 +1,5 @@
 /** Bump whenever matching or normalization code changes; forces unconditional refetches. */
-export const FILTER_VERSION = 12;
+export const FILTER_VERSION = 13;
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -37,6 +37,8 @@ export const POLL_BUDGET_MS = 5 * MINUTE;
 export const STALE_POLL_INTERVALS = 3;
 
 export const HTTP_TIMEOUT_MS = 15_000;
+/** A whole ATS board: big ones (Anduril's is ~2.6 MB) take 20-30 s to serve. */
+export const BOARD_TIMEOUT_MS = 60_000;
 export const HTTP_MAX_RETRY_AFTER_MS = 30_000;
 export const HTTP_MAX_BYTES = 50 * 1024 * 1024;
 export const USER_AGENT = "jobvr (personal job alerts)";

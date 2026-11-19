@@ -21,6 +21,8 @@ export type TextResult =
 export interface GetOptions {
   etag?: string | null;
   signal?: AbortSignal;
+  /** Overrides the client's per-request timeout (whole boards of big companies are slow). */
+  timeoutMs?: number;
 }
 
 export interface HttpClient {
@@ -100,7 +102,7 @@ export const createHttpClient = (deps: HttpClientDeps = {}): HttpClient => {
     options: GetOptions,
     json: boolean,
   ): Promise<{ result?: JsonResult; retryable: boolean; error?: HttpError; waitMs?: number }> => {
-    const signals = [AbortSignal.timeout(timeoutMs)];
+    const signals = [AbortSignal.timeout(options.timeoutMs ?? timeoutMs)];
     if (options.signal) signals.push(options.signal);
     const headers: Record<string, string> = {
       "User-Agent": USER_AGENT,

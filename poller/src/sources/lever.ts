@@ -1,4 +1,5 @@
 import {
+  BOARD_TIMEOUT_MS,
   type ParsedUrl,
   parseDate,
   type Salary,
@@ -90,6 +91,7 @@ export const lever: SourceAdapter = {
     const res = await ctx.http.getJson(postingsUrl(ctx.slug), {
       etag: ctx.etag,
       signal: ctx.signal,
+      timeoutMs: BOARD_TIMEOUT_MS,
     });
     if (res.status === "not_modified") return res;
     const items = z.array(z.unknown()).parse(res.data);

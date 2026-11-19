@@ -1,4 +1,5 @@
 import {
+  BOARD_TIMEOUT_MS,
   HttpError,
   type JobDetail,
   type ParsedUrl,
@@ -93,7 +94,11 @@ export const greenhouse: SourceAdapter = {
 
   async fetch(ctx) {
     if (!ctx.slug) throw new Error("greenhouse: slug is required");
-    const res = await ctx.http.getJson(boardUrl(ctx.slug), { etag: ctx.etag, signal: ctx.signal });
+    const res = await ctx.http.getJson(boardUrl(ctx.slug), {
+      etag: ctx.etag,
+      signal: ctx.signal,
+      timeoutMs: BOARD_TIMEOUT_MS,
+    });
     if (res.status === "not_modified") return res;
     const { jobs: items } = Response.parse(res.data);
     const companyName = ctx.companyName ?? ctx.slug;
