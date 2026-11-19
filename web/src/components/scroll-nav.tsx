@@ -1,31 +1,26 @@
 import { ArrowDown, ArrowUp } from 'lucide-react'
-import { type ReactNode, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/cn'
 
-/** How far from either end before its button shows. */
-const EDGE = 320
+/** Pages shorter than the screen plus this get no button. */
+const MIN_EXTRA = 400
 
 const still = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 /**
- * "Top" and "Bottom" jumps in one pill, bottom center (like the "back to top"
- * pills on X or GitHub). Each half shows only when it would go somewhere, so
- * short pages never get it.
+ * One small pill, bottom center: "Bottom" while you're in the top half of a
+ * long page, "Top" once you're past the middle.
  */
 export function ScrollNav() {
-  const [room, setRoom] = useState({ up: false, down: false })
+  const [state, setState] = useState<'none' | 'down' | 'up'>('none')
 
   useEffect(() => {
     let frame = 0
     const measure = () => {
       frame = 0
-      const top = window.scrollY
-      const left = document.documentElement.scrollHeight - window.innerHeight - top
-      setRoom((was) => {
-        const up = top > EDGE
-        const down = left > EDGE && top > EDGE / 2
-        return was.up === up && was.down === down ? was : { up, down }
-      })
+      const extra = document.documentElement.scrollHeight - window.innerHeight
+      const next = extra < MIN_EXTRA ? 'none' : window.scrollY > extra / 2 ? 'up' : 'down'
+      setState(next)
     }
     const onChange = () => {
       if (!frame) frame = requestAnimationFrame(measure)
@@ -33,7 +28,7 @@ export function ScrollNav() {
     measure()
     window.addEventListener('scroll', onChange, { passive: true })
     window.addEventListener('resize', onChange)
-    // Lists that grow or shrink (filters, Show more) change what's below
+    // Lists that grow or shrink (filters, Show more) change the page's length
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(onChange)
     observer?.observe(document.body)
     return () => {
@@ -44,69 +39,29 @@ export function ScrollNav() {
     }
   }, [])
 
-  const go = (to: 'top' | 'bottom') =>
+  const up = state === 'up'
+  const go = () =>
     window.scrollTo({
-      top: to === 'top' ? 0 : document.documentElement.scrollHeight,
+      top: up ? 0 : document.documentElement.scrollHeight,
       behavior: still() ? 'auto' : 'smooth',
     })
 
-  const shown = room.up || room.down
   return (
-    <div
-      inert={!shown}
+    <button
+      type="button"
+      onClick={go}
+      inert={state === 'none'}
+      aria-label={up ? 'Back to top' : 'Jump to bottom'}
       className={cn(
-        'fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-30 flex -translate-x-1/2 items-center rounded-full border border-line-strong bg-raised/90 p-1 shadow-lg shadow-black/40 backdrop-blur-md transition-[opacity,translate,bottom] duration-300 ease-(--ease-out) in-data-savebar:bottom-[calc(5.5rem+env(safe-area-inset-bottom))]',
-        shown ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0',
+        'fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-30 flex h-7 -translate-x-1/2 items-center gap-1 rounded-full border border-line bg-panel/80 px-2.5 font-mono text-[0.68rem] text-faint shadow-md shadow-black/30 backdrop-blur-md transition-[opacity,translate,bottom,color,border-color] duration-300 ease-(--ease-out) hover:border-line-strong hover:text-paper active:scale-95 in-data-savebar:bottom-[calc(5.5rem+env(safe-area-inset-bottom))] pointer-coarse:h-9 pointer-coarse:px-3.5',
+        state === 'none' ? 'pointer-events-none translate-y-3 opacity-0' : 'opacity-100',
       )}
     >
-      <Jump show={room.up} onClick={() => go('top')} label="Back to top">
-        <ArrowUp /> Top
-      </Jump>
-      {/* A hairline between the two when both show */}
-      <span
-        aria-hidden
-        className={cn(
-          'h-5 w-px bg-line-strong transition-opacity duration-300',
-          room.up && room.down ? 'opacity-100' : 'opacity-0',
-        )}
-      />
-      <Jump show={room.down} onClick={() => go('bottom')} label="Jump to bottom">
-        Bottom <ArrowDown />
-      </Jump>
-    </div>
-  )
-}
-
-/** One half of the pill; folds its width to zero when there's nowhere to go. */
-function Jump({
-  show,
-  onClick,
-  label,
-  children,
-}: {
-  show: boolean
-  onClick: () => void
-  label: string
-  children: ReactNode
-}) {
-  return (
-    <div
-      inert={!show}
-      className={cn(
-        'grid transition-[grid-template-columns,opacity] duration-300 ease-(--ease-out)',
-        show ? 'grid-cols-[1fr] opacity-100' : 'grid-cols-[0fr] opacity-0',
-      )}
-    >
-      <div className="min-w-0 overflow-hidden">
-        <button
-          type="button"
-          onClick={onClick}
-          aria-label={label}
-          className="flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium whitespace-nowrap text-dim transition-colors hover:bg-line hover:text-paper active:scale-95 pointer-coarse:h-11 pointer-coarse:px-4 [&_svg]:size-4"
-        >
-          {children}
-        </button>
-      </div>
-    </div>
+      {/* key: the label fades in fresh when it flips */}
+      <span key={state} className="flex animate-fade-in items-center gap-1">
+        {up ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />}
+        {up ? 'Top' : 'Bottom'}
+      </span>
+    </button>
   )
 }
