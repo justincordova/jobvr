@@ -68,6 +68,9 @@ const resolvesToCompany = sql`EXISTS (
   WHERE c.normalized_name = ${suggestions.id}
      OR (${suggestions.slug} IS NOT NULL AND c.ats = ${suggestions.ats}
          AND lower(c.slug) = lower(${suggestions.slug}))
+     -- A company whose board slug is this name (see resolveCompany)
+     OR (c.slug IS NOT NULL AND regexp_replace(lower(c.slug), '[^a-z0-9]', '', 'g')
+         = regexp_replace(${suggestions.id}, '[^a-z0-9]', '', 'g'))
 )`;
 
 /**

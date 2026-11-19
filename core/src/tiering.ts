@@ -7,7 +7,7 @@ import { errorFields, type Logger, silentLogger } from "./logger";
 
 export const DEFAULT_TIER_MODEL = "gpt-5-mini";
 /** Hard ceiling on AI calls a day, so a bug or a flood of new companies can't run up a bill. */
-export const AUTO_TIER_DAILY_CAP = 50;
+export const AUTO_TIER_DAILY_CAP = 200;
 export const AUTO_TIER_PER_RUN = 10;
 /** A company whose rating failed is tried again after this long. */
 export const AUTO_TIER_RETRY_MS = 60 * 60_000;
@@ -129,6 +129,8 @@ export const createOpenAiTierRater = (options: {
 export interface AutoTierState {
   calls: number[];
   failures: Map<string, number>;
+  /** When "cap reached" was last logged (once a day is enough). */
+  capLoggedAt?: number;
 }
 
 export const createAutoTierState = (): AutoTierState => ({ calls: [], failures: new Map() });
@@ -182,7 +184,13 @@ export const runAutoTier = async (
   });
   if (pending.length === 0) return { rated: [], failed: [] };
   if (left <= 0) {
-    log.debug({ cap: AUTO_TIER_DAILY_CAP }, `daily AI rating cap reached; ${pending.length} wait`);
+    if (state.capLoggedAt === undefined || now.getTime() - state.capLoggedAt >= DAY_MS) {
+      state.capLoggedAt = now.getTime();
+      log.info(
+        { cap: AUTO_TIER_DAILY_CAP, waiting: pending.length },
+        `daily AI rating cap (${AUTO_TIER_DAILY_CAP}) reached; ${pending.length} compan${pending.length === 1 ? "y waits" : "ies wait"} until it frees up`,
+      );
+    }
     return { rated: [], failed: [] };
   }
 

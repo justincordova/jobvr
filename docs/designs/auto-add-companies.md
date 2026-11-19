@@ -47,7 +47,7 @@ Nothing on the Companies page needs a person.
   (`runAutoTier`) rates them with OpenAI (`OPENAI_API_KEY`, model
   `OPENAI_MODEL`, default `gpt-5-mini` with minimal reasoning) using the name,
   careers link and a few recent titles, and stores a one-line `tier_reason`.
-  At most 10 a run and 50 calls a day (about $0.0003 each); a failure is
+  At most 10 a run and 200 calls a day (about $0.0003 each); a failure is
   retried after an hour. Without a key they stay Startup and say "not rated".
 - **Broken boards heal.** The `heal` step (`runHealCompanies`) searches every
   ATS by name for companies in `needs_review` (3 per run, each every 6 h). A
@@ -63,3 +63,9 @@ Nothing on the Companies page needs a person.
   lists, Having trouble, Paused when the tier isn't tracked). The row menu
   changes the tier, hands it back to the AI, opens the careers page or removes
   the company.
+- **No job stays Unlisted.** Auto-add also adds list companies without a
+  readable board (`manual_only`, "Via job lists") so they get a tier; a board
+  that answers with no jobs counts as unreadable, one that doesn't answer is
+  retried daily. A name equal to another company's board slug ("Kira" for
+  Kira Learning's Ashby `kira`) resolves to that company in polls and
+  suggestions, so it isn't added twice.

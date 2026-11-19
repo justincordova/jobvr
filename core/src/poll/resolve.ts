@@ -9,21 +9,39 @@ export interface CompanyIndex {
   byId: Map<string, CompanyRow>;
   byAtsSlug: Map<string, CompanyRow>;
   byName: Map<string, CompanyRow>;
+  /** Board slugs as names ("kira" → Kira Learning); null when two companies share one. */
+  bySlugName: Map<string, CompanyRow | null>;
 }
 
 const atsSlugKey = (ats: string, slug: string) => `${ats}\u0000${slug.toLowerCase()}`;
 
+/** Letters and digits only: "Abnormal Security" and "abnormal-security" → "abnormalsecurity". */
+export const compactName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
 export const indexCompanies = (rows: readonly CompanyRow[]): CompanyIndex => {
-  const index: CompanyIndex = { byId: new Map(), byAtsSlug: new Map(), byName: new Map() };
+  const index: CompanyIndex = {
+    byId: new Map(),
+    byAtsSlug: new Map(),
+    byName: new Map(),
+    bySlugName: new Map(),
+  };
   for (const c of rows) {
     index.byId.set(c.id, c);
-    if (c.slug) index.byAtsSlug.set(atsSlugKey(c.ats, c.slug), c);
+    if (c.slug) {
+      index.byAtsSlug.set(atsSlugKey(c.ats, c.slug), c);
+      const key = compactName(c.slug);
+      if (key) index.bySlugName.set(key, index.bySlugName.has(key) ? null : c);
+    }
     index.byName.set(c.normalizedName, c);
   }
   return index;
 };
 
-/** Simplify jobs: same ats + slug (case-insensitive), else same normalized name, else none. */
+/**
+ * Same ats + slug (case-insensitive), else same normalized name, else a
+ * company whose board slug is the name ("Kira" on Jobright is Kira Learning,
+ * whose board is jobs.ashbyhq.com/kira), else none.
+ */
 export const resolveCompany = (
   index: CompanyIndex,
   name: string,
@@ -33,7 +51,8 @@ export const resolveCompany = (
     const bySlug = index.byAtsSlug.get(atsSlugKey(ats.source, ats.slug));
     if (bySlug) return bySlug;
   }
-  return index.byName.get(normalizeCompanyName(name)) ?? null;
+  const normalized = normalizeCompanyName(name);
+  return index.byName.get(normalized) ?? index.bySlugName.get(compactName(normalized)) ?? null;
 };
 
 export interface SourceKey {

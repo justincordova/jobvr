@@ -503,8 +503,8 @@ function ListsSection({ payload }: { payload: SettingsPayload }) {
         label="Add companies automatically"
         hint={
           payload.tierModel
-            ? `Companies with matching roles on the lists are polled from then on once their Greenhouse, Lever or Ashby board answers. ${payload.tierModel} rates their tier.`
-            : 'Companies with matching roles on the lists are polled from then on once their Greenhouse, Lever or Ashby board answers. They start as Startup; set OPENAI_API_KEY to rate their tier automatically.'
+            ? `Every company with matching roles on the lists is added: polled when its Greenhouse, Lever or Ashby board answers, else kept for its list jobs. ${payload.tierModel} rates its tier.`
+            : 'Every company with matching roles on the lists is added: polled when its Greenhouse, Lever or Ashby board answers, else kept for its list jobs. They start as Startup; set OPENAI_API_KEY to rate their tier automatically.'
         }
       >
         <Switch

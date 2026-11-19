@@ -14,7 +14,10 @@ export const listOpenSuggestions = (db: DbOrTx): Promise<SuggestionRow[]> =>
     .where(and(eq(suggestions.state, "open"), gt(suggestions.listingCount, 0)))
     .orderBy(desc(suggestions.listingCount), suggestions.displayName);
 
-/** One-click add: creates the company (tracked when its ATS + slug are known). */
+/**
+ * One-click add: creates the company (tracked when its ATS + slug are known).
+ * `listOnly` keeps it for its list jobs only (no readable board): `manual_only`.
+ */
 export const addSuggestion = (
   db: DbOrTx,
   registry: Registry,
@@ -22,12 +25,13 @@ export const addSuggestion = (
   tier: Tier,
   notes: string | null = null,
   tierSource: TierSource = "manual",
+  listOnly = false,
 ): Promise<CompanyRow> =>
   db.transaction(async (tx) => {
     const [s] = await tx.select().from(suggestions).where(eq(suggestions.id, id)).for("update");
     if (!s) throw new NotFoundError("Suggestion not found");
     if (s.state === "added") throw new ConflictError("Suggestion was already added");
-    const supported = getAdapter(registry, s.ats)?.kind === "ats";
+    const supported = !listOnly && getAdapter(registry, s.ats)?.kind === "ats";
     const base = { name: s.displayName, city: null, state: null, tier, tierSource, notes };
     const company = !supported
       ? await createCompany(tx, {

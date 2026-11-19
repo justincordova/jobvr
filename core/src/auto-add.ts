@@ -1,11 +1,13 @@
-import { isNull } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { UNRATED_TIER } from "./add-company";
 import { DAY_MS, type Tier } from "./constants";
 import type { Database } from "./db/client";
-import { sourceState } from "./db/schema";
+import { type SuggestionRow, sourceState, suggestions } from "./db/schema";
 import { ConflictError } from "./errors";
 import type { HttpClient } from "./http";
 import { type Logger, silentLogger } from "./logger";
+import { indexCompanies, resolveCompany } from "./poll/resolve";
+import { listCompanies } from "./repos/companies";
 import { getSettingsState } from "./repos/settings";
 import { addSuggestion, listOpenSuggestions } from "./repos/suggestions";
 import { getAdapter } from "./sources/registry";
@@ -13,9 +15,9 @@ import type { Registry } from "./sources/types";
 
 /** Companies added on their own start here, until the AI rater (if configured) rates them. */
 export const AUTO_ADD_TIER: Tier = UNRATED_TIER;
-/** Boards checked per run, so a backlog spreads over a few polls. */
+/** Companies added per run, so a backlog spreads over a few polls. */
 export const AUTO_ADD_PER_RUN = 10;
-/** A board that didn't answer (or had no jobs) is tried again after this long. */
+/** A board that didn't answer is tried again after this long. */
 export const AUTO_ADD_RETRY_MS = DAY_MS;
 
 export interface AutoAddOptions {
@@ -29,11 +31,13 @@ export interface AutoAddOptions {
 }
 
 /**
- * Grows the polled companies from the new-grad lists: an unlisted company whose
- * matching listings point at a Greenhouse, Lever or Ashby board is added as a
- * tracked company once that board answers with jobs. Its first poll is a
- * silent baseline, like any new company; `runAutoTier` rates its tier. Runs
- * when "Add companies automatically" (`suggestCompanies`) is on; dismissed
+ * Grows the companies from the new-grad lists, so no job stays Unlisted: an
+ * unlisted company whose listings point at a Greenhouse, Lever or Ashby board
+ * with jobs is added and polled (its first poll is a silent baseline); any
+ * other is added for its list jobs only (`manual_only`). Either way
+ * `runAutoTier` rates its tier. A name that's another company's board slug
+ * ("Kira" for Kira Learning's `kira`) is that company, not a new one. Runs when
+ * "Add companies automatically" (`suggestCompanies`) is on; dismissed
  * suggestions are skipped.
  */
 export const runAutoAddCompanies = async (
@@ -48,12 +52,17 @@ export const runAutoAddCompanies = async (
   if (!settings.suggestCompanies) return { added: [], failed: [] };
 
   const disabled = new Set(settings.disabledSources);
+  const known = indexCompanies(await listCompanies(db));
+  const boardOf = (s: SuggestionRow) => {
+    const adapter = getAdapter(registry, s.ats);
+    return adapter?.kind === "ats" && adapter.probe && s.slug && !disabled.has(adapter.id)
+      ? adapter
+      : null;
+  };
   const candidates = (await listOpenSuggestions(db))
     .filter((s) => {
-      const adapter = getAdapter(registry, s.ats);
-      if (adapter?.kind !== "ats" || !adapter.probe || !s.slug || disabled.has(adapter.id)) {
-        return false;
-      }
+      // A board on a source switched off in Settings waits until it's back on
+      if (disabled.has(s.ats)) return false;
       const failedAt = failures.get(s.id);
       return failedAt === undefined || now - failedAt >= AUTO_ADD_RETRY_MS;
     })
@@ -62,30 +71,48 @@ export const runAutoAddCompanies = async (
   const added: string[] = [];
   const failed: string[] = [];
   for (const s of candidates) {
-    const adapter = getAdapter(registry, s.ats);
-    const probe = await adapter?.probe?.(s.slug ?? "", { http }).catch(() => null);
-    if (!probe?.found || probe.jobCount === 0) {
-      failures.set(s.id, now);
-      failed.push(s.displayName);
+    // Already on the list under another name ("Kira" is Kira Learning, board "kira")
+    if (resolveCompany(known, s.displayName)) {
+      await db.update(suggestions).set({ state: "added" }).where(eq(suggestions.id, s.id));
       continue;
     }
+    const lists =
+      Object.keys(s.listingCounts)
+        .map((id) => getAdapter(registry, id)?.label ?? id)
+        .join(", ") || "the new-grad lists";
+    const board = boardOf(s);
+    let probe: { found: boolean; jobCount: number } | null = null;
+    if (board) {
+      try {
+        probe = (await board.probe?.(s.slug ?? "", { http })) ?? null;
+      } catch {
+        // No answer: maybe a blip, so the board gets another chance tomorrow
+        failures.set(s.id, now);
+        failed.push(s.displayName);
+        continue;
+      }
+    }
     failures.delete(s.id);
-    const lists = Object.keys(s.listingCounts)
-      .map((id) => getAdapter(registry, id)?.label ?? id)
-      .join(", ");
+    // A board with jobs is polled; anything else is kept for its list jobs (and its tier)
+    const polled = Boolean(board && probe?.found && probe.jobCount > 0);
     try {
       await addSuggestion(
         db,
         registry,
         s.id,
         AUTO_ADD_TIER,
-        `Added automatically from ${lists || "the new-grad lists"} (${adapter?.label} board, ${probe.jobCount} jobs)`,
+        polled
+          ? `Added automatically from ${lists} (${board?.label} board, ${probe?.jobCount} jobs)`
+          : `Added automatically from ${lists} (no readable job board)`,
         "pending",
+        !polled,
       );
       added.push(s.displayName);
       log.info(
-        { ats: s.ats, slug: s.slug, jobCount: probe.jobCount },
-        `added ${s.displayName} (${adapter?.label} ${s.slug}, ${probe.jobCount} jobs) from ${lists || "the new-grad lists"}`,
+        { ats: s.ats, slug: s.slug, jobCount: probe?.jobCount },
+        polled
+          ? `added ${s.displayName} (${board?.label} ${s.slug}, ${probe?.jobCount} jobs) from ${lists}`
+          : `added ${s.displayName} from ${lists} (no readable job board: its jobs come from the lists)`,
       );
     } catch (err) {
       // Added meanwhile (or the name or board already belongs to a company)
@@ -98,7 +125,7 @@ export const runAutoAddCompanies = async (
     await db.update(sourceState).set({ etag: null }).where(isNull(sourceState.companyId));
   }
   if (failed.length > 0) {
-    log.debug({ failed }, `boards not added yet (no answer or no jobs): ${failed.join(", ")}`);
+    log.debug({ failed }, `boards not added yet (no answer): ${failed.join(", ")}`);
   }
   return { added, failed };
 };
