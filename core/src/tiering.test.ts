@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "./db/client";
 import { companies, jobs } from "./db/schema";
-import { createCompany } from "./repos/companies";
+import { createCompany, findCompanyByName } from "./repos/companies";
 import { createTestDatabase } from "./testing";
 import {
   AUTO_TIER_DAILY_CAP,
@@ -142,10 +142,12 @@ describe("runAutoTier", () => {
       state: createAutoTierState(),
       now: () => NOW,
     });
-    expect(result).toEqual({ rated: ["Initech"], failed: [] });
-    expect(seen).toEqual([
+    expect(result).toEqual({ rated: ["Initech"], failed: [], merged: [] });
+    expect(seen).toMatchObject([
       { name: "Initech", careersUrl: null, titles: ["Software Engineer, New Grad"] },
     ]);
+    // The other companies, so a new name for one of them is caught
+    expect([...(seen[0]?.knownCompanies ?? [])].sort()).toEqual(["Globex", "Hooli"]);
     expect(await tiers()).toEqual({
       Initech: ["A", "auto", "Rated Initech"],
       Globex: ["Startup", "seed", null],
@@ -157,16 +159,21 @@ describe("runAutoTier", () => {
     await add("Initech");
     expect(
       await runAutoTier({ database, rater: null, state: createAutoTierState(), now: () => NOW }),
-    ).toEqual({ rated: [], failed: [] });
+    ).toEqual({ rated: [], failed: [], merged: [] });
 
     const state = createAutoTierState();
     const run = (now: Date, r = rater(["Initech"])) =>
       runAutoTier({ database, rater: r, state, now: () => now });
-    expect(await run(NOW)).toEqual({ rated: [], failed: ["Initech"] });
-    expect(await run(new Date(NOW.getTime() + 60_000))).toEqual({ rated: [], failed: [] });
+    expect(await run(NOW)).toEqual({ rated: [], failed: ["Initech"], merged: [] });
+    expect(await run(new Date(NOW.getTime() + 60_000))).toEqual({
+      rated: [],
+      failed: [],
+      merged: [],
+    });
     expect(await run(new Date(NOW.getTime() + AUTO_TIER_RETRY_MS), rater())).toEqual({
       rated: ["Initech"],
       failed: [],
+      merged: [],
     });
   });
 
@@ -175,11 +182,69 @@ describe("runAutoTier", () => {
     const state = createAutoTierState();
     state.calls = Array.from({ length: AUTO_TIER_DAILY_CAP }, () => NOW.getTime() - 1000);
     const run = (now: Date) => runAutoTier({ database, rater: rater(), state, now: () => now });
-    expect(await run(NOW)).toEqual({ rated: [], failed: [] });
+    expect(await run(NOW)).toEqual({ rated: [], failed: [], merged: [] });
     // A day later the old calls no longer count
     expect(await run(new Date(NOW.getTime() + 86_400_000))).toEqual({
       rated: ["Initech"],
       failed: [],
+      merged: [],
     });
+  });
+  it("merges a company the AI says is another one under a new name", async () => {
+    const bmo = await createCompany(database.db, {
+      name: "BMO",
+      tier: "Corporate",
+      tierSource: "seed",
+      track: false,
+      ats: "other",
+      status: "manual_only",
+    });
+    const montreal = await createCompany(database.db, {
+      name: "Bank of Montreal",
+      tier: "Startup",
+      tierSource: "pending",
+      track: true,
+      ats: "lever",
+      slug: "bmo-careers",
+      status: "ok",
+    });
+    await database.db.insert(jobs).values({
+      id: "sj:1",
+      companyId: montreal.id,
+      companyName: "Bank of Montreal",
+      title: "Software Engineer",
+      url: "https://example.com/1",
+      primarySource: "simplify",
+      firstSeenAt: NOW,
+      effectiveAt: NOW,
+    });
+    const sameAsBmo: TierRater = {
+      model: "test-model",
+      rate: async () => ({ tier: "Corporate", reason: "Large bank", sameAs: "bmo" }),
+    };
+    expect(
+      await runAutoTier({
+        database,
+        rater: sameAsBmo,
+        state: createAutoTierState(),
+        now: () => NOW,
+      }),
+    ).toEqual({ rated: [], failed: [], merged: ["Bank of Montreal"] });
+
+    const rows = await database.db.select().from(companies);
+    // Its board moves along, and its name keeps resolving to BMO
+    expect(rows).toEqual([
+      expect.objectContaining({
+        id: bmo.id,
+        tier: "Corporate",
+        ats: "lever",
+        slug: "bmo-careers",
+        track: true,
+        aliases: ["bank of montreal"],
+      }),
+    ]);
+    expect(await findCompanyByName(database.db, "Bank of Montreal")).toMatchObject({ id: bmo.id });
+    const [job] = await database.db.select().from(jobs);
+    expect(job).toMatchObject({ companyId: bmo.id, companyName: "BMO" });
   });
 });

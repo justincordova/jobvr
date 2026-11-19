@@ -3,7 +3,9 @@ import { z } from "zod";
 import { DAY_MS, TIERS, type Tier } from "./constants";
 import type { Database } from "./db/client";
 import { companies, jobs } from "./db/schema";
+import { ConflictError, NotFoundError } from "./errors";
 import { errorFields, type Logger, silentLogger } from "./logger";
+import { mergeCompanyInto } from "./repos/companies";
 
 export const DEFAULT_TIER_MODEL = "gpt-5-mini";
 /** Hard ceiling on AI calls a day, so a bug or a flood of new companies can't run up a bill. */
@@ -18,6 +20,8 @@ export interface TierRating {
   tier: Tier;
   /** One short sentence a job seeker understands. */
   reason: string;
+  /** The name in `knownCompanies` it's another name for ("BMO" for "Bank of Montreal"), else null. */
+  sameAs?: string | null;
 }
 
 export interface TierRaterInput {
@@ -25,6 +29,8 @@ export interface TierRaterInput {
   careersUrl: string | null;
   /** A few of its recent job titles (helps place a company the model barely knows). */
   titles: string[];
+  /** Companies already on the list, so a new name for one of them is caught. */
+  knownCompanies?: readonly string[];
 }
 
 export interface TierRater {
@@ -39,7 +45,8 @@ const INSTRUCTIONS = `You place companies on a tier list for someone looking for
 - Startup: smaller or younger venture-backed tech companies.
 - Corporate: traditional enterprises where software isn't the core business: banks, insurers, retailers, manufacturers, defense contractors, consultancies and staffing firms (e.g. Chubb, American Express, BlackRock).
 If you don't recognize the company, judge from its name, careers page and job titles; when still unsure, answer Startup.
-reason: one plain sentence of at most 15 words, e.g. "Well-funded AI coding startup" or "Large insurer; software supports the business".`;
+reason: one plain sentence of at most 15 words, e.g. "Well-funded AI coding startup" or "Large insurer; software supports the business".
+sameAs: when the company is one already in knownCompanies under another name (e.g. "Bank of Montreal" is "BMO", "Bask" is "Bask Health"), that exact name from the list; otherwise null. Only when you're sure: a parent, a subsidiary or a different company with a similar name is not the same.`;
 
 const RESPONSE_FORMAT = {
   type: "json_schema",
@@ -51,8 +58,9 @@ const RESPONSE_FORMAT = {
       properties: {
         tier: { type: "string", enum: [...TIERS] },
         reason: { type: "string" },
+        sameAs: { type: ["string", "null"] },
       },
-      required: ["tier", "reason"],
+      required: ["tier", "reason", "sameAs"],
       additionalProperties: false,
     },
   },
@@ -67,7 +75,11 @@ const ChatResponse = z.object({
     )
     .min(1),
 });
-const Rating = z.object({ tier: z.enum(TIERS), reason: z.string().trim().min(1).max(300) });
+const Rating = z.object({
+  tier: z.enum(TIERS),
+  reason: z.string().trim().min(1).max(300),
+  sameAs: z.string().trim().min(1).nullish(),
+});
 const ApiError = z.object({ error: z.object({ message: z.string() }) });
 
 /** GPT-5 reasoning models think before answering; minimal effort keeps a rating cheap and quick. */
@@ -104,6 +116,7 @@ export const createOpenAiTierRater = (options: {
                 company: input.name,
                 careersPage: input.careersUrl,
                 recentJobTitles: input.titles,
+                knownCompanies: input.knownCompanies ?? [],
               }),
             },
           ],
@@ -148,14 +161,16 @@ export interface AutoTierOptions {
 /**
  * Rates companies whose tier is `pending` (added automatically or by hand)
  * with the AI rater, when one is configured. Seed tiers and tiers someone
- * picked are never touched. At most AUTO_TIER_DAILY_CAP calls a day.
+ * picked are never touched. At most AUTO_TIER_DAILY_CAP calls a day. When the AI says
+ * it's a company already on the list under another name, it's merged into that
+ * one instead (see `mergeCompanyInto`).
  */
 export const runAutoTier = async (
   options: AutoTierOptions,
-): Promise<{ rated: string[]; failed: string[] }> => {
+): Promise<{ rated: string[]; failed: string[]; merged: string[] }> => {
   const { database, rater, state } = options;
   const { db } = database;
-  if (!rater) return { rated: [], failed: [] };
+  if (!rater) return { rated: [], failed: [], merged: [] };
   const log = (options.logger ?? silentLogger).child({ module: "companies" });
   const now = (options.now ?? (() => new Date()))();
   const since = now.getTime() - DAY_MS;
@@ -182,7 +197,7 @@ export const runAutoTier = async (
     const failedAt = state.failures.get(c.id);
     return failedAt === undefined || now.getTime() - failedAt >= AUTO_TIER_RETRY_MS;
   });
-  if (pending.length === 0) return { rated: [], failed: [] };
+  if (pending.length === 0) return { rated: [], failed: [], merged: [] };
   if (left <= 0) {
     if (state.capLoggedAt === undefined || now.getTime() - state.capLoggedAt >= DAY_MS) {
       state.capLoggedAt = now.getTime();
@@ -191,11 +206,13 @@ export const runAutoTier = async (
         `daily AI rating cap (${AUTO_TIER_DAILY_CAP}) reached; ${pending.length} compan${pending.length === 1 ? "y waits" : "ies wait"} until it frees up`,
       );
     }
-    return { rated: [], failed: [] };
+    return { rated: [], failed: [], merged: [] };
   }
 
+  const known = await db.select({ id: companies.id, name: companies.name }).from(companies);
   const rated: string[] = [];
   const failed: string[] = [];
+  const merged: string[] = [];
   for (const c of pending.slice(0, Math.min(left, AUTO_TIER_PER_RUN))) {
     const titles = await db
       .selectDistinct({ title: jobs.title, effectiveAt: jobs.effectiveAt })
@@ -209,7 +226,25 @@ export const runAutoTier = async (
         name: c.name,
         careersUrl: c.careersUrl,
         titles: [...new Set(titles.map((t) => t.title))].slice(0, TITLES_SENT),
+        knownCompanies: known.filter((k) => k.id !== c.id).map((k) => k.name),
       });
+      state.failures.delete(c.id);
+      const same = rating.sameAs?.toLowerCase();
+      const target = same && known.find((k) => k.id !== c.id && k.name.toLowerCase() === same);
+      if (target) {
+        try {
+          await mergeCompanyInto(db, c.id, target.id);
+          merged.push(c.name);
+          log.info(
+            { company: c.name, into: target.name, model: rater.model },
+            `merged ${c.name} into ${target.name}: the same company under another name`,
+          );
+          continue;
+        } catch (err) {
+          // Both have a job board (or one is gone): keep it as its own company
+          if (!(err instanceof ConflictError || err instanceof NotFoundError)) throw err;
+        }
+      }
       // A tier picked meanwhile wins
       await db
         .update(companies)
@@ -221,7 +256,6 @@ export const runAutoTier = async (
           updatedAt: now,
         })
         .where(and(eq(companies.id, c.id), eq(companies.tierSource, "pending")));
-      state.failures.delete(c.id);
       rated.push(c.name);
       log.info(
         { company: c.name, tier: rating.tier, model: rater.model },
@@ -236,5 +270,5 @@ export const runAutoTier = async (
       );
     }
   }
-  return { rated, failed };
+  return { rated, failed, merged };
 };

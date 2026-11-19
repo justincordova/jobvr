@@ -34,6 +34,10 @@ export const indexCompanies = (rows: readonly CompanyRow[]): CompanyIndex => {
     }
     index.byName.set(c.normalizedName, c);
   }
+  // Aliases after names: a company's own name wins over another's alias
+  for (const c of rows) {
+    for (const alias of c.aliases ?? []) if (!index.byName.has(alias)) index.byName.set(alias, c);
+  }
   return index;
 };
 

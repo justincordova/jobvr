@@ -1,4 +1,4 @@
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { CompanyStatus, Tier, TierSource } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { type CompanyRow, companies, jobs, type SourceStateRow, sourceState } from "../db/schema";
@@ -115,13 +115,17 @@ export const listCompaniesWithHealth = async (
 export const getCompany = async (db: DbOrTx, id: string): Promise<CompanyRow | null> =>
   (await db.select().from(companies).where(eq(companies.id, id)))[0] ?? null;
 
-export const findCompanyByName = async (db: DbOrTx, name: string): Promise<CompanyRow | null> =>
-  (
-    await db
-      .select()
-      .from(companies)
-      .where(eq(companies.normalizedName, normalizeCompanyName(name)))
-  )[0] ?? null;
+/** By normalized name, or by one of its aliases (see `mergeCompanyInto`). */
+export const findCompanyByName = async (db: DbOrTx, name: string): Promise<CompanyRow | null> => {
+  const normalized = normalizeCompanyName(name);
+  const rows = await db
+    .select()
+    .from(companies)
+    .where(
+      or(eq(companies.normalizedName, normalized), sql`${normalized} = ANY(${companies.aliases})`),
+    );
+  return rows.find((c) => c.normalizedName === normalized) ?? rows[0] ?? null;
+};
 
 export const createCompany = async (db: DbOrTx, input: CompanyInput): Promise<CompanyRow> => {
   const values = {
@@ -209,6 +213,54 @@ export const updateCompany = async (
     throw err;
   }
 };
+
+/**
+ * Folds a company into another one that's the same company under another name
+ * ("Bank of Montreal" into "BMO"): its jobs move over, its names become
+ * aliases (so the lists' jobs keep resolving), and it's deleted. A job board
+ * moves along when the other has none; two boards can't merge.
+ */
+export const mergeCompanyInto = (db: DbOrTx, fromId: string, intoId: string): Promise<CompanyRow> =>
+  db.transaction(async (tx) => {
+    const rows = await tx
+      .select()
+      .from(companies)
+      .where(inArray(companies.id, [fromId, intoId]))
+      .for("update");
+    const from = rows.find((c) => c.id === fromId);
+    const into = rows.find((c) => c.id === intoId);
+    if (!from || !into || from.id === into.id) throw new NotFoundError("Company not found");
+    const fromBoard = from.ats !== OTHER_ATS && Boolean(from.slug);
+    const intoBoard = into.ats !== OTHER_ATS && Boolean(into.slug);
+    if (fromBoard && intoBoard) throw new ConflictError("Both companies have a job board");
+
+    await tx
+      .update(jobs)
+      .set({ companyId: into.id, companyName: into.name })
+      .where(eq(jobs.companyId, from.id));
+    const aliases = [...new Set([...into.aliases, from.normalizedName, ...from.aliases])].filter(
+      (a) => a !== into.normalizedName,
+    );
+    // First, so its board's ats + slug is free for `into`
+    await tx.delete(companies).where(eq(companies.id, from.id));
+    const [row] = await tx
+      .update(companies)
+      .set({
+        aliases,
+        ...(fromBoard && {
+          ats: from.ats,
+          slug: from.slug,
+          track: true,
+          status: from.status,
+          careersUrl: into.careersUrl ?? from.careersUrl,
+        }),
+        updatedAt: new Date(),
+      })
+      .where(eq(companies.id, into.id))
+      .returning();
+    if (!row) throw new NotFoundError("Company not found");
+    return row;
+  });
 
 export const deleteCompany = async (db: DbOrTx, id: string): Promise<void> => {
   const deleted = await db

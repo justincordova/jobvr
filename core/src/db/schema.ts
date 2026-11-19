@@ -53,6 +53,8 @@ export const companies = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
     normalizedName: text("normalized_name").notNull(),
+    /** Other names it goes by on the lists ("bask" for Bask Health), normalized like `normalizedName`. */
+    aliases: text("aliases").array().notNull().default(sql`'{}'::text[]`),
     city: text("city"),
     state: text("state"),
     tier: text("tier").notNull(),

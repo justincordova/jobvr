@@ -66,6 +66,7 @@ export const groupSuggestions = (
 const resolvesToCompany = sql`EXISTS (
   SELECT 1 FROM companies c
   WHERE c.normalized_name = ${suggestions.id}
+     OR ${suggestions.id} = ANY(c.aliases)
      OR (${suggestions.slug} IS NOT NULL AND c.ats = ${suggestions.ats}
          AND lower(c.slug) = lower(${suggestions.slug}))
      -- A company whose board slug is this name (see resolveCompany)
