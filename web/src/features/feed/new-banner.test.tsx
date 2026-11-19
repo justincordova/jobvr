@@ -60,9 +60,10 @@ describe('NewSinceBanner', () => {
         onDismiss={vi.fn()}
       />,
     )
-    expect(screen.queryByText('Role d')).toBeNull()
-    expect(screen.getAllByText('hidden by filters')).toHaveLength(2)
+    // The rest stay mounted, folded away, so they can slide open
+    expect(screen.queryByRole('button', { name: /Role d/ })).toBeNull()
+    expect(screen.getAllByRole('button', { name: /hidden by filters/ })).toHaveLength(2)
     await userEvent.click(screen.getByRole('button', { name: 'Show all 5' }))
-    expect(screen.getByText('Role e')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Role e/ })).toBeInTheDocument()
   })
 })

@@ -22,13 +22,15 @@
   --color-go: #79cf96;
   --color-stop: #ec7565;
   --color-info: #8fb8ea;
+  --color-plum: #c4a3ec;
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
 
   --animate-ping-once: ping-once 1.6s cubic-bezier(0, 0, 0.2, 1) 1;
   --animate-rise: rise 240ms var(--ease-out) both;
-  --animate-page: page 260ms var(--ease-out) both;
+  /* backwards, not both: a held transform would trap the page's fixed bars inside it */
+  --animate-page: page 260ms var(--ease-out) backwards;
   --animate-fade-in: fade-in 180ms var(--ease-out) both;
   --animate-fade-out: fade-out 140ms var(--ease-in) both;
   --animate-pop-in: pop-in 200ms var(--ease-out) both;

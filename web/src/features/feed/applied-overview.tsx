@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
-import { useLayoutEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Skeleton } from '@/components/page'
 import { Reveal } from '@/components/ui/reveal'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import type { TierFilter } from '@/lib/types'
+import { TIER_DOT } from '@/lib/tier-style'
 import { appliedStats, type HeatDay } from './applied-stats'
 
 /** Up to a year, like GitHub; fewer when the card is narrower. */
@@ -23,15 +24,6 @@ const LEVEL_CLASS: Record<HeatDay['level'], string> = {
   2: 'bg-signal/50',
   3: 'bg-signal/75',
   4: 'bg-signal',
-}
-
-const TIER_DOT: Record<TierFilter, string> = {
-  S: 'bg-signal',
-  A: 'bg-info',
-  Mid: 'bg-go',
-  Startup: 'bg-paper/75',
-  Corporate: 'bg-dim',
-  Unlisted: 'bg-line-strong',
 }
 
 const DAY_LABELS = ['Mon', '', 'Wed', '', 'Fri', '', '']
@@ -132,9 +124,21 @@ function Heatmap({ weeks, cell }: { weeks: HeatDay[][]; cell: number }) {
     const x = Math.min(Math.max(square.left - box.left + square.width / 2, 80), box.width - 80)
     setTip({ day, x, y: square.top - box.top })
   }
+  // A tap elsewhere closes a tapped tooltip (touch has no mouse leave)
+  const grid = useRef<HTMLDivElement>(null)
+  const open = tip !== null
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => {
+      if (!grid.current?.contains(e.target as Node)) setTip(null)
+    }
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [open])
   const total = weeks.flat().reduce((n, d) => n + d.count, 0)
   return (
     <div
+      ref={grid}
       role="img"
       aria-label={`Applications per day over the last ${weeks.length} weeks: ${total} in all`}
       onMouseLeave={() => setTip(null)}
@@ -162,6 +166,7 @@ function Heatmap({ weeks, cell }: { weeks: HeatDay[][]; cell: number }) {
           month={months[w] ?? ''}
           active={tip?.day.date}
           onShow={show}
+          onHide={() => setTip(null)}
         />
       ))}
       {tip && (
@@ -182,11 +187,13 @@ function WeekColumn({
   month,
   active,
   onShow,
+  onHide,
 }: {
   week: HeatDay[]
   month: string
   active: string | undefined
   onShow: (day: HeatDay, el: HTMLElement) => void
+  onHide: () => void
 }) {
   return (
     <>
@@ -203,8 +210,9 @@ function WeekColumn({
           <span
             key={d.date}
             aria-hidden
-            onMouseEnter={(e) => onShow(d, e.currentTarget)}
-            onClick={(e) => onShow(d, e.currentTarget)}
+            onPointerEnter={(e) => e.pointerType === 'mouse' && onShow(d, e.currentTarget)}
+            // A second tap on the same day closes it
+            onClick={(e) => (active === d.date ? onHide() : onShow(d, e.currentTarget))}
             className={cn(
               'rounded-[3px] transition-shadow duration-100',
               LEVEL_CLASS[d.level],
@@ -219,7 +227,7 @@ function WeekColumn({
 
 /**
  * The Applied view's card: pace up top, a GitHub-style year of days, the tier mix
- * in one line. It stays mounted to slide in and out, but only loads while ctive.
+ * in one line. It stays mounted to slide in and out, but only loads while `active`.
  */
 export function AppliedOverview({ active }: { active: boolean }) {
   const { data } = useQuery({
@@ -241,6 +249,12 @@ export function AppliedOverview({ active }: { active: boolean }) {
         : null,
     [data],
   )
+  // Holds the card's place while it loads, so the reveal opens once, to the right height
+  if (!data) {
+    return active ? (
+      <Skeleton className={cn('rounded-xl bg-panel/60', graphOpen ? 'h-80' : 'h-24')} />
+    ) : null
+  }
   if (!stats || stats.total === 0) return null
 
   const shown = stats.weeks.slice(-weeks)

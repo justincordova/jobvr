@@ -36,7 +36,9 @@ import { ShortcutsDialog } from './shortcuts-dialog'
 import { useFeedKeys } from './use-feed-keys'
 import { useJobActions } from './use-job-actions'
 import {
+  bannerDismissed,
   captureFirstResponse,
+  dismissBanner,
   isSessionNew,
   sessionNewCount,
   sessionNewJobs,
@@ -106,7 +108,7 @@ export function FeedPage() {
 function JobsPage({ search }: { search: FeedSearch }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const [bannerOpen, setBannerOpen] = useState(true)
+  const [bannerOpen, setBannerOpen] = useState(() => !bannerDismissed())
   const [helpOpen, setHelpOpen] = useState(false)
   const [detailsId, setDetailsId] = useState<string | null>(null)
   const baseQuery = toJobQuery(search)
@@ -254,14 +256,19 @@ function JobsPage({ search }: { search: FeedSearch }) {
         onState={act}
       />
 
-      {bannerJobs.length > 0 && bannerOpen && view === 'feed' && (
-        <NewSinceBanner
-          count={Math.max(newCount - (bannerAll.length - bannerJobs.length), bannerJobs.length)}
-          jobs={bannerJobs}
-          inList={new Set(list.map((j) => j.id))}
-          onOpen={(job) => setDetailsId(job.id)}
-          onDismiss={() => setBannerOpen(false)}
-        />
+      {bannerAll.length > 0 && (
+        <Reveal open={bannerJobs.length > 0 && bannerOpen && view === 'feed'}>
+          <NewSinceBanner
+            count={Math.max(newCount - (bannerAll.length - bannerJobs.length), bannerJobs.length)}
+            jobs={bannerJobs}
+            inList={new Set(list.map((j) => j.id))}
+            onOpen={(job) => setDetailsId(job.id)}
+            onDismiss={() => {
+              dismissBanner()
+              setBannerOpen(false)
+            }}
+          />
+        </Reveal>
       )}
 
       <FilterBar search={search} onChange={update} onView={goView} />
@@ -313,7 +320,7 @@ function JobsPage({ search }: { search: FeedSearch }) {
       ) : (
         <ul
           className={cn(
-            'mt-4 border-t border-line/70 transition-opacity duration-200',
+            'mt-4 animate-fade-in border-t border-line/70 transition-opacity duration-200',
             jobs.isPlaceholderData && 'opacity-60',
           )}
         >
@@ -353,7 +360,7 @@ function JobsPage({ search }: { search: FeedSearch }) {
           <Button
             size="sm"
             variant="ghost"
-            pending={jobs.isFetching}
+            pending={jobs.isPlaceholderData}
             onClick={() => setPaging({ queryId, limit: limit + PAGE_SIZE })}
           >
             Show {Math.min(PAGE_SIZE, total - list.length)} more

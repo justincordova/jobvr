@@ -27,6 +27,7 @@ import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { companiesQuery, pendingDeletes } from '@/lib/companies-query'
 import { safeHref, shortAge } from '@/lib/format'
+import { TIER_BADGE } from '@/lib/tier-style'
 import { type Company, TIERS, type Tier } from '@/lib/types'
 
 type CompanyPatch = { tier: Tier } | { autoTier: true }
@@ -101,6 +102,14 @@ function useCompanyMutations() {
       }
       return { prev }
     },
+    onSuccess: (company, { json }) =>
+      toast(
+        'tier' in json
+          ? `${company.name} is now ${company.tier}`
+          : company.tierSource === 'auto'
+            ? `${company.name}: rated ${company.tier} by AI`
+            : `${company.name} will be rated shortly`,
+      ),
     onError: (err, _v, ctx) => {
       qc.setQueryData(queryKeys.companies, ctx?.prev)
       toast.error(err.message)
@@ -344,10 +353,19 @@ export function CompaniesPage() {
           aria-label="Search companies"
           className="pr-9 pl-9"
         />
-        <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-line px-1.5 font-mono text-[0.65rem] text-faint sm:block">
+        <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-line px-1.5 font-mono text-[0.65rem] text-faint pointer-fine:block">
           /
         </kbd>
       </div>
+      {/* Phones show only the status dots, so say what they mean */}
+      <ul className="-mt-1 mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-faint sm:hidden">
+        {Object.values(WATCH).map((w) => (
+          <li key={w.label} className="flex items-center gap-1.5">
+            <span className={cn('size-2 rounded-full', w.dot)} />
+            {w.label}
+          </li>
+        ))}
+      </ul>
 
       {companies.isError && !companies.data ? (
         <ErrorState
@@ -382,7 +400,7 @@ export function CompaniesPage() {
             <thead>
               <tr className="border-b border-line text-left font-mono text-[0.68rem] tracking-wider text-faint uppercase">
                 <th className="px-4 py-2.5 font-medium">Company</th>
-                <th className="px-2 py-2.5 font-medium">Tier</th>
+                <th className="w-px px-2 py-2.5 font-medium">Tier</th>
                 <th
                   className="hidden px-2 py-2.5 font-medium sm:table-cell"
                   title="Matching roles in the last 30 days"
@@ -390,7 +408,7 @@ export function CompaniesPage() {
                   Roles · 30d
                 </th>
                 <th className="hidden px-2 py-2.5 font-medium sm:table-cell">Newest</th>
-                <th className="px-2 py-2.5 font-medium">
+                <th className="w-px px-2 py-2.5 font-medium sm:w-auto">
                   <span className="sr-only sm:not-sr-only">Status</span>
                 </th>
                 <th className="w-10 px-2 py-2.5">
@@ -411,7 +429,9 @@ export function CompaniesPage() {
                       className="border-b border-line/60 transition-colors duration-150 last:border-0 hover:bg-panel/60"
                     >
                       <td className="max-w-0 px-4 py-2.5 sm:w-[45%]">
-                        <p className="truncate font-medium">{c.name}</p>
+                        <p className="font-medium break-words max-sm:line-clamp-2 sm:truncate">
+                          {c.name}
+                        </p>
                         {(c.tierReason || place) && (
                           <p className="truncate text-xs text-faint">{c.tierReason ?? place}</p>
                         )}
@@ -420,13 +440,15 @@ export function CompaniesPage() {
                         <span
                           title={tierHint(c, model)}
                           className={cn(
-                            'inline-flex items-center gap-1 rounded-md bg-raised px-1.5 py-0.5 text-xs ring-1 ring-line',
-                            c.tierSource === 'pending' ? 'text-faint' : 'text-paper',
+                            'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs ring-1 transition-colors duration-300',
+                            c.tierSource === 'pending'
+                              ? 'bg-raised text-faint ring-line'
+                              : TIER_BADGE[c.tier],
                           )}
                         >
                           {c.tier}
                           {c.tierSource === 'auto' && (
-                            <Sparkles aria-label="rated by AI" className="size-3 text-faint" />
+                            <Sparkles aria-label="rated by AI" className="size-3 opacity-60" />
                           )}
                           {c.tierSource === 'pending' && <span aria-label="not rated yet">?</span>}
                         </span>

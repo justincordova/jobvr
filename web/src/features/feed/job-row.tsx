@@ -9,7 +9,7 @@ import {
   Undo2,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { Badge, TierBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
 import { relative, safeHref, salaryRange, shortAge } from '@/lib/format'
@@ -54,6 +54,12 @@ function IconAction({
       {...props}
     />
   )
+}
+
+/** Under a day reads green, under three days bright, older fades. */
+const freshness = (iso: string) => {
+  const hours = (Date.now() - new Date(iso).getTime()) / 3_600_000
+  return hours < 24 ? 'text-go' : hours < 72 ? 'text-paper/80' : 'text-faint'
 }
 
 /** Matching places first ("King of Prussia, PA" before "Farmington Hills, MI"), then a count. */
@@ -111,7 +117,7 @@ export function JobRow({
           title={new Date(job.effectiveAt).toLocaleString()}
           className={cn(
             'font-mono text-sm tabular-nums',
-            highlighted ? 'font-semibold text-signal' : 'text-dim',
+            highlighted ? 'font-semibold text-signal' : freshness(job.effectiveAt),
           )}
         >
           {shortAge(job.effectiveAt)}
@@ -142,7 +148,7 @@ export function JobRow({
             <span className="shrink-0 truncate text-paper/85 max-lg:max-w-[60%]">
               {job.companyName}
             </span>
-            {job.tier !== 'Unlisted' && <Badge tone="info">{job.tier}</Badge>}
+            {job.tier !== 'Unlisted' && <TierBadge tier={job.tier} />}
             {/* Small screens: the location shares the company line */}
             <span className="min-w-0 truncate lg:hidden" title={allPlaces}>
               <span aria-hidden className="mr-2 text-faint">
@@ -213,7 +219,12 @@ export function JobRow({
               </IconAction>
             ) : (
               job.state !== 'hidden' && (
-                <IconAction label="Save" onClick={() => onState('saved')} disabled={busy}>
+                <IconAction
+                  label="Save"
+                  onClick={() => onState('saved')}
+                  disabled={busy}
+                  className="hover:text-signal"
+                >
                   <Bookmark />
                 </IconAction>
               )
@@ -223,7 +234,12 @@ export function JobRow({
                 <Eye />
               </IconAction>
             ) : (
-              <IconAction label="Hide" onClick={() => onState('hidden')} disabled={busy}>
+              <IconAction
+                label="Hide"
+                onClick={() => onState('hidden')}
+                disabled={busy}
+                className="hover:text-stop"
+              >
                 <EyeOff />
               </IconAction>
             )}
@@ -236,7 +252,7 @@ export function JobRow({
             onClick={onDetails}
             aria-label={`Details for ${job.title}`}
             title="Details (d)"
-            className="size-8"
+            className="size-8 hover:text-info"
           >
             <PanelRightOpen />
           </Button>

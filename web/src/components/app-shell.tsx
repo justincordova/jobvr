@@ -3,6 +3,7 @@ import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { Building2, CloudOff, Settings } from 'lucide-react'
 import { type ComponentType, useEffect, useRef } from 'react'
 import { api, queryKeys, unwrap } from '@/lib/api'
+import { ScrollNav } from '@/components/scroll-nav'
 import { cn } from '@/lib/cn'
 import { relative } from '@/lib/format'
 import { useOnline } from '@/lib/use-online'
@@ -21,7 +22,7 @@ function Wordmark() {
   )
 }
 
-function PollStatus() {
+function PollStatus({ active }: { active: boolean }) {
   const online = useOnline()
   const { data, dataUpdatedAt } = useQuery({
     queryKey: queryKeys.settings,
@@ -52,7 +53,10 @@ function PollStatus() {
           ? `Last poll ${new Date(data.lastPollAt).toLocaleString()} · open the logs`
           : 'No poll has run yet') + (down.length ? ` · ${down.join(', ')} looks down` : '')
       }
-      className="flex items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[0.7rem] text-faint transition-colors hover:text-dim"
+      className={cn(
+        'flex items-center gap-1.5 rounded-md px-2 py-1 font-mono text-[0.7rem] transition-colors duration-200 hover:bg-raised hover:text-dim pointer-coarse:min-h-11',
+        active ? 'bg-raised text-dim' : 'text-faint',
+      )}
     >
       <span
         className={cn(
@@ -142,7 +146,7 @@ export function AppShell() {
       <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center pt-[env(safe-area-inset-top)] justify-between gap-4 border-b border-line/70 bg-ink/80 px-4 backdrop-blur-lg sm:px-6 lg:px-10">
         <Wordmark />
         <div className="flex items-center gap-1">
-          <PollStatus />
+          <PollStatus active={pathname.startsWith('/logs')} />
           {HEADER_PAGES.map(
             ({ to, label, icon }) =>
               icon && (
@@ -164,6 +168,7 @@ export function AppShell() {
       >
         <Outlet />
       </main>
+      <ScrollNav />
     </div>
   )
 }

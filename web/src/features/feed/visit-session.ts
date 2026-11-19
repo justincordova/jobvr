@@ -9,6 +9,7 @@ const session = {
   count: 0,
   ids: new Set<string>(),
   jobs: [] as Job[],
+  dismissed: false,
 }
 
 export function captureFirstResponse(list: JobList): boolean {
@@ -31,10 +32,17 @@ export const sessionNewCount = () => session.count
 /** The new jobs themselves (newest first), whatever the list's filters. */
 export const sessionNewJobs = (): readonly Job[] => session.jobs
 
+/** The banner stays closed for the rest of this visit, across pages. */
+export const bannerDismissed = () => session.dismissed
+export const dismissBanner = () => {
+  session.dismissed = true
+}
+
 /** Test helper. */
 export function resetVisitSession() {
   session.captured = false
   session.count = 0
   session.ids.clear()
   session.jobs = []
+  session.dismissed = false
 }

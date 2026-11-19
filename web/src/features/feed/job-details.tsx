@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Bookmark, BookmarkCheck, Check, ExternalLink, EyeOff, Undo2 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { useState } from 'react'
+import { TierBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { api, unwrap } from '@/lib/api'
@@ -23,7 +24,7 @@ const detailsKey = (id: string) => ['job-details', id] as const
  * Details button or "d".
  */
 export function JobDetailsDialog({
-  job,
+  job: current,
   sourceLabel,
   onOpenChange,
   onState,
@@ -33,10 +34,14 @@ export function JobDetailsDialog({
   onOpenChange: (open: boolean) => void
   onState: (job: Job, state: Job['state']) => void
 }) {
+  // The last job stays rendered while the dialog animates shut
+  const [last, setLast] = useState(current)
+  if (current && current !== last) setLast(current)
+  const job = current ?? last
   const details = useQuery({
     queryKey: detailsKey(job?.id ?? ''),
     queryFn: () => unwrap(api.api.jobs[':id'].details.$get({ param: { id: job?.id ?? '' } })),
-    enabled: job !== null,
+    enabled: current !== null,
     staleTime: 10 * 60_000,
   })
   if (!job) return null
@@ -49,13 +54,21 @@ export function JobDetailsDialog({
   const data = details.data
 
   return (
-    <Dialog open onOpenChange={onOpenChange}>
+    <Dialog open={current !== null} onOpenChange={onOpenChange}>
       <DialogContent
+        // Back to the row it was opened from, so j / k carry on from there
+        onCloseAutoFocus={(e) => {
+          const row = document.querySelector<HTMLElement>(`[data-job-id="${CSS.escape(job.id)}"] a`)
+          if (row) {
+            e.preventDefault()
+            row.focus({ preventScroll: true })
+          }
+        }}
         title={job.title}
         description={
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-paper">{job.companyName}</span>
-            {job.tier !== 'Unlisted' && <Badge tone="info">{job.tier}</Badge>}
+            {job.tier !== 'Unlisted' && <TierBadge tier={job.tier} />}
             <span>{job.locations.slice(0, 3).join(' · ')}</span>
           </span>
         }

@@ -12,6 +12,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { cn } from '@/lib/cn'
+import { TIER_DOT } from '@/lib/tier-style'
 import { TIER_FILTERS, type TierFilter } from '@/lib/types'
 import { type Age, DEFAULT_AGE, defaultSort, type FeedSearch, type Sort, type View } from './search'
 
@@ -155,6 +156,7 @@ function TierMenu({
             checked={on.has(t)}
             onCheckedChange={(checked) => toggle(t, checked === true)}
           >
+            <span aria-hidden className={cn('size-2 rounded-full', TIER_DOT[t])} />
             {t}
           </DropdownMenuCheckboxItem>
         ))}

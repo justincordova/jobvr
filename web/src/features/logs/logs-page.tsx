@@ -188,11 +188,24 @@ export function LogsPage() {
               ? 'Polls, pushes and problems show up here as they happen.'
               : 'Try another level or clear the filter.'
           }
+          action={
+            total > 0 && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setLevel('all')
+                  setSearch('')
+                }}
+              >
+                Show every line
+              </Button>
+            )
+          }
         />
       ) : (
         <ol
           aria-label="Log lines, newest first"
-          className="divide-y divide-line/60 overflow-hidden rounded-xl border border-line bg-panel/60"
+          className="animate-fade-in divide-y divide-line/60 overflow-hidden rounded-xl border border-line bg-panel/60"
         >
           {shown.map((e) => (
             <LogRow key={e.seq} entry={e} />
