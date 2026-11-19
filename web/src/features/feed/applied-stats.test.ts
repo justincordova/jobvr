@@ -33,6 +33,36 @@ describe('appliedStats', () => {
     ])
   })
 
+  it('counts today, yesterday and this month, and averages per day', () => {
+    const s = appliedStats(
+      [
+        { appliedAt: at(18), tier: 'Mid' },
+        { appliedAt: at(18, 9), tier: 'Mid' },
+        { appliedAt: at(17), tier: 'Mid' },
+        { appliedAt: new Date(2026, 9, 30, 12).toISOString(), tier: 'Mid' },
+      ],
+      NOW,
+    )
+    expect(s.today).toBe(2)
+    expect(s.yesterday).toBe(1)
+    // 30 Oct is last month
+    expect(s.thisMonth).toBe(3)
+    // 30 Oct to 18 Nov is 20 days
+    expect(s.perDay).toBeCloseTo(4 / 20)
+  })
+
+  it('averages over at most 30 days, and has no average without dates', () => {
+    const old = appliedStats(
+      [
+        { appliedAt: new Date(2026, 5, 1, 12).toISOString(), tier: 'Mid' },
+        { appliedAt: at(18), tier: 'Mid' },
+      ],
+      NOW,
+    )
+    expect(old.perDay).toBeCloseTo(1 / 30)
+    expect(appliedStats([{ appliedAt: null, tier: 'Mid' }], NOW).perDay).toBeNull()
+  })
+
   it('keeps a streak alive until the day is over', () => {
     const s = appliedStats(
       [

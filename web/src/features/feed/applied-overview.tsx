@@ -96,16 +96,40 @@ function useGraphOpen(): [boolean, () => void] {
   return [open, toggle]
 }
 
-function Stat({ value, label, tone }: { value: string; label: string; tone?: 'go' | 'stop' }) {
+function Stat({
+  value,
+  label,
+  tone,
+  note,
+}: {
+  value: string
+  label: string
+  tone?: 'go'
+  /** A small aside after the number: a comparison, or yesterday's count. */
+  note?: { text: string; tone?: 'go' | 'stop'; title?: string }
+}) {
   return (
     <div>
-      <p
-        className={cn(
-          'font-mono text-lg leading-none font-semibold tabular-nums',
-          tone === 'go' ? 'text-go' : tone === 'stop' ? 'text-stop' : 'text-paper',
+      <p className="flex items-baseline gap-1.5 leading-none">
+        <span
+          className={cn(
+            'font-mono text-lg font-semibold tabular-nums',
+            tone === 'go' ? 'text-go' : 'text-paper',
+          )}
+        >
+          {value}
+        </span>
+        {note && (
+          <span
+            title={note.title}
+            className={cn(
+              'font-mono text-[0.68rem] tabular-nums',
+              note.tone === 'go' ? 'text-go' : note.tone === 'stop' ? 'text-stop' : 'text-faint',
+            )}
+          >
+            {note.text}
+          </span>
         )}
-      >
-        {value}
       </p>
       <p className="mt-1.5 font-mono text-[0.62rem] tracking-wider text-faint uppercase">{label}</p>
     </div>
@@ -279,12 +303,25 @@ export function AppliedOverview({ active }: { active: boolean }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-x-7 gap-y-3">
-          <Stat value={String(stats.thisWeek)} label="this week" />
           <Stat
-            value={delta === 0 ? '±0' : delta > 0 ? `+${delta}` : String(delta)}
-            label="vs last week"
-            tone={delta > 0 ? 'go' : delta < 0 ? 'stop' : undefined}
+            value={String(stats.today)}
+            label="today"
+            tone={stats.today > 0 ? 'go' : undefined}
+            note={{ text: `${stats.yesterday} yday`, title: `${stats.yesterday} yesterday` }}
           />
+          <Stat
+            value={String(stats.thisWeek)}
+            label="this week"
+            note={{
+              text: delta === 0 ? '±0' : delta > 0 ? `+${delta}` : String(delta),
+              tone: delta > 0 ? 'go' : delta < 0 ? 'stop' : undefined,
+              title: `${stats.lastWeek} last week`,
+            }}
+          />
+          <Stat value={String(stats.thisMonth)} label="this month" />
+          {stats.perDay !== null && (
+            <Stat value={stats.perDay.toFixed(stats.perDay < 10 ? 1 : 0)} label="per day · 30d" />
+          )}
           <Stat value={`${stats.streak}d`} label="streak" />
           {stats.bestDay && (
             <Stat
