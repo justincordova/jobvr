@@ -8,8 +8,9 @@ const EDGE = 320
 const still = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 /**
- * Top and bottom quick jumps, bottom right. Each shows only when it would go
- * somewhere, so short pages never get it.
+ * "Top" and "Bottom" jumps in one pill, bottom center (like the "back to top"
+ * pills on X or GitHub). Each half shows only when it would go somewhere, so
+ * short pages never get it.
  */
 export function ScrollNav() {
   const [room, setRoom] = useState({ up: false, down: false })
@@ -52,48 +53,56 @@ export function ScrollNav() {
   const shown = room.up || room.down
   return (
     <div
-      className={cn(
-        'fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 in-data-savebar:bottom-[calc(5.5rem+env(safe-area-inset-bottom))] flex flex-col overflow-hidden rounded-full border border-line-strong bg-panel/85 shadow-lg shadow-black/40 backdrop-blur-md transition-[opacity,translate,bottom] duration-300 ease-(--ease-out) sm:right-6 lg:right-10',
-        shown ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0',
-      )}
       inert={!shown}
+      className={cn(
+        'fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-30 flex -translate-x-1/2 items-center rounded-full border border-line-strong bg-raised/90 p-1 shadow-lg shadow-black/40 backdrop-blur-md transition-[opacity,translate,bottom] duration-300 ease-(--ease-out) in-data-savebar:bottom-[calc(5.5rem+env(safe-area-inset-bottom))]',
+        shown ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0',
+      )}
     >
-      <JumpButton label="Back to top" show={room.up} onClick={() => go('top')}>
-        <ArrowUp />
-      </JumpButton>
-      <JumpButton label="Jump to bottom" show={room.down} onClick={() => go('bottom')}>
-        <ArrowDown />
-      </JumpButton>
+      <Jump show={room.up} onClick={() => go('top')} label="Back to top">
+        <ArrowUp /> Top
+      </Jump>
+      {/* A hairline between the two when both show */}
+      <span
+        aria-hidden
+        className={cn(
+          'h-5 w-px bg-line-strong transition-opacity duration-300',
+          room.up && room.down ? 'opacity-100' : 'opacity-0',
+        )}
+      />
+      <Jump show={room.down} onClick={() => go('bottom')} label="Jump to bottom">
+        Bottom <ArrowDown />
+      </Jump>
     </div>
   )
 }
 
-function JumpButton({
-  label,
+/** One half of the pill; folds its width to zero when there's nowhere to go. */
+function Jump({
   show,
   onClick,
+  label,
   children,
 }: {
-  label: string
   show: boolean
   onClick: () => void
+  label: string
   children: ReactNode
 }) {
   return (
     <div
-      className={cn(
-        'grid transition-[grid-template-rows,opacity] duration-300 ease-(--ease-out)',
-        show ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
-      )}
       inert={!show}
+      className={cn(
+        'grid transition-[grid-template-columns,opacity] duration-300 ease-(--ease-out)',
+        show ? 'grid-cols-[1fr] opacity-100' : 'grid-cols-[0fr] opacity-0',
+      )}
     >
-      <div className="min-h-0 overflow-hidden">
+      <div className="min-w-0 overflow-hidden">
         <button
           type="button"
           onClick={onClick}
           aria-label={label}
-          title={label}
-          className="grid size-10 place-items-center text-dim transition-colors hover:bg-raised hover:text-signal active:scale-95 pointer-coarse:size-12 [&_svg]:size-4"
+          className="flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium whitespace-nowrap text-dim transition-colors hover:bg-line hover:text-paper active:scale-95 pointer-coarse:h-11 pointer-coarse:px-4 [&_svg]:size-4"
         >
           {children}
         </button>

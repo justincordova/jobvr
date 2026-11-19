@@ -159,7 +159,7 @@ function StatusStrip({ payload }: { payload: SettingsPayload }) {
     })),
   ]
   return (
-    <ul className="mb-6 flex flex-wrap gap-2" aria-label="Status">
+    <ul className="flex flex-wrap gap-2" aria-label="Status">
       {items.map((it) => (
         <li
           key={it.label}
@@ -207,7 +207,11 @@ function SideNav({ dirty, onPick }: { dirty: Set<string>; onPick: (id: string) =
     return () => observer.disconnect()
   }, [])
   return (
-    <nav aria-label="Settings sections" className="sticky top-24 hidden self-start lg:block">
+    <nav
+      aria-label="Settings sections"
+      // Level with the first card, below the title and status
+      className="sticky top-24 hidden self-start lg:col-start-1 lg:row-start-1 lg:mt-[7.5rem] lg:block"
+    >
       <ul className="space-y-0.5 border-l border-line">
         {GROUPS.map((g) => (
           <li key={g.id}>
@@ -277,7 +281,7 @@ function StoreWindow({ value, onChange }: { value: number; onChange: (n: number)
   )
 }
 
-function SettingsForm({ payload }: { payload: SettingsPayload }) {
+function SettingsForm({ payload, header }: { payload: SettingsPayload; header: ReactNode }) {
   const qc = useQueryClient()
   const toast = useToast()
   const { draft, set, changed, valid, reset, commit, version } = useDraft(payload.settings)
@@ -311,10 +315,13 @@ function SettingsForm({ payload }: { payload: SettingsPayload }) {
 
   return (
     <>
-      <StatusStrip payload={payload} />
-      <div className="grid gap-10 lg:grid-cols-[10rem_minmax(0,46rem)]">
+      <div className={LAYOUT}>
         <SideNav dirty={dirtyGroups} onPick={pick} />
-        <div className="min-w-0 space-y-5">
+        <div className="min-w-0 space-y-5 lg:col-start-2 lg:row-start-1">
+          <div>
+            {header}
+            <StatusStrip payload={payload} />
+          </div>
           <Card
             id="feed"
             title="Feed"
@@ -653,47 +660,53 @@ function KeywordField({
   )
 }
 
+/**
+ * Centered: the settings column sits in the middle of the page, the side nav to
+ * its left (balanced by an empty column on wide screens, so the middle is the middle).
+ */
+const LAYOUT =
+  'mx-auto grid max-w-[46rem] gap-x-10 lg:max-w-none lg:grid-cols-[10rem_minmax(0,46rem)] lg:justify-center xl:grid-cols-[10rem_minmax(0,46rem)_10rem]'
+
 function SettingsSkeleton() {
   return (
-    <div aria-hidden className="grid gap-10 lg:grid-cols-[10rem_minmax(0,46rem)]">
-      <div className="hidden space-y-3 lg:block">
-        {GROUPS.map((g) => (
-          <Skeleton key={g.id} className="h-4 w-24" />
-        ))}
-      </div>
-      <div className="space-y-5">
-        <Skeleton className="h-72 rounded-xl bg-panel" />
-        <Skeleton className="h-56 rounded-xl bg-panel" />
-        <Skeleton className="h-48 rounded-xl bg-panel" />
-      </div>
+    <div aria-hidden className="space-y-5">
+      <Skeleton className="h-72 rounded-xl bg-panel" />
+      <Skeleton className="h-56 rounded-xl bg-panel" />
+      <Skeleton className="h-48 rounded-xl bg-panel" />
     </div>
   )
 }
+
+const HEADER = (
+  <PageHeader title="Settings" description="Saved together. Changes apply from the next poll." />
+)
 
 export function SettingsPage() {
   const settings = useQuery({
     queryKey: queryKeys.settings,
     queryFn: () => unwrap(api.api.settings.$get()),
   })
+  if (settings.data) {
+    return (
+      <section className="animate-fade-in">
+        <SettingsForm payload={settings.data} header={HEADER} />
+      </section>
+    )
+  }
   return (
-    <section>
-      <PageHeader
-        title="Settings"
-        description="Saved together. Changes apply from the next poll."
-      />
-      {settings.isError && !settings.data ? (
-        <ErrorState
-          error={settings.error}
-          onRetry={() => settings.refetch()}
-          retrying={settings.isFetching}
-        />
-      ) : !settings.data ? (
-        <SettingsSkeleton />
-      ) : (
-        <div className="animate-fade-in">
-          <SettingsForm payload={settings.data} />
-        </div>
-      )}
+    <section className={LAYOUT}>
+      <div className="min-w-0 lg:col-start-2">
+        {HEADER}
+        {settings.isError ? (
+          <ErrorState
+            error={settings.error}
+            onRetry={() => settings.refetch()}
+            retrying={settings.isFetching}
+          />
+        ) : (
+          <SettingsSkeleton />
+        )}
+      </div>
     </section>
   )
 }
