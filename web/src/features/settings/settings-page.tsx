@@ -1,745 +1,622 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useBlocker } from '@tanstack/react-router'
-import { Plus, ScrollText, Trash2 } from 'lucide-react'
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react'
-import { ErrorState, PageHeader, Section, Skeleton } from '@/components/page'
+import { useBlocker } from '@tanstack/react-router'
+import { ChevronDown } from 'lucide-react'
+import { type ReactNode, useEffect, useState } from 'react'
+import { ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { useToast } from '@/components/toast'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { Input, Label } from '@/components/ui/input'
+import { Input } from '@/components/ui/input'
+import { Reveal } from '@/components/ui/reveal'
 import { Segmented } from '@/components/ui/segmented'
 import { Switch } from '@/components/ui/switch'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { relative } from '@/lib/format'
-import { type Settings, type SettingsPayload, TIER_FILTERS } from '@/lib/types'
+import type { Settings, SettingsPayload } from '@/lib/types'
 import { ChipsInput } from './chips-input'
+import { Card, Field, LocationsEditor, NumberInput, TierPicker, Toggle } from './parts'
 
 type Key = keyof Settings
 
-/** Sections report unsaved drafts so the page can guard navigation. */
-const DirtyContext = createContext<(section: string, dirty: boolean) => void>(() => {})
+/** The page's groups, in order, and the settings each one holds. */
+const GROUPS = [
+  {
+    id: 'feed',
+    label: 'Feed',
+    keys: ['tiersToTrack', 'entryLevelOnly', 'experienceCutoffYears', 'minSalaryUsd'],
+  },
+  { id: 'places', label: 'Places', keys: ['locations'] },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    keys: ['pushEveryMinutes', 'maxJobAgeHours', 'quietHours'],
+  },
+  {
+    id: 'sources',
+    label: 'Sources',
+    keys: ['disabledSources', 'suggestCompanies', 'showSimplifyJobs'],
+  },
+  {
+    id: 'advanced',
+    label: 'Advanced',
+    keys: [
+      'pollEveryMinutes',
+      'storeWindowDays',
+      'requireLevelOnBoards',
+      'applyLevelToSimplify',
+      'roleKeywords',
+      'levelKeywords',
+      'excludeKeywords',
+      'simplifyCategories',
+    ],
+  },
+] as const satisfies readonly { id: string; label: string; keys: readonly Key[] }[]
 
-/** Local draft of some settings fields, saved together with one PATCH. */
-function useDraft<K extends Key>(section: string, settings: Settings, keys: readonly K[]) {
-  const pick = () => Object.fromEntries(keys.map((k) => [k, settings[k]])) as Pick<Settings, K>
-  const [draft, setDraft] = useState(pick)
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * One draft for the whole page, saved together from the bar that slides up
+ * once something changes. When the saved settings change underneath (another
+ * tab), settings not being edited here follow them; edits in progress stay.
+ */
+function useDraft(settings: Settings) {
+  const [draft, setDraft] = useState(settings)
   const [baseline, setBaseline] = useState(settings)
-  // Server data changed (another section saved): reset this draft only if it was clean
   if (baseline !== settings) {
-    const wasDirty = keys.some((k) => JSON.stringify(draft[k]) !== JSON.stringify(baseline[k]))
+    const untouched = (Object.keys(settings) as Key[]).filter((k) => same(draft[k], baseline[k]))
     setBaseline(settings)
-    if (!wasDirty) setDraft(pick())
+    setDraft({ ...draft, ...Object.fromEntries(untouched.map((k) => [k, settings[k]])) })
   }
-  const dirty = keys.some((k) => JSON.stringify(draft[k]) !== JSON.stringify(settings[k]))
-  const set = <F extends K>(field: F, value: Settings[F]) =>
-    setDraft((d) => ({ ...d, [field]: value }))
-  const report = useContext(DirtyContext)
-  useEffect(() => {
-    report(section, dirty)
-    return () => report(section, false)
-  }, [report, section, dirty])
-  // Empty number inputs are NaN; block saving until they're filled in
-  const valid = keys.every((k) => typeof draft[k] !== 'number' || Number.isFinite(draft[k]))
-  return { draft, set, dirty, valid, reset: () => setDraft(pick()) }
+  const changed = (Object.keys(draft) as Key[]).filter((k) => !same(draft[k], settings[k]))
+  const set = <K extends Key>(key: K, value: Settings[K]) =>
+    setDraft((d) => ({ ...d, [key]: value }))
+  // Numbers are whole and filled in (an empty input is NaN), and every place keeps a name
+  const valid =
+    Object.values(draft).every((v) => typeof v !== 'number' || (Number.isInteger(v) && v >= 0)) &&
+    draft.locations.every((l) => l.builtin || l.aliases.length > 0)
+  // Bumped on Discard, so fields with their own state (Custom days) start over too
+  const [version, setVersion] = useState(0)
+  const reset = () => {
+    setDraft(settings)
+    setVersion((v) => v + 1)
+  }
+  /** After a save: what the server kept (trimmed, de-duplicated) becomes the draft. */
+  const commit = (saved: Settings) => {
+    setBaseline(saved)
+    setDraft(saved)
+  }
+  return { draft, set, changed, valid, reset, commit, version }
 }
 
 function SaveBar({
-  dirty,
-  valid = true,
-  onSave,
-  onReset,
+  count,
+  valid,
   pending,
-  error,
+  onSave,
+  onDiscard,
 }: {
-  dirty: boolean
-  valid?: boolean
-  onSave: () => void
-  onReset: () => void
+  count: number
+  valid: boolean
   pending: boolean
-  error: string | null
+  onSave: () => void
+  onDiscard: () => void
 }) {
+  const open = count > 0
+  // Lets the scroll buttons step up out of its way
+  useEffect(() => {
+    document.body.toggleAttribute('data-savebar', open)
+    return () => document.body.removeAttribute('data-savebar')
+  }, [open])
   return (
-    <>
-      {(error || !valid) && (
-        <p className="mr-auto animate-fade-in text-sm text-stop">
-          {error ?? 'Fill in every number first.'}
-        </p>
+    <div
+      inert={!open}
+      className={cn(
+        'fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] transition-[translate,opacity] duration-300 ease-(--ease-out) sm:pb-5',
+        open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0',
       )}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onReset}
-        className={cn('transition-opacity', !dirty && 'pointer-events-none opacity-0')}
-        tabIndex={dirty ? 0 : -1}
-        aria-hidden={!dirty}
+    >
+      <div
+        role="status"
+        className="flex w-full max-w-md items-center gap-3 rounded-xl border border-signal/40 bg-raised/95 py-2 pr-2 pl-4 shadow-2xl shadow-black/50 backdrop-blur-md"
       >
-        Discard
-      </Button>
-      <Button
-        variant="primary"
-        size="sm"
-        onClick={onSave}
-        disabled={!dirty || !valid}
-        pending={pending}
-      >
-        Save
-      </Button>
-    </>
-  )
-}
-
-function useSave(section: string) {
-  const qc = useQueryClient()
-  const toast = useToast()
-  const [error, setError] = useState<string | null>(null)
-  const mutation = useMutation({
-    mutationFn: (json: Partial<Settings>) => unwrap(api.api.settings.$patch({ json })),
-    onMutate: () => setError(null),
-    onSuccess: (data) => {
-      qc.setQueryData(queryKeys.settings, data)
-      void qc.invalidateQueries({ queryKey: queryKeys.allJobs })
-      toast(`${section} saved`)
-    },
-    onError: (err) => setError(err.message),
-  })
-  return { save: mutation.mutate, pending: mutation.isPending, error }
-}
-
-function Row({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="min-w-0">
-        <p className="text-sm font-medium">{label}</p>
-        {hint && <p className="text-xs text-dim">{hint}</p>}
+        <span className="size-2 shrink-0 animate-pulse rounded-full bg-signal" aria-hidden />
+        <p className="min-w-0 flex-1 text-sm">
+          {valid ? (
+            <>
+              {count} unsaved change{count === 1 ? '' : 's'}
+            </>
+          ) : (
+            <span className="text-stop">Use whole numbers, and give every place a name</span>
+          )}
+        </p>
+        <Button variant="ghost" size="sm" onClick={onDiscard}>
+          Discard
+        </Button>
+        <Button variant="primary" size="sm" onClick={onSave} disabled={!valid} pending={pending}>
+          Save
+        </Button>
       </div>
-      {children}
     </div>
   )
 }
 
-function NumberField({
-  id,
-  label,
-  value,
-  onChange,
-  min,
-  max,
-  suffix,
-}: {
-  id: string
-  label: string
-  value: number
-  onChange: (n: number) => void
-  min: number
-  max?: number
-  suffix: string
-}) {
+/** Poll, push and backup at a glance, and anything that's down. */
+function StatusStrip({ payload }: { payload: SettingsPayload }) {
+  const items: { label: string; tone: 'go' | 'stop' | 'dim'; title?: string }[] = [
+    { label: `Polled ${relative(payload.lastPollAt)}`, tone: payload.lastPollAt ? 'go' : 'dim' },
+    { label: `Pushed ${relative(payload.lastPushAt)}`, tone: 'dim' },
+    payload.backup.problem
+      ? { label: 'Backups failing', tone: 'stop', title: payload.backup.problem }
+      : {
+          label: `Backed up ${relative(payload.backup.lastBackupAt)}`,
+          tone: payload.backup.lastBackupAt ? 'go' : 'dim',
+        },
+    ...payload.sourceOutages.map((o) => ({
+      label: `${o.label} down`,
+      tone: 'stop' as const,
+      title: `Since ${relative(o.since)}: ${o.error}`,
+    })),
+  ]
   return (
-    <div>
-      <Label htmlFor={id}>{label}</Label>
-      <div className="flex items-center gap-2">
-        <Input
-          id={id}
-          type="number"
-          inputMode="numeric"
-          min={min}
-          max={max}
-          value={Number.isFinite(value) ? value : ''}
-          onChange={(e) => onChange(e.target.valueAsNumber)}
-          aria-invalid={!Number.isFinite(value)}
-          className="w-28 font-mono aria-invalid:border-stop/60"
-        />
-        <span className="text-sm text-dim">{suffix}</span>
-      </div>
-    </div>
+    <ul className="mb-6 flex flex-wrap gap-2" aria-label="Status">
+      {items.map((it) => (
+        <li
+          key={it.label}
+          title={it.title}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[0.7rem]',
+            it.tone === 'stop' ? 'border-stop/40 bg-stop/5 text-stop' : 'border-line text-dim',
+          )}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              'size-1.5 rounded-full',
+              it.tone === 'go' ? 'bg-go' : it.tone === 'stop' ? 'bg-stop' : 'bg-faint',
+            )}
+          />
+          {it.label}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Desktop: the groups down the side, the one in view lit up; a click glides to it. */
+function SideNav({ dirty, onPick }: { dirty: Set<string>; onPick: (id: string) => void }) {
+  const [current, setCurrent] = useState<string>(GROUPS[0].id)
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return
+    const seen = new Map<string, boolean>()
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) seen.set(e.target.id, e.isIntersecting)
+        // At the very bottom the last group can't reach the band; it's the one in view
+        const atEnd =
+          window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4
+        const first = atEnd ? GROUPS.at(-1) : GROUPS.find((g) => seen.get(g.id))
+        if (first) setCurrent(first.id)
+      },
+      { rootMargin: '-20% 0px -55% 0px' },
+    )
+    for (const g of GROUPS) {
+      const el = document.getElementById(g.id)
+      if (el) observer.observe(el)
+    }
+    return () => observer.disconnect()
+  }, [])
+  return (
+    <nav aria-label="Settings sections" className="sticky top-24 hidden self-start lg:block">
+      <ul className="space-y-0.5 border-l border-line">
+        {GROUPS.map((g) => (
+          <li key={g.id}>
+            <button
+              type="button"
+              onClick={() => {
+                setCurrent(g.id)
+                onPick(g.id)
+              }}
+              aria-current={current === g.id ? 'true' : undefined}
+              className={cn(
+                '-ml-px flex w-full items-center gap-2 border-l-2 py-1.5 pl-4 text-left text-sm transition-colors duration-200',
+                current === g.id
+                  ? 'border-signal text-paper'
+                  : 'border-transparent text-dim hover:text-paper',
+              )}
+            >
+              {g.label}
+              {dirty.has(g.id) && (
+                <>
+                  <span aria-hidden className="size-1.5 rounded-full bg-signal" />
+                  <span className="sr-only">(unsaved)</span>
+                </>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </nav>
   )
 }
 
 const WINDOW_PRESETS = [30, 60] as const
 
-/** 30 / 60 days in one tap, or any number of days. */
-function StoreWindowField({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+function StoreWindow({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const preset = WINDOW_PRESETS.find((d) => d === value)
-  const [custom, setCustom] = useState(preset === undefined)
+  const [custom, setCustom] = useState(false)
   const mode = custom || preset === undefined ? 'custom' : String(preset)
   return (
-    <div>
-      <p className="mb-1.5 text-sm font-medium" id="storeWindowLabel">
-        Keep jobs posted within
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <Segmented
-          label="Keep jobs posted within"
-          value={mode}
-          options={[
-            ...WINDOW_PRESETS.map((d) => ({ id: String(d), label: `${d} days` })),
-            { id: 'custom', label: 'Custom' },
-          ]}
-          onChange={(v) => {
-            setCustom(v === 'custom')
-            if (v !== 'custom') onChange(Number(v))
-          }}
-        />
-        {mode === 'custom' && (
-          <div className="flex animate-fade-in items-center gap-2">
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={7}
-              max={120}
-              value={Number.isFinite(value) ? value : ''}
-              onChange={(e) => onChange(e.target.valueAsNumber)}
-              aria-labelledby="storeWindowLabel"
-              aria-invalid={!Number.isFinite(value)}
-              className="w-20 font-mono aria-invalid:border-stop/60"
-            />
-            <span className="text-sm text-dim">days (7 to 120)</span>
-          </div>
-        )}
-      </div>
-      <p className="mt-1.5 text-xs text-dim">
-        Older roles that are still open show up further down the feed. New-grad roles on company
-        boards are kept for up to 180 days, since firms post them months ahead. Pushes only cover
-        jobs within max job age.
-      </p>
+    <div className="flex flex-wrap items-center gap-2">
+      <Segmented
+        label="Keep jobs posted within"
+        value={mode}
+        options={[
+          ...WINDOW_PRESETS.map((d) => ({ id: String(d), label: `${d} days` })),
+          { id: 'custom', label: 'Custom' },
+        ]}
+        onChange={(v) => {
+          setCustom(v === 'custom')
+          if (v !== 'custom') onChange(Number(v))
+        }}
+      />
+      {mode === 'custom' && (
+        <span className="animate-fade-in">
+          <NumberInput
+            id="storeWindow"
+            label="Days to keep roles"
+            value={value}
+            onChange={onChange}
+            min={7}
+            max={120}
+            suffix="days"
+          />
+        </span>
+      )}
     </div>
   )
 }
 
-function MatchingSection({ settings }: { settings: Settings }) {
-  const { draft, set, dirty, valid, reset } = useDraft('Matching', settings, [
-    'locations',
-    'roleKeywords',
-    'levelKeywords',
-    'excludeKeywords',
-    'minSalaryUsd',
-    'requireLevelOnBoards',
-    'experienceCutoffYears',
-  ] as const)
-  const { save, pending, error } = useSave('Matching')
-  const [newLabel, setNewLabel] = useState('')
-  const duplicate = draft.locations.some(
-    (l) => l.label.toLowerCase() === newLabel.trim().toLowerCase(),
-  )
-
-  const updateLoc = (i: number, patch: Partial<Settings['locations'][number]>) =>
-    set(
-      'locations',
-      draft.locations.map((l, j) => (j === i ? { ...l, ...patch } : l)),
-    )
-
-  return (
-    <Section
-      title="Matching"
-      dirty={dirty}
-      description="Company-board titles need a role keyword and nothing senior (exclude keywords, or levels like II or 3). The new-grad lists are new-grad only, so their titles just need to avoid excludes."
-      footer={
-        <SaveBar
-          dirty={dirty}
-          valid={valid}
-          onSave={() => save(draft)}
-          onReset={reset}
-          pending={pending}
-          error={error}
-        />
-      }
-    >
-      <div>
-        <p className="mb-2 font-mono text-[0.7rem] tracking-wider text-dim uppercase">Locations</p>
-        <ul className="space-y-2">
-          {draft.locations.map((loc, i) => (
-            <li
-              key={loc.label}
-              className={cn(
-                'animate-rise rounded-lg border border-line bg-ink/40 p-3 transition-opacity duration-200',
-                !loc.enabled && 'opacity-60',
-              )}
-            >
-              <div className="mb-2 flex items-center gap-3">
-                <Switch
-                  checked={loc.enabled}
-                  onCheckedChange={(enabled) => updateLoc(i, { enabled })}
-                  aria-label={`Enable ${loc.label}`}
-                />
-                <span className="font-semibold">{loc.label}</span>
-                {loc.builtin && <Badge tone="info">built-in rule</Badge>}
-                {!loc.builtin && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="ml-auto size-7"
-                    aria-label={`Remove ${loc.label}`}
-                    onClick={() =>
-                      set(
-                        'locations',
-                        draft.locations.filter((_, j) => j !== i),
-                      )
-                    }
-                  >
-                    <Trash2 />
-                  </Button>
-                )}
-              </div>
-              {loc.builtin ? (
-                <p className="text-xs text-dim">
-                  Matches “Remote”, “Remote - US”, “Remote in USA”, “United States (Remote)”; not
-                  “Remote in UK”.
-                </p>
-              ) : (
-                <ChipsInput
-                  label="Aliases"
-                  value={loc.aliases}
-                  onChange={(aliases) => updateLoc(i, { aliases })}
-                />
-              )}
-            </li>
-          ))}
-        </ul>
-        <form
-          className="mt-2 flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            const label = newLabel.trim()
-            if (!label || duplicate) return
-            set('locations', [
-              ...draft.locations.filter((l) => !l.builtin),
-              { label, aliases: [label.toLowerCase()], enabled: true },
-              ...draft.locations.filter((l) => l.builtin),
-            ])
-            setNewLabel('')
-          }}
-        >
-          <Input
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="New location, e.g. Boston"
-            aria-label="New location label"
-            aria-invalid={duplicate}
-            className="max-w-xs aria-invalid:border-stop/60"
-          />
-          <Button type="submit" size="md" disabled={!newLabel.trim() || duplicate}>
-            <Plus /> Add
-          </Button>
-        </form>
-        {duplicate && (
-          <p className="mt-1.5 animate-fade-in text-xs text-stop">
-            {newLabel.trim()} is already in the list.
-          </p>
-        )}
-      </div>
-      <ChipsInput
-        label="Role keywords (any)"
-        value={draft.roleKeywords}
-        onChange={(v) => set('roleKeywords', v)}
-      />
-      <ChipsInput
-        label="Level keywords (any)"
-        value={draft.levelKeywords}
-        onChange={(v) => set('levelKeywords', v)}
-      />
-      <ChipsInput
-        label="Exclude keywords"
-        tone="stop"
-        value={draft.excludeKeywords}
-        onChange={(v) => set('excludeKeywords', v)}
-      />
-      <Row
-        label="Require a level keyword on company boards"
-        hint="Off: plain titles like “Software Engineer” count too. On: only titles that say new grad, junior, I, and so on."
-      >
-        <Switch
-          checked={draft.requireLevelOnBoards}
-          onCheckedChange={(v) => set('requireLevelOnBoards', v)}
-          aria-label="Require a level keyword on company boards"
-        />
-      </Row>
-      <div>
-        <NumberField
-          id="experienceCutoff"
-          label="Hide board jobs asking for"
-          value={draft.experienceCutoffYears}
-          onChange={(n) => set('experienceCutoffYears', n)}
-          min={0}
-          max={20}
-          suffix="+ years of experience (0 = off)"
-        />
-        <p className="mt-1.5 text-xs text-dim">
-          Read from the job description. Titles that say new grad, junior, and so on always stay.
-        </p>
-      </div>
-      <NumberField
-        id="minSalary"
-        label="Min salary (when listed)"
-        value={draft.minSalaryUsd}
-        onChange={(n) => set('minSalaryUsd', n)}
-        min={0}
-        suffix="USD / year (0 = any)"
-      />
-    </Section>
-  )
-}
-
-function TiersSection({ settings }: { settings: Settings }) {
-  const { draft, set, dirty, reset } = useDraft('Tiers', settings, [
-    'tiersToTrack',
-    'entryLevelOnly',
-  ] as const)
-  const { save, pending, error } = useSave('Tiers')
-  const on = new Set(draft.tiersToTrack)
-  return (
-    <Section
-      title="Tiers to track"
-      dirty={dirty}
-      description="Decides which companies are polled, which jobs push, and the feed’s default tier filter. Unlisted = roles from the new-grad lists at companies not in your list."
-      footer={
-        <SaveBar
-          dirty={dirty}
-          onSave={() => save(draft)}
-          onReset={reset}
-          pending={pending}
-          error={error}
-        />
-      }
-    >
-      <div className="flex flex-wrap gap-2">
-        {TIER_FILTERS.map((t) => (
-          <button
-            key={t}
-            type="button"
-            aria-pressed={on.has(t)}
-            onClick={() =>
-              set(
-                'tiersToTrack',
-                on.has(t) ? draft.tiersToTrack.filter((x) => x !== t) : [...draft.tiersToTrack, t],
-              )
-            }
-            className={cn(
-              'rounded-full border px-3 py-1 text-sm transition-[color,background-color,border-color,scale] duration-150 active:scale-95',
-              on.has(t)
-                ? 'border-signal/60 bg-signal-soft text-signal'
-                : 'border-line text-dim hover:text-paper',
-            )}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-      <Row
-        label="Entry level only"
-        hint="Feed and pushes: titles that say new grad, junior, I and so on, plus everything on the new-grad lists. Hides plain “Software Engineer” board roles."
-      >
-        <Switch
-          checked={draft.entryLevelOnly}
-          onCheckedChange={(v) => set('entryLevelOnly', v)}
-          aria-label="Entry level only"
-        />
-      </Row>
-    </Section>
-  )
-}
-
-function ListsSection({ payload }: { payload: SettingsPayload }) {
-  const { draft, set, dirty, reset } = useDraft('New-grad lists', payload.settings, [
-    'simplifyCategories',
-    'applyLevelToSimplify',
-    'showSimplifyJobs',
-    'suggestCompanies',
-  ] as const)
-  const { save, pending, error } = useSave('New-grad lists')
-  return (
-    <Section
-      title="New-grad lists"
-      dirty={dirty}
-      description={
-        payload.sourceHealth.length > 0 && (
-          <span className="grid gap-0.5">
-            {payload.sourceHealth.map((h) => (
-              <span key={h.source}>
-                {h.label}: last good fetch {relative(h.lastSuccessAt)}
-                {h.consecutiveFailures > 0 && (
-                  <span className="text-stop">
-                    {' '}
-                    · {h.consecutiveFailures} failed
-                    {h.lastError ? `: ${h.lastError}` : ''}
-                  </span>
-                )}
-              </span>
-            ))}
-          </span>
-        )
-      }
-      footer={
-        <SaveBar
-          dirty={dirty}
-          onSave={() => save(draft)}
-          onReset={reset}
-          pending={pending}
-          error={error}
-        />
-      }
-    >
-      <ChipsInput
-        label="Trusted SimplifyJobs categories (others need a role keyword)"
-        value={draft.simplifyCategories}
-        onChange={(v) => set('simplifyCategories', v)}
-      />
-      <Row label="Apply level keywords" hint="Also require a level keyword in list titles.">
-        <Switch
-          checked={draft.applyLevelToSimplify}
-          onCheckedChange={(v) => set('applyLevelToSimplify', v)}
-          aria-label="Apply level keywords to the lists"
-        />
-      </Row>
-      <Row label="Show list-only roles" hint="Roles also found on a company board always show.">
-        <Switch
-          checked={draft.showSimplifyJobs}
-          onCheckedChange={(v) => set('showSimplifyJobs', v)}
-          aria-label="Show roles found only on the lists"
-        />
-      </Row>
-      <Row
-        label="Add companies automatically"
-        hint={
-          payload.tierModel
-            ? `Every company with matching roles on the lists is added: polled when its Greenhouse, Lever or Ashby board answers, else kept for its list jobs. ${payload.tierModel} rates its tier.`
-            : 'Every company with matching roles on the lists is added: polled when its Greenhouse, Lever or Ashby board answers, else kept for its list jobs. They start as Startup; set OPENAI_API_KEY to rate their tier automatically.'
-        }
-      >
-        <Switch
-          checked={draft.suggestCompanies}
-          onCheckedChange={(v) => set('suggestCompanies', v)}
-          aria-label="Add companies from the lists automatically"
-        />
-      </Row>
-    </Section>
-  )
-}
-
-function ScheduleSection({ payload }: { payload: SettingsPayload }) {
-  const { draft, set, dirty, valid, reset } = useDraft('Schedule', payload.settings, [
-    'maxJobAgeHours',
-    'pollEveryMinutes',
-    'pushEveryMinutes',
-    'quietHours',
-    'storeWindowDays',
-  ] as const)
-  const { save, pending, error } = useSave('Schedule')
-  return (
-    <Section
-      title="Schedule & notifications"
-      dirty={dirty}
-      description={
-        <>
-          Last poll {relative(payload.lastPollAt)} · last push {relative(payload.lastPushAt)}
-          {payload.backup.lastBackupAt && !payload.backup.problem && (
-            <> · last backup {relative(payload.backup.lastBackupAt)}</>
-          )}
-          {payload.backup.problem && (
-            <span className="block text-stop">Backups: {payload.backup.problem}</span>
-          )}
-        </>
-      }
-      footer={
-        <SaveBar
-          dirty={dirty}
-          valid={valid}
-          onSave={() => save(draft)}
-          onReset={reset}
-          pending={pending}
-          error={error}
-        />
-      }
-    >
-      <div className="grid gap-4 sm:grid-cols-3">
-        <NumberField
-          id="pollEvery"
-          label="Poll every"
-          value={draft.pollEveryMinutes}
-          onChange={(n) => set('pollEveryMinutes', n)}
-          min={5}
-          max={1440}
-          suffix="min"
-        />
-        <NumberField
-          id="pushEvery"
-          label="Push every"
-          value={draft.pushEveryMinutes}
-          onChange={(n) => set('pushEveryMinutes', n)}
-          min={5}
-          max={1440}
-          suffix="min"
-        />
-        <NumberField
-          id="maxAge"
-          label="Max job age"
-          value={draft.maxJobAgeHours}
-          onChange={(n) => set('maxJobAgeHours', n)}
-          min={1}
-          max={168}
-          suffix="hours"
-        />
-      </div>
-      <StoreWindowField value={draft.storeWindowDays} onChange={(n) => set('storeWindowDays', n)} />
-      <div>
-        <p className="mb-1.5 font-mono text-[0.7rem] tracking-wider text-dim uppercase">
-          Quiet hours (Eastern)
-        </p>
-        <div className="flex items-center gap-2">
-          <Input
-            type="time"
-            aria-label="Quiet hours start"
-            value={draft.quietHours.start}
-            onChange={(e) => set('quietHours', { ...draft.quietHours, start: e.target.value })}
-            className="w-32 font-mono"
-          />
-          <span className="text-dim">to</span>
-          <Input
-            type="time"
-            aria-label="Quiet hours end"
-            value={draft.quietHours.end}
-            onChange={(e) => set('quietHours', { ...draft.quietHours, end: e.target.value })}
-            className="w-32 font-mono"
-          />
-          <span className="text-xs text-faint">same time = off</span>
-        </div>
-      </div>
-    </Section>
-  )
-}
-
-function SourcesSection({ payload }: { payload: SettingsPayload }) {
-  const { draft, set, dirty, reset } = useDraft('Sources', payload.settings, [
-    'disabledSources',
-  ] as const)
-  const { save, pending, error } = useSave('Sources')
-  const off = new Set(draft.disabledSources)
-  const outage = (id: string) => payload.sourceOutages.find((o) => o.source === id)
-  return (
-    <Section
-      title="Sources"
-      dirty={dirty}
-      description="Turning a source off stops polling it; jobs already found stay."
-      footer={
-        <SaveBar
-          dirty={dirty}
-          onSave={() => save(draft)}
-          onReset={reset}
-          pending={pending}
-          error={error}
-        />
-      }
-    >
-      {payload.sources.map((s) => (
-        <Row
-          key={s.id}
-          label={s.label}
-          hint={
-            outage(s.id) ? (
-              <span className="text-stop">
-                Looks down since {relative(outage(s.id)?.since ?? null)}: all {outage(s.id)?.boards}{' '}
-                boards failed ({outage(s.id)?.error}). Retried every poll.
-              </span>
-            ) : s.kind === 'ats' ? (
-              'Company job boards'
-            ) : (
-              'Aggregated list'
-            )
-          }
-        >
-          <Switch
-            checked={!off.has(s.id)}
-            aria-label={`Poll ${s.label}`}
-            onCheckedChange={(v) =>
-              set(
-                'disabledSources',
-                v
-                  ? draft.disabledSources.filter((x) => x !== s.id)
-                  : [...draft.disabledSources, s.id],
-              )
-            }
-          />
-        </Row>
-      ))}
-    </Section>
-  )
-}
-
-function SettingsSkeleton() {
-  return (
-    <div aria-hidden className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-      <Skeleton className="h-[34rem] rounded-xl bg-panel" />
-      <div className="space-y-4">
-        <Skeleton className="h-64 rounded-xl bg-panel" />
-        <Skeleton className="h-32 rounded-xl bg-panel" />
-      </div>
-    </div>
-  )
-}
-
-export function SettingsPage() {
-  const settings = useQuery({
-    queryKey: queryKeys.settings,
-    queryFn: () => unwrap(api.api.settings.$get()),
+function SettingsForm({ payload }: { payload: SettingsPayload }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const { draft, set, changed, valid, reset, commit, version } = useDraft(payload.settings)
+  const [advanced, setAdvanced] = useState(false)
+  const save = useMutation({
+    mutationFn: (json: Partial<Settings>) => unwrap(api.api.settings.$patch({ json })),
+    onSuccess: (data) => {
+      qc.setQueryData(queryKeys.settings, data)
+      commit(data.settings)
+      void qc.invalidateQueries({ queryKey: queryKeys.allJobs })
+      toast('Settings saved: they apply from the next poll')
+    },
+    onError: (err) => toast.error(err.message),
   })
-  const [dirtySections, setDirtySections] = useState<string[]>([])
-  const report = useCallback((section: string, dirty: boolean) => {
-    setDirtySections((list) =>
-      dirty === list.includes(section)
-        ? list
-        : dirty
-          ? [...list, section]
-          : list.filter((s) => s !== section),
-    )
-  }, [])
+  const dirtyGroups = new Set(
+    GROUPS.filter((g) => g.keys.some((k) => changed.includes(k))).map((g) => g.id),
+  )
   const blocker = useBlocker({
-    shouldBlockFn: () => dirtySections.length > 0,
-    enableBeforeUnload: () => dirtySections.length > 0,
+    shouldBlockFn: () => changed.length > 0,
+    enableBeforeUnload: () => changed.length > 0,
     withResolver: true,
   })
 
+  const pick = (id: string) => {
+    if (id === 'advanced') setAdvanced(true)
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    document.getElementById(id)?.scrollIntoView({ behavior: still ? 'auto' : 'smooth' })
+  }
+  const lists = new Map(payload.sourceHealth.map((h) => [h.source, h]))
+  const off = new Set(draft.disabledSources)
+
   return (
-    <DirtyContext.Provider value={report}>
-      <section>
-        <PageHeader
-          title="Settings"
-          description="Changes apply from the next poll. Each section saves on its own."
-          actions={
-            <Button size="sm" variant="ghost" asChild>
-              <Link to="/logs">
-                <ScrollText /> Logs
-              </Link>
-            </Button>
-          }
-        />
-        {settings.isError && !settings.data ? (
-          <ErrorState
-            error={settings.error}
-            onRetry={() => settings.refetch()}
-            retrying={settings.isFetching}
-          />
-        ) : !settings.data ? (
-          <SettingsSkeleton />
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr] 2xl:grid-cols-[1.2fr_1fr]">
-            <div className="space-y-4">
-              <MatchingSection settings={settings.data.settings} />
-            </div>
-            <div className="space-y-4">
-              <ScheduleSection payload={settings.data} />
-              <TiersSection settings={settings.data.settings} />
-              <ListsSection payload={settings.data} />
-              <SourcesSection payload={settings.data} />
-            </div>
-          </div>
-        )}
-      </section>
+    <>
+      <StatusStrip payload={payload} />
+      <div className="grid gap-10 lg:grid-cols-[10rem_minmax(0,46rem)]">
+        <SideNav dirty={dirtyGroups} onPick={pick} />
+        <div className="min-w-0 space-y-5">
+          <Card
+            id="feed"
+            title="Feed"
+            description="Which roles reach your feed and your phone."
+            dirty={dirtyGroups.has('feed')}
+          >
+            <Field
+              label="Tiers to track"
+              hint="Their boards are checked every poll, and their roles are pushed."
+              stack
+            >
+              <TierPicker value={draft.tiersToTrack} onChange={(v) => set('tiersToTrack', v)} />
+            </Field>
+            <Toggle
+              id="entryLevelOnly"
+              label="Entry level only"
+              hint="Only titles that say new grad, junior, I and so on (the new-grad lists always count)."
+              checked={draft.entryLevelOnly}
+              onChange={(v) => set('entryLevelOnly', v)}
+            />
+            <Field
+              label="Hide roles asking for"
+              hint="Years of experience, read from the description. 0 shows them all."
+              htmlFor="experienceCutoff"
+            >
+              <NumberInput
+                id="experienceCutoff"
+                value={draft.experienceCutoffYears}
+                onChange={(n) => set('experienceCutoffYears', n)}
+                min={0}
+                max={20}
+                suffix="+ years"
+              />
+            </Field>
+            <Field
+              label="Minimum salary"
+              hint="Only when a posting lists pay. 0 shows them all."
+              htmlFor="minSalary"
+            >
+              <NumberInput
+                id="minSalary"
+                value={draft.minSalaryUsd}
+                onChange={(n) => set('minSalaryUsd', n)}
+                min={0}
+                suffix="USD/yr"
+              />
+            </Field>
+          </Card>
+
+          <Card
+            id="places"
+            title="Places"
+            description="Roles in these places rank higher and are the ones pushed."
+            dirty={dirtyGroups.has('places')}
+          >
+            <LocationsEditor value={draft.locations} onChange={(v) => set('locations', v)} />
+          </Card>
+
+          <Card
+            id="notifications"
+            title="Notifications"
+            description={`Last push ${relative(payload.lastPushAt)}.`}
+            dirty={dirtyGroups.has('notifications')}
+          >
+            <Field label="Push every" htmlFor="pushEvery">
+              <NumberInput
+                id="pushEvery"
+                value={draft.pushEveryMinutes}
+                onChange={(n) => set('pushEveryMinutes', n)}
+                min={5}
+                max={1440}
+                suffix="min"
+              />
+            </Field>
+            <Field
+              label="Only push roles newer than"
+              hint="Older ones still show in the feed."
+              htmlFor="maxAge"
+            >
+              <NumberInput
+                id="maxAge"
+                value={draft.maxJobAgeHours}
+                onChange={(n) => set('maxJobAgeHours', n)}
+                min={1}
+                max={168}
+                suffix="hours"
+              />
+            </Field>
+            <Field
+              label="Quiet hours"
+              hint="Eastern time. No pushes in between; the same time twice turns it off."
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  type="time"
+                  aria-label="Quiet hours start"
+                  value={draft.quietHours.start}
+                  onChange={(e) =>
+                    set('quietHours', { ...draft.quietHours, start: e.target.value })
+                  }
+                  className="w-32 font-mono"
+                />
+                <span className="text-sm text-dim">to</span>
+                <Input
+                  type="time"
+                  aria-label="Quiet hours end"
+                  value={draft.quietHours.end}
+                  onChange={(e) => set('quietHours', { ...draft.quietHours, end: e.target.value })}
+                  className="w-32 font-mono"
+                />
+              </div>
+            </Field>
+          </Card>
+
+          <Card
+            id="sources"
+            title="Sources"
+            description="Where roles come from. Turning one off keeps the roles it already found."
+            dirty={dirtyGroups.has('sources')}
+          >
+            {payload.sources.map((s) => {
+              const down = payload.sourceOutages.find((o) => o.source === s.id)
+              const health = lists.get(s.id)
+              return (
+                <Field
+                  key={s.id}
+                  label={s.label}
+                  htmlFor={`source-${s.id}`}
+                  hint={
+                    down ? (
+                      <span className="text-stop">
+                        Down since {relative(down.since)} ({down.error}). Retried every poll.
+                      </span>
+                    ) : health ? (
+                      <>
+                        New-grad list · fetched {relative(health.lastSuccessAt)}
+                        {health.consecutiveFailures > 0 && (
+                          <span className="text-stop">
+                            {' '}
+                            · last {health.consecutiveFailures} failed
+                          </span>
+                        )}
+                      </>
+                    ) : s.kind === 'ats' ? (
+                      'Company job boards'
+                    ) : (
+                      'New-grad list'
+                    )
+                  }
+                >
+                  <Switch
+                    id={`source-${s.id}`}
+                    checked={!off.has(s.id)}
+                    onCheckedChange={(v) =>
+                      set(
+                        'disabledSources',
+                        v
+                          ? draft.disabledSources.filter((x) => x !== s.id)
+                          : [...draft.disabledSources, s.id],
+                      )
+                    }
+                  />
+                </Field>
+              )
+            })}
+            <Toggle
+              id="suggestCompanies"
+              label="Add companies automatically"
+              hint={
+                payload.tierModel
+                  ? `Companies hiring on the lists are added and rated by ${payload.tierModel}.`
+                  : 'Companies hiring on the lists are added as Startup (add an OpenAI key to rate them).'
+              }
+              checked={draft.suggestCompanies}
+              onChange={(v) => set('suggestCompanies', v)}
+            />
+            <Toggle
+              id="showSimplifyJobs"
+              label="Show roles found only on the lists"
+              hint="Roles also on a company board always show."
+              checked={draft.showSimplifyJobs}
+              onChange={(v) => set('showSimplifyJobs', v)}
+            />
+          </Card>
+
+          <section
+            id="advanced"
+            aria-labelledby="advanced-title"
+            className={cn(
+              'scroll-mt-24 rounded-xl border bg-panel/60 transition-colors duration-300',
+              dirtyGroups.has('advanced') ? 'border-signal/40' : 'border-line',
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => setAdvanced((a) => !a)}
+              aria-expanded={advanced}
+              aria-controls="advanced-body"
+              className="flex w-full items-center gap-3 rounded-xl px-5 py-4 text-left transition-colors hover:bg-raised/40"
+            >
+              <span className="flex-1">
+                <span id="advanced-title" className="flex items-center gap-2 font-semibold">
+                  Advanced
+                  {dirtyGroups.has('advanced') && (
+                    <>
+                      <span aria-hidden className="size-1.5 rounded-full bg-signal" />
+                      <span className="sr-only">(unsaved)</span>
+                    </>
+                  )}
+                </span>
+                <span className="mt-0.5 block text-sm text-dim">
+                  Polling, history and the keywords behind matching.
+                </span>
+              </span>
+              <ChevronDown
+                className={cn(
+                  'size-4 text-dim transition-transform duration-300 ease-(--ease-out)',
+                  advanced && 'rotate-180',
+                )}
+              />
+            </button>
+            <Reveal open={advanced} id="advanced-body">
+              <div className="divide-y divide-line/70 border-t border-line/70">
+                <Field label="Check for new roles every" htmlFor="pollEvery">
+                  <NumberInput
+                    id="pollEvery"
+                    value={draft.pollEveryMinutes}
+                    onChange={(n) => set('pollEveryMinutes', n)}
+                    min={5}
+                    max={1440}
+                    suffix="min"
+                  />
+                </Field>
+                <Field
+                  label="Keep roles posted within"
+                  hint="Older roles still open sink down the feed. New-grad board roles stay up to 180 days."
+                >
+                  <StoreWindow
+                    key={version}
+                    value={draft.storeWindowDays}
+                    onChange={(n) => set('storeWindowDays', n)}
+                  />
+                </Field>
+                <Toggle
+                  id="requireLevelOnBoards"
+                  label="Boards: titles must say the level"
+                  hint="Off lets plain “Software Engineer” through; levels like II or Senior never pass."
+                  checked={draft.requireLevelOnBoards}
+                  onChange={(v) => set('requireLevelOnBoards', v)}
+                />
+                <Toggle
+                  id="applyLevelToSimplify"
+                  label="Lists: titles must say the level"
+                  hint="Usually off: the lists are new-grad already."
+                  checked={draft.applyLevelToSimplify}
+                  onChange={(v) => set('applyLevelToSimplify', v)}
+                />
+                <KeywordField
+                  label="Role keywords"
+                  hint="A title needs one of these."
+                  value={draft.roleKeywords}
+                  onChange={(v) => set('roleKeywords', v)}
+                />
+                <KeywordField
+                  label="Level keywords"
+                  hint="These mark a title as entry level."
+                  value={draft.levelKeywords}
+                  onChange={(v) => set('levelKeywords', v)}
+                />
+                <KeywordField
+                  label="Exclude keywords"
+                  hint="Any of these hides a title."
+                  tone="stop"
+                  value={draft.excludeKeywords}
+                  onChange={(v) => set('excludeKeywords', v)}
+                />
+                <KeywordField
+                  label="Trusted SimplifyJobs categories"
+                  hint="Roles in these pass without a role keyword."
+                  value={draft.simplifyCategories}
+                  onChange={(v) => set('simplifyCategories', v)}
+                />
+              </div>
+            </Reveal>
+          </section>
+        </div>
+      </div>
+
+      <SaveBar
+        count={changed.length}
+        valid={valid}
+        pending={save.isPending}
+        onSave={() =>
+          save.mutate(Object.fromEntries(changed.map((k) => [k, draft[k]])) as Partial<Settings>)
+        }
+        onDiscard={reset}
+      />
 
       <Dialog open={blocker.status === 'blocked'} onOpenChange={(o) => !o && blocker.reset?.()}>
         <DialogContent
           title="Leave without saving?"
-          description={`Unsaved changes in ${dirtySections.join(', ')} will be lost.`}
+          description={`${changed.length} unsaved change${changed.length === 1 ? '' : 's'} will be lost.`}
         >
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => blocker.reset?.()} autoFocus>
@@ -751,6 +628,72 @@ export function SettingsPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </DirtyContext.Provider>
+    </>
+  )
+}
+
+function KeywordField({
+  label,
+  hint,
+  value,
+  onChange,
+  tone,
+}: {
+  label: string
+  hint: ReactNode
+  value: string[]
+  onChange: (v: string[]) => void
+  tone?: 'stop'
+}) {
+  return (
+    <div className="px-5 py-3.5">
+      <ChipsInput label={label} value={value} onChange={onChange} tone={tone} />
+      <p className="mt-1.5 text-xs text-dim">{hint}</p>
+    </div>
+  )
+}
+
+function SettingsSkeleton() {
+  return (
+    <div aria-hidden className="grid gap-10 lg:grid-cols-[10rem_minmax(0,46rem)]">
+      <div className="hidden space-y-3 lg:block">
+        {GROUPS.map((g) => (
+          <Skeleton key={g.id} className="h-4 w-24" />
+        ))}
+      </div>
+      <div className="space-y-5">
+        <Skeleton className="h-72 rounded-xl bg-panel" />
+        <Skeleton className="h-56 rounded-xl bg-panel" />
+        <Skeleton className="h-48 rounded-xl bg-panel" />
+      </div>
+    </div>
+  )
+}
+
+export function SettingsPage() {
+  const settings = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: () => unwrap(api.api.settings.$get()),
+  })
+  return (
+    <section>
+      <PageHeader
+        title="Settings"
+        description="Saved together. Changes apply from the next poll."
+      />
+      {settings.isError && !settings.data ? (
+        <ErrorState
+          error={settings.error}
+          onRetry={() => settings.refetch()}
+          retrying={settings.isFetching}
+        />
+      ) : !settings.data ? (
+        <SettingsSkeleton />
+      ) : (
+        <div className="animate-fade-in">
+          <SettingsForm payload={settings.data} />
+        </div>
+      )}
+    </section>
   )
 }

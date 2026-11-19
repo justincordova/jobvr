@@ -17,6 +17,8 @@ export function ChipsInput({
   tone?: 'neutral' | 'stop'
 }) {
   const [text, setText] = useState('')
+  // Backspace on an empty field marks the last chip first; a second one removes it
+  const [armed, setArmed] = useState(false)
   const id = useId()
 
   const add = (raw: string) => {
@@ -37,7 +39,10 @@ export function ChipsInput({
       e.preventDefault()
       add(text)
     } else if (e.key === 'Backspace' && !text && value.length) {
-      onChange(value.slice(0, -1))
+      if (armed) onChange(value.slice(0, -1))
+      setArmed(!armed)
+    } else if (armed) {
+      setArmed(false)
     }
   }
 
@@ -50,12 +55,13 @@ export function ChipsInput({
         {label}
       </label>
       <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-line-strong bg-panel p-1.5 transition-colors hover:border-faint focus-within:border-signal">
-        {value.map((v) => (
+        {value.map((v, i) => (
           <span
             key={v}
             className={cn(
-              'inline-flex animate-pop-in items-center gap-1 rounded px-2 py-0.5 font-mono text-xs',
+              'inline-flex animate-pop-in items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-shadow duration-150',
               tone === 'stop' ? 'bg-stop/10 text-stop' : 'bg-raised text-paper ring-1 ring-line',
+              armed && i === value.length - 1 && 'ring-2 ring-stop/70',
             )}
           >
             {v}
@@ -63,7 +69,7 @@ export function ChipsInput({
               type="button"
               onClick={() => onChange(value.filter((x) => x !== v))}
               aria-label={`Remove ${v}`}
-              className="relative -mr-0.5 rounded-sm p-0.5 text-faint transition-colors after:absolute after:-inset-2 hover:text-paper"
+              className="relative -mr-0.5 rounded-sm p-0.5 text-faint transition-colors after:absolute after:-inset-2 hover:text-paper pointer-coarse:after:-inset-3"
             >
               <X className="size-3" />
             </button>
@@ -74,11 +80,17 @@ export function ChipsInput({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
-          onBlur={() => text && add(text)}
+          onBlur={() => {
+            setArmed(false)
+            if (text) add(text)
+          }}
           placeholder={value.length ? '' : placeholder}
           className="min-w-32 flex-1 bg-transparent px-1.5 py-0.5 text-base placeholder:text-faint sm:text-sm focus:outline-none"
         />
       </div>
+      <p aria-live="polite" className="sr-only">
+        {armed && value.length > 0 ? `Press Backspace again to remove ${value.at(-1)}` : ''}
+      </p>
     </div>
   )
 }
