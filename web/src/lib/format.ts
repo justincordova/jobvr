@@ -46,8 +46,3 @@ export function toDateInput(iso: string): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
-
-/** Local date input → ISO at local noon (avoids timezone day shifts). */
-export function fromDateInput(value: string): string {
-  return new Date(`${value}T12:00:00`).toISOString()
-}

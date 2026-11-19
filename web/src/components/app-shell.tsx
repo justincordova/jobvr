@@ -160,7 +160,7 @@ export function AppShell() {
 
       <main
         key={pathname}
-        className="flex-1 animate-page px-4 pt-6 pb-[calc(4rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-10"
+        className="flex-1 animate-page px-4 pt-6 pb-[calc(2.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-10"
       >
         <Outlet />
       </main>

@@ -66,7 +66,6 @@ export const router = createRouter({
   defaultPreload: 'intent',
   scrollRestoration: true,
 })
-export { feedRoute }
 
 declare module '@tanstack/react-router' {
   interface Register {

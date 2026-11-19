@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from '@/components/toast'
 import { safeHref } from '@/lib/format'
 import type { Job } from '@/lib/types'
+import { SEARCH_INPUT_ID } from './filter-bar'
 import type { View } from './search'
 
 export const SHORTCUTS: { keys: string[]; label: string }[] = [
@@ -28,13 +29,17 @@ const rowLink = (id: string) =>
 const controlOf = (target: EventTarget | null) =>
   target instanceof Element
     ? target.closest(
-        'a, button, summary, [role="radio"], [role="switch"], [role="tab"], [role="menuitem"]',
+        'a, button, summary, [role="radio"], [role="switch"], [role="tab"], [role^="menuitem"]',
       )
     : null
 
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
-  Boolean(target.closest('input, textarea, select, [contenteditable], [role="dialog"]'))
+  Boolean(
+    target.closest(
+      'input, textarea, select, [contenteditable], [role="dialog"], [role="menu"], [role="listbox"]',
+    ),
+  )
 
 /**
  * Gmail-style triage on the feed. The selected row follows keyboard focus (Tab
@@ -91,7 +96,7 @@ export function useFeedKeys({
       link?.closest('li')?.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' })
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return
       const { list, index, onState, onView, onHelp, onDetails } = latest.current
       const job = index >= 0 ? list[index] : undefined
       const key = e.key
@@ -102,8 +107,10 @@ export function useFeedKeys({
       if (key === 'j' || (key === 'ArrowDown' && arrowsFree)) select(index + 1)
       else if (key === 'k' || (key === 'ArrowUp' && arrowsFree)) select(index < 0 ? 0 : index - 1)
       else if (key === '?') onHelp()
-      else if (key === '/') document.getElementById('feed-search')?.focus()
+      else if (key === '/') document.getElementById(SEARCH_INPUT_ID)?.focus()
       else if (key in VIEW_KEYS) onView(VIEW_KEYS[key] as View)
+      // Held down, these would fire a burst of changes
+      else if (e.repeat && ['a', 's', 'h', 'u'].includes(key)) handled = false
       else if (key === 'u') handled = toast.undoLatest()
       else if (key === 'Escape' && job) {
         setPicked(null)

@@ -49,9 +49,13 @@ export function useJobActions() {
         .flatMap(([, list]) => list?.jobs ?? [])
       const ids = [id, ...also]
       // Only these jobs are put back on error, so other quick actions aren't undone too
-      const before = new Map<string, JobState>()
-      for (const j of cached) if (ids.includes(j.id) && !before.has(j.id)) before.set(j.id, j.state)
-      const prev = before.get(id) ?? 'new'
+      const before = new Map<string, Pick<Job, 'state' | 'appliedAt'>>()
+      for (const j of cached) {
+        if (ids.includes(j.id) && !before.has(j.id)) {
+          before.set(j.id, { state: j.state, appliedAt: j.appliedAt })
+        }
+      }
+      const prev = before.get(id)?.state ?? 'new'
       await withViewTransition(() =>
         qc.setQueriesData<JobList>({ queryKey: queryKeys.allJobs }, (list) =>
           list
@@ -81,8 +85,8 @@ export function useJobActions() {
             ? {
                 ...list,
                 jobs: list.jobs.map((j) => {
-                  const state = before.get(j.id)
-                  return state ? { ...j, state } : j
+                  const was = before.get(j.id)
+                  return was ? { ...j, ...was } : j
                 }),
               }
             : list,

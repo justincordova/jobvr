@@ -1,4 +1,10 @@
-import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  skipToken,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Bookmark, CloudOff, EyeOff, Keyboard, LoaderCircle, Radar, Send } from 'lucide-react'
 import { type ComponentType, useEffect, useRef, useState } from 'react'
@@ -7,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Reveal } from '@/components/ui/reveal'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import type { JobList } from '@/lib/types'
 import { AppliedOverview } from './applied-overview'
 import { FEED_GRID } from './columns'
 import { FilterBar } from './filter-bar'
@@ -89,6 +96,8 @@ function SkeletonRows() {
 }
 
 const PAGE_SIZE = 500
+// The banner's jobs, kept with the job lists so Save, Hide and Applied (and their undo) update them too
+const BANNER_KEY = queryKeys.jobs({ banner: 'new-since-visit' })
 
 export function FeedPage() {
   return <JobsPage search={useSearch({ from: '/' })} />
@@ -96,6 +105,7 @@ export function FeedPage() {
 
 function JobsPage({ search }: { search: FeedSearch }) {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [bannerOpen, setBannerOpen] = useState(true)
   const [helpOpen, setHelpOpen] = useState(false)
   const [detailsId, setDetailsId] = useState<string | null>(null)
@@ -103,17 +113,19 @@ function JobsPage({ search }: { search: FeedSearch }) {
   const view = search.view ?? 'feed'
   // A bare page (the home-screen icon, a reload) opens with the filters last used here
   const opening = useRef(true)
+  const searchId = JSON.stringify(search)
   useEffect(() => {
+    const now: FeedSearch = JSON.parse(searchId)
     if (opening.current) {
       opening.current = false
       const saved = recallSearch(view)
-      if (isBlankSearch(search) && !isBlankSearch(saved)) {
+      if (isBlankSearch(now) && !isBlankSearch(saved)) {
         void navigate({ to: '/', search: saved, replace: true })
         return
       }
     }
-    rememberSearch(view, search)
-  })
+    rememberSearch(view, now)
+  }, [view, searchId, navigate])
   // "Show more" raises the page size; any other change of query starts over
   const queryId = JSON.stringify(baseQuery)
   const [paging, setPaging] = useState({ queryId, limit: PAGE_SIZE })
@@ -131,6 +143,11 @@ function JobsPage({ search }: { search: FeedSearch }) {
     queryKey: queryKeys.settings,
     queryFn: () => unwrap(api.api.settings.$get()),
   })
+  const banner = useQuery<JobList>({
+    queryKey: BANNER_KEY,
+    queryFn: skipToken,
+    gcTime: Number.POSITIVE_INFINITY,
+  })
   const { mutate: recordVisit } = useMutation({
     mutationFn: () => unwrap(api.api.jobs.visit.$post()),
   })
@@ -142,8 +159,11 @@ function JobsPage({ search }: { search: FeedSearch }) {
   const plainFeed = view === 'feed' && !search.q && (search.age ?? DEFAULT_AGE) === DEFAULT_AGE
   useEffect(() => {
     if (!plainFeed || !jobs.data || jobs.isPlaceholderData) return
-    if (captureFirstResponse(jobs.data)) recordVisit()
-  }, [plainFeed, jobs.data, jobs.isPlaceholderData, recordVisit])
+    if (captureFirstResponse(jobs.data)) {
+      qc.setQueryData(BANNER_KEY, { ...jobs.data, jobs: jobs.data.newJobs })
+      recordVisit()
+    }
+  }, [plainFeed, jobs.data, jobs.isPlaceholderData, recordVisit, qc])
 
   const sources = settings.data?.sources ?? []
   const sourceLabel = (id: string) => sources.find((s) => s.id === id)?.label ?? id
@@ -154,6 +174,9 @@ function JobsPage({ search }: { search: FeedSearch }) {
   const goView = (next: View) => navigate({ to: '/', search: recallSearch(next) })
 
   const newCount = sessionNewCount()
+  // Ones applied to or hidden since leave the banner
+  const bannerAll = banner.data?.jobs ?? sessionNewJobs()
+  const bannerJobs = bannerAll.filter((j) => j.state === 'new' || j.state === 'saved')
   const list = (jobs.data?.jobs ?? []).filter((j) =>
     // Optimistic state changes remove rows that no longer belong to this view
     view === 'feed' ? j.state === 'new' || j.state === 'saved' : j.state === view,
@@ -171,7 +194,7 @@ function JobsPage({ search }: { search: FeedSearch }) {
   // banner's new jobs may be hidden by the filters, so they're looked up there too
   const detailsJob =
     jobs.data?.jobs.find((j) => j.id === detailsId) ??
-    sessionNewJobs().find((j) => j.id === detailsId) ??
+    bannerAll.find((j) => j.id === detailsId) ??
     null
   const empty = EMPTY_COPY[view]
   const filtered = activeFilterCount(search) > 0 || Boolean(search.q)
@@ -231,10 +254,10 @@ function JobsPage({ search }: { search: FeedSearch }) {
         onState={act}
       />
 
-      {newCount > 0 && bannerOpen && view === 'feed' && (
+      {bannerJobs.length > 0 && bannerOpen && view === 'feed' && (
         <NewSinceBanner
-          count={newCount}
-          jobs={sessionNewJobs()}
+          count={Math.max(newCount - (bannerAll.length - bannerJobs.length), bannerJobs.length)}
+          jobs={bannerJobs}
           inList={new Set(list.map((j) => j.id))}
           onOpen={(job) => setDetailsId(job.id)}
           onDismiss={() => setBannerOpen(false)}
@@ -245,7 +268,7 @@ function JobsPage({ search }: { search: FeedSearch }) {
 
       {/* Below the filters, so switching views never moves them; it slides open and shut */}
       <Reveal open={view === 'applied'} className="mt-4">
-        <AppliedOverview />
+        <AppliedOverview active={view === 'applied'} />
       </Reveal>
 
       {jobs.isPending ? (

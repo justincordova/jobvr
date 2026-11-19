@@ -89,7 +89,7 @@ export function Toaster() {
     <ol
       aria-live="polite"
       aria-label="Notifications"
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-[60] mx-auto flex w-full max-w-sm flex-col px-3 md:bottom-5"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-[60] mx-auto flex w-full max-w-sm flex-col px-3 md:bottom-5"
     >
       {list.map((t) => (
         <Toast key={t.id} toast={t} />

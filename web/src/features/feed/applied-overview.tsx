@@ -217,16 +217,28 @@ function WeekColumn({
   )
 }
 
-/** The Applied page's header card: pace up top, a GitHub-style year of days, the tier mix in one line. */
-export function AppliedOverview() {
+/**
+ * The Applied view's card: pace up top, a GitHub-style year of days, the tier mix
+ * in one line. It stays mounted to slide in and out, but only loads while ctive.
+ */
+export function AppliedOverview({ active }: { active: boolean }) {
   const { data } = useQuery({
     queryKey: queryKeys.jobs(QUERY),
     queryFn: () => unwrap(api.api.jobs.$get({ query: QUERY })),
+    enabled: active,
   })
   const { ref, weeks, cell } = useWeeksThatFit()
   const [graphOpen, toggleGraph] = useGraphOpen()
   const stats = useMemo(
-    () => (data ? appliedStats(data.jobs, new Date(), MAX_WEEKS) : null),
+    () =>
+      // An optimistic 'Not applied' leaves the job in the cache until the refetch
+      data
+        ? appliedStats(
+            data.jobs.filter((j) => j.state === 'applied'),
+            new Date(),
+            MAX_WEEKS,
+          )
+        : null,
     [data],
   )
   if (!stats || stats.total === 0) return null

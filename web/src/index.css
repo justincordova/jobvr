@@ -107,13 +107,6 @@
   background-size: 0.9rem;
 }
 
-@utility scrollbar-none {
-  scrollbar-width: none;
-  &::-webkit-scrollbar {
-    display: none;
-  }
-}
-
 @layer base {
   html {
     color-scheme: dark;
@@ -145,7 +138,7 @@
     cursor: pointer;
   }
 
-  /* Shared-element moves (board columns, list removals) use the View Transitions API */
+  /* Shared-element moves (list removals) use the View Transitions API */
   ::view-transition-group(*) {
     animation-duration: 240ms;
     animation-timing-function: var(--ease-out);
