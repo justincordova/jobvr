@@ -3,7 +3,9 @@ import {
   addCompanyFrom,
   createCompany,
   deleteCompany,
+  findCompanyByName,
   listCompaniesWithHealth,
+  NotFoundError,
   runAutoTier,
   updateCompany,
 } from "@jobvr/core";
@@ -19,16 +21,31 @@ const withHealth = async (db: AppDeps["database"]["db"], id: string) => {
   return toCompanyDto(found, found.health, found.stats);
 };
 
-/** Rates one company now (when a rater is configured), so its tier shows at once. */
-const rateNow = (deps: AppDeps, id: string) =>
-  runAutoTier({
-    database: deps.database,
-    rater: deps.tierRater,
-    state: deps.tierState,
-    logger,
-    now: deps.now,
-    ids: [id],
-  });
+/**
+ * Rates one company now (when a rater is configured), so its tier shows at once,
+ * and returns it. Rating is best effort; when the AI finds it's a company already
+ * listed under another name, it's merged and that company is returned.
+ */
+const rateNow = async (deps: AppDeps, company: { id: string; name: string }) => {
+  try {
+    await runAutoTier({
+      database: deps.database,
+      rater: deps.tierRater,
+      state: deps.tierState,
+      logger,
+      now: deps.now,
+      ids: [company.id],
+    });
+  } catch (err) {
+    logger.warn({ err, company: company.name }, `couldn't rate ${company.name} now`);
+  }
+  const { db } = deps.database;
+  const [found] = await listCompaniesWithHealth(db, company.id);
+  if (found) return toCompanyDto(found, found.health, found.stats);
+  const into = await findCompanyByName(db, company.name);
+  if (!into) throw new NotFoundError(`Company ${company.name} not found`);
+  return withHealth(db, into.id);
+};
 
 export const listHandler: RouteHandler<typeof routes.list, AppBindings> = async (c) => {
   const { database, now } = c.var.deps;
@@ -56,13 +73,15 @@ export const addHandler: RouteHandler<typeof routes.add, AppBindings> = async (c
     http: deps.http,
     logger,
   });
-  await rateNow(deps, company.id);
+  const dto = await rateNow(deps, company);
   return created(
     c,
-    await withHealth(deps.database.db, company.id),
-    board
-      ? `${company.name} added`
-      : `${company.name} added; no job board found, so its jobs come from the new-grad lists`,
+    dto,
+    dto.id !== company.id
+      ? `${company.name} is already listed as ${dto.name}`
+      : board
+        ? `${company.name} added`
+        : `${company.name} added; no job board found, so its jobs come from the new-grad lists`,
   );
 };
 
@@ -71,14 +90,13 @@ export const updateHandler: RouteHandler<typeof routes.update, AppBindings> = as
   const { autoTier, ...body } = c.req.valid("json");
   assertKnownAts(deps.registry, body.ats);
   const { id } = c.req.valid("param");
-  await updateCompany(deps.database.db, id, {
+  const row = await updateCompany(deps.database.db, id, {
     ...body,
     // A tier someone picks is kept; handing it back lets the AI rate it again
     ...(body.tier && { tierSource: "manual", tierReason: null }),
     ...(autoTier && { tierSource: "pending", tierReason: null }),
   });
-  if (autoTier) await rateNow(deps, id);
-  return ok(c, await withHealth(deps.database.db, id));
+  return ok(c, autoTier ? await rateNow(deps, row) : await withHealth(deps.database.db, id));
 };
 
 export const removeHandler: RouteHandler<typeof routes.remove, AppBindings> = async (c) => {

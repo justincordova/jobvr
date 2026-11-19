@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
@@ -35,4 +36,4 @@ export const runMigrations = (db: Db, migrationsFolder: string) =>
   migrate(db, { migrationsFolder });
 
 /** Absolute path of core's migrations folder when running from source. */
-export const CORE_MIGRATIONS_DIR = new URL("../../drizzle", import.meta.url).pathname;
+export const CORE_MIGRATIONS_DIR = fileURLToPath(new URL("../../drizzle", import.meta.url));

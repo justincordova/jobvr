@@ -263,11 +263,18 @@ export const mergeCompanyInto = (db: DbOrTx, fromId: string, intoId: string): Pr
   });
 
 export const deleteCompany = async (db: DbOrTx, id: string): Promise<void> => {
-  const deleted = await db
-    .delete(companies)
-    .where(eq(companies.id, id))
-    .returning({ id: companies.id });
-  if (deleted.length === 0) throw new NotFoundError("Company not found");
+  await db.transaction(async (tx) => {
+    // Removing a company is final: auto-add would otherwise add it back from the lists
+    await tx.execute(sql`
+      UPDATE suggestions s SET state = 'dismissed'
+      FROM companies c
+      WHERE c.id = ${id} AND (s.id = c.normalized_name OR s.id = ANY(c.aliases))`);
+    const deleted = await tx
+      .delete(companies)
+      .where(eq(companies.id, id))
+      .returning({ id: companies.id });
+    if (deleted.length === 0) throw new NotFoundError("Company not found");
+  });
 };
 
 /** Health of non-company targets (aggregators), keyed by source id. */

@@ -36,8 +36,6 @@ export interface AppOptions {
   schedulerEnabled?: boolean;
 }
 
-/** /health turns 503 when the last poll is older than this many poll intervals. */
-
 /**
  * Build and configure the Hono application.
  *

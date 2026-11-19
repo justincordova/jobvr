@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../db/client";
-import { sourceState } from "../db/schema";
+import { sourceState, suggestions } from "../db/schema";
 import { ConflictError, InvalidError } from "../errors";
 import { createTestDatabase } from "../testing/db";
 import {
@@ -85,5 +85,22 @@ describe("companies repo", () => {
 
     await deleteCompany(db, c.id);
     expect(await db.select().from(sourceState).where(eq(sourceState.key, key))).toHaveLength(0);
+  });
+
+  it("dismisses a deleted company's suggestion, so auto-add doesn't bring it back", async () => {
+    const { db } = database;
+    const c = await createCompany(db, {
+      name: "Zephyrtech",
+      tier: "Startup",
+      ats: "other",
+      track: false,
+      status: "manual_only",
+    });
+    await db
+      .insert(suggestions)
+      .values({ id: "zephyrtech", displayName: "Zephyrtech", ats: "other", state: "added" });
+    await deleteCompany(db, c.id);
+    const [s] = await db.select().from(suggestions).where(eq(suggestions.id, "zephyrtech"));
+    expect(s?.state).toBe("dismissed");
   });
 });

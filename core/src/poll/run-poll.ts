@@ -269,7 +269,9 @@ const fetchAll = async (
   const budget = new AbortController();
   const timer = setTimeout(() => budget.abort(new Error("Poll fetch budget exceeded")), budgetMs);
   const onStop = () => budget.abort(new Error("Shutting down"));
-  stop?.addEventListener("abort", onStop, { once: true });
+  // A stop that came before this point fires no event
+  if (stop?.aborted) onStop();
+  else stop?.addEventListener("abort", onStop, { once: true });
   const bySource = new Map<string, Target[]>();
   for (const t of targets) {
     const list = bySource.get(t.adapter.id) ?? [];

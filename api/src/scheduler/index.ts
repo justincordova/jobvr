@@ -32,9 +32,10 @@ export interface SchedulerOptions {
 }
 
 /**
- * In-process scheduler: one tick 10 s after boot, then every 5 minutes. Each
- * task checks whether it's due (and takes its own advisory lock), so settings
- * changes apply on the next tick. On AWS this becomes an EventBridge rule.
+ * In-process scheduler: one tick 10 s after boot, then every 5 minutes, never
+ * two at once. Each task checks whether it's due (poll and notify also take an
+ * advisory lock), so settings changes apply on the next tick. On AWS this becomes
+ * an EventBridge rule.
  */
 export const startScheduler = (options: SchedulerOptions) => {
   const { database, registry, logger } = options;
@@ -95,6 +96,7 @@ export const startScheduler = (options: SchedulerOptions) => {
       await step("cleanup", () => runCleanup({ database, logger }));
       if (stopping.signal.aborted) return;
       await step("backup check", () => runBackupCheck({ database, notifier, logger }));
+      if (stopping.signal.aborted) return;
       await step("poll check", () =>
         runPollStallCheck({ database, notifier, bootedAt: startedAt, logger }),
       );

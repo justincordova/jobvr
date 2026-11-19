@@ -45,7 +45,13 @@ export const addCompanyFrom = async (
     const linked = boardInLink(url, finder);
     name = nameFromLink(url, linked?.slug ?? null);
     if (linked) {
-      const probe = await linked.adapter.probe?.(linked.slug, { http }).catch(() => null);
+      // A missing board is `found: false`; a throw is the board being down or rate-limiting
+      const probe = await linked.adapter.probe?.(linked.slug, { http }).catch((err: unknown) => {
+        const why = err instanceof Error ? err.message : String(err);
+        throw new InvalidError(
+          `Couldn't reach that ${linked.adapter.label} board right now (${why}); try again in a minute`,
+        );
+      });
       if (!probe?.found) {
         throw new InvalidError(`That ${linked.adapter.label} board (${linked.slug}) doesn't exist`);
       }

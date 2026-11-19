@@ -17,9 +17,6 @@ export const atsValues = (registry: Registry): string[] => [
   OTHER_ATS_ID,
 ];
 
-export const isAggregator = (registry: Registry, source: string): boolean =>
-  getAdapter(registry, source)?.kind === "aggregator";
-
 export const isAts = (registry: Registry, source: string): boolean =>
   getAdapter(registry, source)?.kind === "ats";
 

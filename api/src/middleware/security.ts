@@ -10,10 +10,6 @@ import { BODY_LIMIT_BYTES, HTTP_STATUS } from "@/constants";
 import { fail } from "@/utils/response";
 
 /**
- * Response headers: secure headers and CORS. Applied before rate limiting so
- * every response (including 429s) is readable by allowed browser origins.
- */
-/**
  * The web app loads only its own files; job links are plain navigations. Inline
  * styles are allowed (Radix injects a scroll-lock <style>). /reference and
  * /docs are left out only where the API docs exist (not production): Scalar
@@ -42,6 +38,10 @@ const contentSecurityPolicy =
     c.header("Content-Security-Policy", CONTENT_SECURITY_POLICY);
   };
 
+/**
+ * Response headers: secure headers and CORS. Applied before rate limiting so
+ * every response (including 429s) is readable by allowed browser origins.
+ */
 export const securityHeaders = (docsEnabled: boolean): MiddlewareHandler[] => [
   secureHeaders(),
   contentSecurityPolicy(docsEnabled),
