@@ -1,8 +1,8 @@
 import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
 import { AppShell } from '@/components/app-shell'
 import { CompaniesPage } from '@/features/companies/companies-page'
-import { AppliedPage, FeedPage } from '@/features/feed/feed-page'
-import { parseAppliedSearch, parseFeedSearch } from '@/features/feed/search'
+import { FeedPage } from '@/features/feed/feed-page'
+import { parseFeedSearch } from '@/features/feed/search'
 import { LogsPage } from '@/features/logs/logs-page'
 import { SettingsPage } from '@/features/settings/settings-page'
 
@@ -12,20 +12,17 @@ const feedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   validateSearch: parseFeedSearch,
-  // Applied used to be a view of the feed; old links and bookmarks still work
-  beforeLoad: ({ search }) => {
-    if (search.view === 'applied') {
-      throw redirect({ to: '/applied', search: { ...search, view: undefined }, replace: true })
-    }
-  },
   component: FeedPage,
 })
 
+// Applied was its own page for a while; old links and home-screen shortcuts land on the view
 const appliedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/applied',
-  validateSearch: parseAppliedSearch,
-  component: AppliedPage,
+  validateSearch: parseFeedSearch,
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: '/', search: { ...search, view: 'applied' }, replace: true })
+  },
 })
 
 const companiesRoute = createRoute({

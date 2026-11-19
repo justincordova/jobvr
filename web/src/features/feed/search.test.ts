@@ -3,10 +3,10 @@ import {
   defaultSort,
   forgetSearches,
   isBlankSearch,
-  parseAppliedSearch,
   parseFeedSearch,
   recallSearch,
   rememberSearch,
+  searchFor,
   toJobQuery,
 } from './search'
 
@@ -32,8 +32,12 @@ describe('feed search params', () => {
     expect(toJobQuery({ tier: [] })).toEqual({})
   })
 
-  it('implies the view on the Applied page and sorts it by applied date', () => {
-    expect(parseAppliedSearch({ view: 'hidden', q: 'stripe' }).view).toBeUndefined()
+  it('keeps the feed at a plain URL and sorts Applied by applied date only', () => {
+    expect(searchFor('feed', { view: 'feed', tier: ['Mid'] })).toEqual({ tier: ['Mid'] })
+    expect(searchFor('applied', { sort: 'best', q: 'stripe' })).toEqual({
+      view: 'applied',
+      q: 'stripe',
+    })
     expect(defaultSort('applied')).toBe('applied')
     expect(defaultSort(undefined)).toBe('best')
     expect(defaultSort('saved')).toBe('newest')
@@ -43,7 +47,7 @@ describe('feed search params', () => {
     localStorage.clear()
     forgetSearches()
     rememberSearch('feed', { tier: ['Mid', 'Startup'], q: 'backend' })
-    expect(recallSearch('applied')).toEqual({})
+    expect(recallSearch('applied')).toEqual({ view: 'applied' })
     expect(recallSearch('saved')).toEqual({ view: 'saved' })
     rememberSearch('saved', { view: 'saved', age: '3d' })
     expect(recallSearch('feed')).toEqual({ tier: ['Mid', 'Startup'], q: 'backend' })

@@ -89,14 +89,8 @@ function SkeletonRows() {
 
 const PAGE_SIZE = 500
 
-const pathOf = (view: View) => (view === 'applied' ? '/applied' : '/')
-
 export function FeedPage() {
   return <JobsPage search={useSearch({ from: '/' })} />
-}
-
-export function AppliedPage() {
-  return <JobsPage search={{ ...useSearch({ from: '/applied' }), view: 'applied' }} />
 }
 
 function JobsPage({ search }: { search: FeedSearch }) {
@@ -113,7 +107,7 @@ function JobsPage({ search }: { search: FeedSearch }) {
       opening.current = false
       const saved = recallSearch(view)
       if (isBlankSearch(search) && !isBlankSearch(saved)) {
-        void navigate({ to: pathOf(view), search: saved, replace: true })
+        void navigate({ to: '/', search: saved, replace: true })
         return
       }
     }
@@ -154,9 +148,9 @@ function JobsPage({ search }: { search: FeedSearch }) {
   const sourceLabel = (id: string) => sources.find((s) => s.id === id)?.label ?? id
   // Filter and search tweaks replace the entry; a view switch is a place you can go Back from
   const update = (next: Partial<FeedSearch>) =>
-    navigate({ to: pathOf(view), search: searchFor(view, { ...search, ...next }), replace: true })
+    navigate({ to: '/', search: searchFor(view, { ...search, ...next }), replace: true })
   // Each view opens with its own last filters (see `recallSearch`)
-  const goView = (next: View) => navigate({ to: pathOf(next), search: recallSearch(next) })
+  const goView = (next: View) => navigate({ to: '/', search: recallSearch(next) })
 
   const newCount = sessionNewCount()
   const list = (jobs.data?.jobs ?? []).filter((j) =>

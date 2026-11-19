@@ -20,20 +20,19 @@ export interface FeedSearch {
 export const defaultSort = (view: View | undefined): Sort =>
   (view ?? 'feed') === 'feed' ? 'best' : view === 'applied' ? 'applied' : 'newest'
 
-/** Applied is its own page (`/applied`), so `view` there is implied. */
-export function parseAppliedSearch(raw: Record<string, unknown>): FeedSearch {
-  return withoutView(parseFeedSearch(raw))
-}
-
 export function withoutView(s: FeedSearch): FeedSearch {
   const out = { ...s }
   delete out.view
   return out
 }
 
-/** The URL search for a view's page: Saved and Hidden are views of `/`. */
-export const searchFor = (view: View, s: FeedSearch): FeedSearch =>
-  view === 'saved' || view === 'hidden' ? { ...withoutView(s), view } : withoutView(s)
+/** The URL search for a view: the feed is plain `/`; Applied has no order to pick. */
+export function searchFor(view: View, s: FeedSearch): FeedSearch {
+  if (view === 'feed') return withoutView(s)
+  const out = { ...withoutView(s), view }
+  if (view === 'applied') delete out.sort
+  return out
+}
 
 const STORAGE_KEY = 'jobvr.filters'
 

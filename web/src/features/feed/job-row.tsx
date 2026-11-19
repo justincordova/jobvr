@@ -181,15 +181,16 @@ export function JobRow({
             </span>
           )}
           {job.state === 'saved' && <Badge tone="signal">Saved</Badge>}
+          {closed && <Badge tone="stop">Closed</Badge>}
+          {/* Its own line, under the badges and sources */}
           {job.state === 'applied' && (
-            <Badge
-              tone="go"
+            <span
+              className="basis-full font-mono text-[0.68rem] text-go"
               title={job.appliedAt ? new Date(job.appliedAt).toLocaleString() : undefined}
             >
               Applied{job.appliedAt && ` ${relative(job.appliedAt)}`}
-            </Badge>
+            </span>
           )}
-          {closed && <Badge tone="stop">Closed</Badge>}
         </div>
       </div>
 

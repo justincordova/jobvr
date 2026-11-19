@@ -34,7 +34,7 @@ export default defineConfig({
           },
           {
             name: 'Applied',
-            url: '/applied',
+            url: '/?view=applied',
             icons: [{ src: '/pwa-192.png', sizes: '192x192' }],
           },
         ],

@@ -1,19 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { Building2, CloudOff, Radar, Send, Settings } from 'lucide-react'
+import { Building2, CloudOff, Settings } from 'lucide-react'
 import { type ComponentType, useEffect, useRef } from 'react'
 import { api, queryKeys, unwrap } from '@/lib/api'
-import { recallSearch } from '@/features/feed/search'
 import { cn } from '@/lib/cn'
 import { relative } from '@/lib/format'
-import { useIndicator } from '@/lib/use-indicator'
 import { useOnline } from '@/lib/use-online'
-
-const NAV: { to: string; label: string; icon: ComponentType<{ className?: string }> }[] = [
-  { to: '/', label: 'Feed', icon: Radar },
-  { to: '/applied', label: 'Applied', icon: Send },
-  { to: '/companies', label: 'Companies', icon: Building2 },
-]
 
 function Wordmark() {
   return (
@@ -78,87 +70,40 @@ function PollStatus() {
   )
 }
 
-/** Pages reached from the header's right side, not the nav: Logs (the poll status) and Settings (the cog). */
-const HEADER_PAGES = [
-  { to: '/logs', label: 'Logs' },
-  { to: '/settings', label: 'Settings' },
-]
+/**
+ * The feed is the app (its views: Feed, Saved, Applied, Hidden); everything
+ * else is on the header's right: Logs (the poll status), Companies, Settings.
+ */
+const HEADER_PAGES: { to: string; label: string; icon?: ComponentType<{ className?: string }> }[] =
+  [
+    { to: '/logs', label: 'Logs' },
+    { to: '/companies', label: 'Companies', icon: Building2 },
+    { to: '/settings', label: 'Settings', icon: Settings },
+  ]
 
-function SettingsLink({ active }: { active: boolean }) {
+function HeaderLink({
+  to,
+  label,
+  icon: Icon,
+  active,
+}: {
+  to: string
+  label: string
+  icon: ComponentType<{ className?: string }>
+  active: boolean
+}) {
   return (
     <Link
-      to="/settings"
-      aria-label="Settings"
-      title="Settings"
+      to={to}
+      aria-label={label}
+      title={label}
       className={cn(
         'grid size-8 place-items-center rounded-md transition-colors duration-200 hover:bg-raised hover:text-paper pointer-coarse:size-11',
         active ? 'bg-raised text-signal' : 'text-dim',
       )}
     >
-      <Settings className="size-[1.1rem]" />
+      <Icon className="size-[1.1rem]" />
     </Link>
-  )
-}
-
-/** Feed and Applied reopen with the filters they last had (see `recallSearch`). */
-const navSearch = (to: string) =>
-  to === '/'
-    ? () => recallSearch('feed')
-    : to === '/applied'
-      ? () => recallSearch('applied')
-      : undefined
-
-const isActive = (to: string, pathname: string) =>
-  to === '/' ? pathname === '/' : pathname.startsWith(to)
-
-function DesktopNav({ pathname }: { pathname: string }) {
-  const { ref, style } = useIndicator<HTMLElement>('[data-status="active"]', pathname)
-  return (
-    <nav ref={ref} className="relative hidden items-center gap-0.5 md:flex" aria-label="Main">
-      <span
-        aria-hidden
-        className="absolute inset-y-0 left-0 rounded-md bg-raised ring-1 ring-line"
-        style={style}
-      />
-      {NAV.map(({ to, label }) => (
-        <Link
-          key={to}
-          to={to}
-          search={navSearch(to)}
-          activeOptions={{ exact: to === '/', includeSearch: false }}
-          className="relative flex items-center rounded-md px-3 py-1.5 text-sm text-dim transition-colors duration-200 hover:text-paper data-[status=active]:text-paper"
-        >
-          {label}
-        </Link>
-      ))}
-    </nav>
-  )
-}
-
-function MobileNav({ pathname }: { pathname: string }) {
-  const { ref, style } = useIndicator<HTMLElement>('[data-status="active"]', pathname)
-  return (
-    <nav
-      ref={ref}
-      aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 border-t border-line bg-panel/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg md:hidden"
-    >
-      <span aria-hidden className="absolute top-0 left-0 flex justify-center" style={style}>
-        <span className="h-0.5 w-8 rounded-b-full bg-signal" />
-      </span>
-      {NAV.map(({ to, label, icon: Icon }) => (
-        <Link
-          key={to}
-          to={to}
-          search={navSearch(to)}
-          activeOptions={{ exact: to === '/', includeSearch: false }}
-          className="group relative flex flex-col items-center gap-1 pt-2.5 pb-2 text-[0.65rem] text-faint transition-colors duration-200 data-[status=active]:text-paper"
-        >
-          <Icon className="size-5 transition-[color,scale] duration-200 group-active:scale-90 group-data-[status=active]:text-signal" />
-          {label}
-        </Link>
-      ))}
-    </nav>
   )
 }
 
@@ -188,10 +133,7 @@ export function AppShell() {
   useRefreshAfterPoll()
 
   useEffect(() => {
-    const page = NAV.find((n) => isActive(n.to, pathname))
-    const label =
-      HEADER_PAGES.find((p) => pathname.startsWith(p.to))?.label ??
-      (page && page.to !== '/' && page.label)
+    const label = HEADER_PAGES.find((p) => pathname.startsWith(p.to))?.label
     document.title = label ? `${label} · jobvr` : 'jobvr'
   }, [pathname])
 
@@ -199,21 +141,29 @@ export function AppShell() {
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center pt-[env(safe-area-inset-top)] justify-between gap-4 border-b border-line/70 bg-ink/80 px-4 backdrop-blur-lg sm:px-6 lg:px-10">
         <Wordmark />
-        <DesktopNav pathname={pathname} />
         <div className="flex items-center gap-1">
           <PollStatus />
-          <SettingsLink active={pathname.startsWith('/settings')} />
+          {HEADER_PAGES.map(
+            ({ to, label, icon }) =>
+              icon && (
+                <HeaderLink
+                  key={to}
+                  to={to}
+                  label={label}
+                  icon={icon}
+                  active={pathname.startsWith(to)}
+                />
+              ),
+          )}
         </div>
       </header>
 
       <main
         key={pathname}
-        className="flex-1 animate-page px-4 pt-6 pb-28 sm:px-6 md:pb-16 lg:px-10"
+        className="flex-1 animate-page px-4 pt-6 pb-[calc(4rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-10"
       >
         <Outlet />
       </main>
-
-      <MobileNav pathname={pathname} />
     </div>
   )
 }

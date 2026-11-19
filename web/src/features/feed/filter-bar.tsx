@@ -15,21 +15,16 @@ import { cn } from '@/lib/cn'
 import { TIER_FILTERS, type TierFilter } from '@/lib/types'
 import { type Age, DEFAULT_AGE, defaultSort, type FeedSearch, type Sort, type View } from './search'
 
-// Applied is its own page
 const VIEW_OPTIONS: { id: View; label: string }[] = [
   { id: 'feed', label: 'Feed' },
   { id: 'saved', label: 'Saved' },
+  { id: 'applied', label: 'Applied' },
   { id: 'hidden', label: 'Hidden' },
 ]
 
 const SORT_OPTIONS: { id: Sort; label: string }[] = [
   { id: 'best', label: 'Best' },
   { id: 'newest', label: 'Newest' },
-]
-
-const APPLIED_SORT_OPTIONS: { id: Sort; label: string }[] = [
-  { id: 'applied', label: 'Applied' },
-  ...SORT_OPTIONS,
 ]
 
 const AGE_OPTIONS: { id: Age; label: string }[] = [
@@ -182,7 +177,7 @@ interface FilterBarProps {
   onView: (view: View) => void
 }
 
-/** One compact row: view, age, order, tiers, search. Places, sources and companies are for search. */
+/** One compact row: view, age, order (not on Applied), tiers, search. Places, sources and companies are for search. */
 export function FilterBar({ search, onChange, onView }: FilterBarProps) {
   const view = search.view ?? 'feed'
   const age = search.age ?? DEFAULT_AGE
@@ -190,23 +185,24 @@ export function FilterBar({ search, onChange, onView }: FilterBarProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {view !== 'applied' && (
-        <Segmented label="View" value={view} options={VIEW_OPTIONS} onChange={onView} />
-      )}
+      <Segmented label="View" value={view} options={VIEW_OPTIONS} onChange={onView} />
       <Segmented
         label="Age"
         value={age}
         options={AGE_OPTIONS}
         onChange={(a) => onChange({ age: a === DEFAULT_AGE ? undefined : a })}
       />
-      <span title="Best weighs freshness, a new-grad title, the company's tier and a named place; ties go to the newest">
-        <Segmented
-          label="Order"
-          value={sort}
-          options={view === 'applied' ? APPLIED_SORT_OPTIONS : SORT_OPTIONS}
-          onChange={(s) => onChange({ sort: s === defaultSort(search.view) ? undefined : s })}
-        />
-      </span>
+      {/* Applied is always latest application first */}
+      {view !== 'applied' && (
+        <span title="Best weighs freshness, a new-grad title, the company's tier and a named place; ties go to the newest">
+          <Segmented
+            label="Order"
+            value={sort}
+            options={SORT_OPTIONS}
+            onChange={(s) => onChange({ sort: s === defaultSort(search.view) ? undefined : s })}
+          />
+        </span>
+      )}
       <TierMenu
         selected={search.tier}
         onChange={(tier) => onChange({ tier })}
