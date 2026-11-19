@@ -19,7 +19,10 @@ type KeywordSettings = Pick<
 
 // Numbered levels: "Engineer I" / "1" signal entry level; "II", "3", "IV" signal experience
 const ENTRY_LEVEL_TOKENS = new Set(["i", "1"]);
-const EXPERIENCED_LEVEL_TOKENS = new Set(["ii", "iii", "iv", "v", "2", "3", "4", "5"]);
+// Bare 6-9 stay out ("24/7", "Series 7"); codes like "L6" read as "5" (see `levelTokens`)
+const EXPERIENCED_LEVEL_TOKENS = new Set(["ii", "iii", "iv", "v", "vi", "2", "3", "4", "5"]);
+/** Only these outrank a numbered experienced level ("Engineer 2, New Grad"); "Associate" doesn't. */
+const NEW_GRAD_WORDS = ["new grad", "new graduate", "grads", "entry level", "early career"];
 
 /** Engineering titles from other disciplines; they need a role keyword, not just "engineer". */
 const NON_SOFTWARE = [
@@ -53,7 +56,7 @@ const NON_SOFTWARE = [
  * as the subject ("Smart Contract Engineer") don't count.
  */
 const CONTRACT_TAG =
-  /[([]\s*contract(?:or|ual)?(?:\s+(?:position|role|basis))?\s*[)\]]|[-,|/]\s*contract(?:or|ual)?(?:\s+(?:position|role|basis))?\s*(?:$|[([])/i;
+  /[([]\s*contract(?:or|ual)?(?:\s+(?:position|role|basis))?\s*[)\]]|[-–—,|/]\s*contract(?:or|ual)?(?:\s+(?:position|role|basis))?\s*(?:$|[([,;])/i;
 const GENERIC_ENGINEERING = ["engineer", "engineering", "developer", "programmer"];
 
 /** Level codes read as their number: "L2", "IC3", "P2", "SDE2", "SWE3" → "2", "3", ... */
@@ -64,32 +67,37 @@ const LEVEL_CODE = /^(?:l|ic|p|sde|swe)(\d)$/;
  * Engineer II - AMZ27480.1" would otherwise read as level 1 (entry).
  */
 const levelTokens = (title: string) =>
-  tokenize(title.replace(/\b[a-z]*\d+\w*(?:\.\d+)+\b/gi, " ")).map(
-    (t) => LEVEL_CODE.exec(t)?.[1] ?? t,
-  );
+  tokenize(title.replace(/\b[a-z]*\d+\w*(?:\.\d+)+\b/gi, " ")).map((t) => {
+    const level = LEVEL_CODE.exec(t)?.[1];
+    return level ? (Number(level) > 5 ? "5" : level) : t;
+  });
+
+/** "I" or "1" as a level: not "I/O" or "Tier 1". */
+const isEntryNumber = (tokens: readonly string[], i: number) =>
+  ENTRY_LEVEL_TOKENS.has(tokens[i] ?? "") && tokens[i + 1] !== "o" && tokens[i - 1] !== "tier";
 
 /** True when the title says it's entry level (a level keyword, or "I" / "1"). */
 export const isEntryLevelTitle = (title: string, settings: Pick<Settings, "levelKeywords">) => {
   const tokens = levelTokens(title);
   return (
     matchesAnyKeyword(tokens, settings.levelKeywords) ||
-    tokens.some((t) => ENTRY_LEVEL_TOKENS.has(t))
+    tokens.some((_, i) => isEntryNumber(tokens, i))
   );
 };
 
 /**
- * 1. Exclude keywords and a contract tag always reject ("Senior", "Intern",
- *    "(Contract)").
- * 2. Numbered experienced levels ("II", "3") reject unless the title is also
- *    entry level ("Engineer 1/2", "Engineer 2 New Grad").
- * 3. A role keyword passes ("Software Engineer", "AI Engineer"). A level
- *    keyword is optional unless "requireLevelOnBoards" (company boards) or
- *    "applyLevelToSimplify" (SimplifyJobs) is on.
- * 4. Without a role keyword, a generic engineering title with no other
- *    discipline ("Engineer 2 New Grad", not "Electrical Engineer") passes when
- *    it's entry level on a board, or in a trusted SimplifyJobs category.
- *    "AI Acceleration Specialist" never passes.
+ * A numbered level of 2 or more ("II", "3", "L2", "IC3"), unless the title is
+ * a range from entry ("Engineer 1/2", "I/II") or plainly for new grads
+ * ("Engineer 2, New Grad"). "Associate" or "University" alone don't outrank it.
  */
+const isExperiencedLevel = (title: string) => {
+  const tokens = levelTokens(title);
+  const at = tokens.findIndex((t) => EXPERIENCED_LEVEL_TOKENS.has(t));
+  if (at < 0) return false;
+  const range = at > 0 && isEntryNumber(tokens, at - 1);
+  return !range && !matchesAnyKeyword(tokens, NEW_GRAD_WORDS);
+};
+
 /**
  * Blanks out the words of multi-word role phrases found in the title, so an
  * exclude word inside one ("Member of Technical Staff") doesn't reject it.
@@ -106,6 +114,19 @@ const maskRolePhrases = (tokens: readonly string[], roles: readonly string[]): s
   return out;
 };
 
+/**
+ * 1. Exclude keywords and a contract tag always reject ("Senior", "Intern",
+ *    "(Contract)").
+ * 2. Numbered experienced levels ("II", "3") reject, unless it's a range from
+ *    entry ("Engineer 1/2") or a new-grad title ("Engineer 2 New Grad").
+ * 3. A role keyword passes ("Software Engineer", "AI Engineer"). A level
+ *    keyword is optional unless "requireLevelOnBoards" (company boards) or
+ *    "applyLevelToSimplify" (SimplifyJobs) is on.
+ * 4. Without a role keyword, a generic engineering title with no other
+ *    discipline ("Engineer 2 New Grad", not "Electrical Engineer") passes when
+ *    it's entry level on a board, or in a trusted SimplifyJobs category.
+ *    "AI Acceleration Specialist" never passes.
+ */
 export const passesKeywordRule = (
   title: string,
   kind: SourceKind,
@@ -118,7 +139,7 @@ export const passesKeywordRule = (
     return false;
   }
   const entry = isEntryLevelTitle(title, settings);
-  if (!entry && levelTokens(title).some((t) => EXPERIENCED_LEVEL_TOKENS.has(t))) return false;
+  if (isExperiencedLevel(title)) return false;
   const role = matchesAnyKeyword(tokens, settings.roleKeywords);
 
   if (role) {

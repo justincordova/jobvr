@@ -42,6 +42,7 @@ describe("keyword rule", () => {
       "Software Engineer, Smart Contracts",
       "Software Engineer, Contracts Platform",
       "Software Engineer (L1)",
+      "Software Engineer I/II",
     ]) {
       expect(ats(t), t).toBe(true);
     }
@@ -58,6 +59,15 @@ describe("keyword rule", () => {
       "Software Engineer, Platform Access (L2)",
       "Software Engineer - IC3",
       "SDE2, Payments",
+      // A level word or a stray "I" / "1" doesn't outrank a numbered level
+      "Software Engineer III – Storage I/O",
+      "Software Engineer II, Tier 1 Tools",
+      "Software Engineer II (Associate)",
+      "Software Engineer II, University Recruiting Platform",
+      "Software Engineer L6",
+      "Software Engineer VI",
+      "Software Engineer – Contract",
+      "Software Engineer - Contract, Remote",
       "Staff Software Engineer (AI Agents)",
       "Field Engineer, Healthcare",
       "Analytics Engineer",
