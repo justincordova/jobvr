@@ -43,6 +43,10 @@ describe("keyword rule", () => {
       "Software Engineer, Contracts Platform",
       "Software Engineer (L1)",
       "Software Engineer I/II",
+      // Google hires new grads at L3; Amazon's SDE I is L4
+      "Software Engineer, L3",
+      "Software Development Engineer I (L4)",
+      "SDE I, L4 - Payments",
     ]) {
       expect(ats(t), t).toBe(true);
     }
@@ -65,6 +69,10 @@ describe("keyword rule", () => {
       "Software Engineer II (Associate)",
       "Software Engineer II, University Recruiting Platform",
       "Software Engineer L6",
+      // L4 without level I is past entry level, as is any other numbered level beside L3
+      "Software Engineer (L4)",
+      "Software Engineer II (L4)",
+      "Software Engineer III, L3",
       "Software Engineer VI",
       "Software Engineer – Contract",
       "Software Engineer - Contract, Remote",

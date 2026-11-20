@@ -61,6 +61,13 @@ const GENERIC_ENGINEERING = ["engineer", "engineering", "developer", "programmer
 
 /** Level codes read as their number: "L2", "IC3", "P2", "SDE2", "SWE3" → "2", "3", ... */
 const LEVEL_CODE = /^(?:l|ic|p|sde|swe)(\d)$/;
+/**
+ * "L" codes where entry level starts higher: Google hires new grads at L3 and
+ * Amazon's SDE I is L4. L3 says nothing about experience; L4 is entry level
+ * when the title also says level I ("SDE I (L4)"), experienced otherwise.
+ */
+const NEUTRAL_L_CODE = "l3";
+const ENTRY_L_CODE = "l4";
 
 /**
  * Tokens for the level checks, without dotted codes: Amazon's "Software Dev
@@ -68,6 +75,7 @@ const LEVEL_CODE = /^(?:l|ic|p|sde|swe)(\d)$/;
  */
 const levelTokens = (title: string) =>
   tokenize(title.replace(/\b[a-z]*\d+\w*(?:\.\d+)+\b/gi, " ")).map((t) => {
+    if (t === NEUTRAL_L_CODE || t === ENTRY_L_CODE) return t;
     const level = LEVEL_CODE.exec(t)?.[1];
     return level ? (Number(level) > 5 ? "5" : level) : t;
   });
@@ -92,7 +100,10 @@ export const isEntryLevelTitle = (title: string, settings: Pick<Settings, "level
  */
 const isExperiencedLevel = (title: string) => {
   const tokens = levelTokens(title);
-  const at = tokens.findIndex((t) => EXPERIENCED_LEVEL_TOKENS.has(t));
+  const entryNumber = tokens.some((_, i) => isEntryNumber(tokens, i));
+  const at = tokens.findIndex(
+    (t) => EXPERIENCED_LEVEL_TOKENS.has(t) || (t === ENTRY_L_CODE && !entryNumber),
+  );
   if (at < 0) return false;
   const range = at > 0 && isEntryNumber(tokens, at - 1);
   return !range && !matchesAnyKeyword(tokens, NEW_GRAD_WORDS);
