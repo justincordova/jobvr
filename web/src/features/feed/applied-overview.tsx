@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Skeleton } from '@/components/page'
 import { Reveal } from '@/components/ui/reveal'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import { toDateInput } from '@/lib/format'
 import { TIER_DOT } from '@/lib/tier-style'
 import { appliedStats, type HeatDay } from './applied-stats'
 
@@ -71,6 +72,21 @@ function useWeeksThatFit() {
     return () => observer.disconnect()
   }, [el])
   return { ref, ...size }
+}
+
+/** Today's local date, YYYY-MM-DD; it turns over at midnight while the page stays open. */
+function useLocalDate() {
+  const [date, setDate] = useState(() => toDateInput(new Date().toISOString()))
+  useEffect(() => {
+    const now = new Date()
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+    const timer = setTimeout(
+      () => setDate(toDateInput(new Date().toISOString())),
+      midnight.getTime() - now.getTime() + 1000,
+    )
+    return () => clearTimeout(timer)
+  }, [date])
+  return date
 }
 
 const GRAPH_KEY = 'jobvr.activity'
@@ -160,49 +176,60 @@ function Heatmap({ weeks, cell }: { weeks: HeatDay[][]; cell: number }) {
     return () => document.removeEventListener('pointerdown', away)
   }, [open])
   const total = weeks.flat().reduce((n, d) => n + d.count, 0)
+  const busy = weeks.flat().filter((d) => d.count > 0)
   return (
-    <div
-      ref={grid}
-      role="img"
-      aria-label={`Applications per day over the last ${weeks.length} weeks: ${total} in all`}
-      onMouseLeave={() => setTip(null)}
-      className="relative inline-grid grid-flow-col gap-[3px]"
-      style={{
-        gridTemplateRows: `auto repeat(7, ${cell}px)`,
-        gridTemplateColumns: `${DAY_LABEL_WIDTH - GAP}px repeat(${weeks.length}, ${cell}px)`,
-      }}
-    >
-      <span aria-hidden />
-      {DAY_LABELS.map((d, i) => (
-        <span
-          key={i}
-          aria-hidden
-          className="font-mono text-[0.6rem] text-faint"
-          style={{ lineHeight: `${cell}px` }}
-        >
-          {d}
-        </span>
-      ))}
-      {weeks.map((week, w) => (
-        <WeekColumn
-          key={week[0]?.date}
-          week={week}
-          month={months[w] ?? ''}
-          active={tip?.day.date}
-          onShow={show}
-          onHide={() => setTip(null)}
-        />
-      ))}
-      {tip && (
-        <span
-          role="tooltip"
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md border border-line-strong bg-raised px-2 py-1 text-xs whitespace-nowrap text-paper shadow-lg"
-          style={{ left: tip.x, top: tip.y - 6 }}
-        >
-          {dayText(tip.day)}
-        </span>
+    <>
+      <div
+        ref={grid}
+        role="img"
+        aria-label={`Applications per day over the last ${weeks.length} weeks: ${total} in all`}
+        onMouseLeave={() => setTip(null)}
+        className="relative inline-grid grid-flow-col gap-[3px]"
+        style={{
+          gridTemplateRows: `auto repeat(7, ${cell}px)`,
+          gridTemplateColumns: `${DAY_LABEL_WIDTH - GAP}px repeat(${weeks.length}, ${cell}px)`,
+        }}
+      >
+        <span aria-hidden />
+        {DAY_LABELS.map((d, i) => (
+          <span
+            key={i}
+            aria-hidden
+            className="font-mono text-[0.6rem] text-faint"
+            style={{ lineHeight: `${cell}px` }}
+          >
+            {d}
+          </span>
+        ))}
+        {weeks.map((week, w) => (
+          <WeekColumn
+            key={week[0]?.date}
+            week={week}
+            month={months[w] ?? ''}
+            active={tip?.day.date}
+            onShow={show}
+            onHide={() => setTip(null)}
+          />
+        ))}
+        {tip && (
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md border border-line-strong bg-raised px-2 py-1 text-xs whitespace-nowrap text-paper shadow-lg"
+            style={{ left: tip.x, top: tip.y - 6 }}
+          >
+            {dayText(tip.day)}
+          </span>
+        )}
+      </div>
+      {/* The squares are pointer-only; screen readers get the days that had any */}
+      {busy.length > 0 && (
+        <ul aria-label="Days with applications" className="sr-only">
+          {busy.map((d) => (
+            <li key={d.date}>{dayText(d)}</li>
+          ))}
+        </ul>
       )}
-    </div>
+    </>
   )
 }
 
@@ -253,7 +280,7 @@ function WeekColumn({
  * The Applied view's card: pace up top, a GitHub-style year of days, the tier mix
  * in one line. It stays mounted to slide in and out, but only loads while `active`.
  */
-export function AppliedOverview({ active }: { active: boolean }) {
+export const AppliedOverview = memo(function AppliedOverview({ active }: { active: boolean }) {
   const { data } = useQuery({
     queryKey: queryKeys.jobs(QUERY),
     queryFn: () => unwrap(api.api.jobs.$get({ query: QUERY })),
@@ -261,17 +288,19 @@ export function AppliedOverview({ active }: { active: boolean }) {
   })
   const { ref, weeks, cell } = useWeeksThatFit()
   const [graphOpen, toggleGraph] = useGraphOpen()
+  // Recounted when the day turns over, so today, yesterday and the streak move on
+  const date = useLocalDate()
   const stats = useMemo(
     () =>
       // An optimistic 'Not applied' leaves the job in the cache until the refetch
       data
         ? appliedStats(
             data.jobs.filter((j) => j.state === 'applied'),
-            new Date(),
+            new Date(`${date}T12:00:00`),
             MAX_WEEKS,
           )
         : null,
-    [data],
+    [data, date],
   )
   // Holds the card's place while it loads, so the reveal opens once, to the right height
   if (!data) {
@@ -381,4 +410,4 @@ export function AppliedOverview({ active }: { active: boolean }) {
       </Reveal>
     </section>
   )
-}
+})

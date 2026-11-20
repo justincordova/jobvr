@@ -63,10 +63,11 @@ export function NewSinceBanner({
 }) {
   const [expanded, setExpanded] = useState(false)
   return (
-    <div role="status" className="mb-4 rounded-lg border border-signal/40 bg-signal-soft text-sm">
+    <div className="mb-4 rounded-lg border border-signal/40 bg-signal-soft text-sm">
       <div className="flex items-center gap-3 px-3.5 pt-2.5 pb-1.5">
         <Sparkle className="size-4 shrink-0 text-signal" />
-        <p className="flex-1">
+        {/* Only the count is live: the list's "hidden by filters" changes as you search */}
+        <p role="status" className="flex-1">
           <span className="font-mono font-semibold text-signal">{count}</span> new since your last
           visit
         </p>

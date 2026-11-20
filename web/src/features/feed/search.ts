@@ -102,11 +102,14 @@ export function parseFeedSearch(raw: Record<string, unknown>): FeedSearch {
   const tiers = strings(raw.tier)?.filter((t): t is TierFilter =>
     TIER_FILTERS.includes(t as TierFilter),
   )
+  const view = oneOf(VIEWS, raw.view)
+  const sort = oneOf(SORTS, raw.sort)
   return {
-    view: oneOf(VIEWS, raw.view),
+    view,
     age: oneOf(AGES, raw.age),
     tier: tiers?.length ? tiers : undefined,
-    sort: oneOf(SORTS, raw.sort),
+    // Only Applied sorts by applied date; elsewhere the Order switch has no such option
+    sort: sort === 'applied' && view !== 'applied' ? undefined : sort,
     q: typeof raw.q === 'string' && raw.q.trim() ? raw.q.trim().slice(0, 200) : undefined,
   }
 }
@@ -131,6 +134,13 @@ export function toJobQuery(s: FeedSearch) {
 }
 
 export const DEFAULT_AGE: Age = 'all'
+
+/**
+ * Whether opening this list records a visit. The new-since-visit jobs ignore
+ * the filters, and filters are remembered, so tiers and age don't count; a
+ * text search or another view (a home-screen shortcut to Saved) does.
+ */
+export const countsAsVisit = (s: FeedSearch) => (s.view ?? 'feed') === 'feed' && !s.q
 
 export const CLEARED_FILTERS = { tier: undefined } satisfies Partial<FeedSearch>
 

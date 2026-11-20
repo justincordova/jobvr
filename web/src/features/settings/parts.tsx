@@ -8,6 +8,7 @@ import { cn } from '@/lib/cn'
 import { TIER_BADGE, TIER_DOT } from '@/lib/tier-style'
 import { type Settings, TIER_FILTERS, type TierFilter } from '@/lib/types'
 import { ChipsInput } from './chips-input'
+import { numberProblem } from './draft'
 
 /** A settings group: a title, one line on what it's for, then its rows. */
 export function Card({
@@ -56,12 +57,18 @@ export function Field({
   label,
   hint,
   htmlFor,
+  error,
+  errorId = htmlFor && `${htmlFor}-error`,
   stack,
   children,
 }: {
   label: string
   hint?: ReactNode
   htmlFor?: string
+  /** What to fix before saving. */
+  error?: string
+  /** For the control to point at (`aria-describedby`); from `htmlFor` by default. */
+  errorId?: string
   /** The control takes the full width under the label (chips, lists). */
   stack?: boolean
   children: ReactNode
@@ -82,6 +89,11 @@ export function Field({
           <p className="text-sm font-medium">{label}</p>
         )}
         {hint && <p className="mt-0.5 text-xs text-dim">{hint}</p>}
+        {error && (
+          <p id={errorId} className="mt-0.5 animate-fade-in text-xs text-stop">
+            {error}
+          </p>
+        )}
       </div>
       {children}
     </div>
@@ -126,6 +138,7 @@ export function NumberInput({
   max?: number
   suffix: string
 }) {
+  const invalid = numberProblem(value, { min, max }) !== undefined
   return (
     <div className="flex items-center gap-2">
       <Input
@@ -137,7 +150,8 @@ export function NumberInput({
         value={Number.isFinite(value) ? value : ''}
         onChange={(e) => onChange(e.target.valueAsNumber)}
         aria-label={label}
-        aria-invalid={!Number.isInteger(value) || value < 0}
+        aria-invalid={invalid}
+        aria-describedby={invalid ? `${id}-error` : undefined}
         className="w-20 text-right font-mono tabular-nums aria-invalid:border-stop/60"
       />
       <span className="w-14 text-sm text-dim">{suffix}</span>

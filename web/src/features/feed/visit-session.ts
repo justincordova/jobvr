@@ -37,12 +37,3 @@ export const bannerDismissed = () => session.dismissed
 export const dismissBanner = () => {
   session.dismissed = true
 }
-
-/** Test helper. */
-export function resetVisitSession() {
-  session.captured = false
-  session.count = 0
-  session.ids.clear()
-  session.jobs = []
-  session.dismissed = false
-}

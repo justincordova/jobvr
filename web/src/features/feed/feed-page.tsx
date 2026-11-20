@@ -23,6 +23,7 @@ import { NewSinceBanner } from './new-banner'
 import {
   activeFilterCount,
   CLEARED_FILTERS,
+  countsAsVisit,
   DEFAULT_AGE,
   type FeedSearch,
   isBlankSearch,
@@ -155,10 +156,7 @@ function JobsPage({ search }: { search: FeedSearch }) {
   })
   const { setState } = useJobActions()
 
-  // Only the plain feed counts as a visit: opening on Saved (a home-screen
-  // shortcut) or a searched or age-narrowed list would record it and lose the
-  // feed's highlights. Tiers don't count: they're remembered, so the feed usually opens with some
-  const plainFeed = view === 'feed' && !search.q && (search.age ?? DEFAULT_AGE) === DEFAULT_AGE
+  const plainFeed = countsAsVisit(search)
   useEffect(() => {
     if (!plainFeed || !jobs.data || jobs.isPlaceholderData) return
     if (captureFirstResponse(jobs.data)) {

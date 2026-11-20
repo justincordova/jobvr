@@ -35,6 +35,8 @@ export function useJobActions() {
       state: JobState
       also?: string[]
       silent?: boolean
+      /** Undo: the applied dates the jobs had, put back instead of stamping now. */
+      restore?: ReadonlyMap<string, Pick<Job, 'state' | 'appliedAt'>>
     }) =>
       Promise.all(
         [id, ...also].map((jobId) =>
@@ -42,7 +44,7 @@ export function useJobActions() {
         ),
       ),
     // Moves the job in every cached list, animating rows in or out of the current view
-    onMutate: async ({ id, state, also = [] }) => {
+    onMutate: async ({ id, state, also = [], restore }) => {
       await qc.cancelQueries({ queryKey: queryKeys.allJobs })
       const cached = qc
         .getQueriesData<JobList>({ queryKey: queryKeys.allJobs })
@@ -67,7 +69,11 @@ export function useJobActions() {
                         ...j,
                         state,
                         appliedAt:
-                          state === 'applied' ? (j.appliedAt ?? new Date().toISOString()) : null,
+                          state === 'applied'
+                            ? (j.appliedAt ??
+                              restore?.get(j.id)?.appliedAt ??
+                              new Date().toISOString())
+                            : null,
                       }
                     : j,
                 ),
@@ -98,7 +104,7 @@ export function useJobActions() {
       if (silent || !ctx) return
       const prev = ctx.prev
       toast.undoable(message(prev, state), {
-        undo: () => setState.mutate({ id, state: prev, also, silent: true }),
+        undo: () => setState.mutate({ id, state: prev, also, silent: true, restore: ctx.before }),
       })
     },
     // Refetch once the last of several quick actions settles: an earlier one's

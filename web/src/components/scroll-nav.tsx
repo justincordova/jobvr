@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { cn } from '@/lib/cn'
+import { useToastShowing } from './toast'
 
 /** Pages shorter than the screen plus this get no button. */
 const MIN_EXTRA = 400
@@ -13,6 +14,8 @@ const still = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matc
  */
 export function ScrollNav() {
   const [state, setState] = useState<'none' | 'down' | 'up'>('none')
+  // Toasts share the bottom center; the Bottom pill waits until they're gone
+  const toastShowing = useToastShowing()
 
   useEffect(() => {
     let frame = 0
@@ -52,7 +55,7 @@ export function ScrollNav() {
       </Pill>
       <Pill
         edge="bottom"
-        show={state === 'down'}
+        show={state === 'down' && !toastShowing}
         onClick={() => go('bottom')}
         label="Jump to bottom"
       >

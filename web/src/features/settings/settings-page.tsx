@@ -15,6 +15,7 @@ import { cn } from '@/lib/cn'
 import { relative } from '@/lib/format'
 import type { Settings, SettingsPayload } from '@/lib/types'
 import { ChipsInput } from './chips-input'
+import { LIMITS, PROBLEM_LABELS, useDraft } from './draft'
 import { Card, Field, LocationsEditor, NumberInput, TierPicker, Toggle } from './parts'
 
 type Key = keyof Settings
@@ -53,51 +54,16 @@ const GROUPS = [
   },
 ] as const satisfies readonly { id: string; label: string; keys: readonly Key[] }[]
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
-
-/**
- * One draft for the whole page, saved together from the bar that slides up
- * once something changes. When the saved settings change underneath (another
- * tab), settings not being edited here follow them; edits in progress stay.
- */
-function useDraft(settings: Settings) {
-  const [draft, setDraft] = useState(settings)
-  const [baseline, setBaseline] = useState(settings)
-  if (baseline !== settings) {
-    const untouched = (Object.keys(settings) as Key[]).filter((k) => same(draft[k], baseline[k]))
-    setBaseline(settings)
-    setDraft({ ...draft, ...Object.fromEntries(untouched.map((k) => [k, settings[k]])) })
-  }
-  const changed = (Object.keys(draft) as Key[]).filter((k) => !same(draft[k], settings[k]))
-  const set = <K extends Key>(key: K, value: Settings[K]) =>
-    setDraft((d) => ({ ...d, [key]: value }))
-  // Numbers are whole and filled in (an empty input is NaN), and every place keeps a name
-  const valid =
-    Object.values(draft).every((v) => typeof v !== 'number' || (Number.isInteger(v) && v >= 0)) &&
-    draft.locations.every((l) => l.builtin || l.aliases.length > 0)
-  // Bumped on Discard, so fields with their own state (Custom days) start over too
-  const [version, setVersion] = useState(0)
-  const reset = () => {
-    setDraft(settings)
-    setVersion((v) => v + 1)
-  }
-  /** After a save: what the server kept (trimmed, de-duplicated) becomes the draft. */
-  const commit = (saved: Settings) => {
-    setBaseline(saved)
-    setDraft(saved)
-  }
-  return { draft, set, changed, valid, reset, commit, version }
-}
-
 function SaveBar({
   count,
-  valid,
+  problem,
   pending,
   onSave,
   onDiscard,
 }: {
   count: number
-  valid: boolean
+  /** The first thing to fix before saving, if any. */
+  problem?: string
   pending: boolean
   onSave: () => void
   onDiscard: () => void
@@ -116,24 +82,30 @@ function SaveBar({
         open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0',
       )}
     >
-      <div
-        role="status"
-        className="flex w-full max-w-md items-center gap-3 rounded-xl border border-signal/40 bg-raised/95 py-2 pr-2 pl-4 shadow-2xl shadow-black/50 backdrop-blur-md"
-      >
+      <div className="flex w-full max-w-md items-center gap-3 rounded-xl border border-signal/40 bg-raised/95 py-2 pr-2 pl-4 shadow-2xl shadow-black/50 backdrop-blur-md">
         <span className="size-2 shrink-0 animate-pulse rounded-full bg-signal" aria-hidden />
-        <p className="min-w-0 flex-1 text-sm">
-          {valid ? (
-            <>
-              {count} unsaved change{count === 1 ? '' : 's'}
-            </>
+        {/* Only the text is live, and it changes with the count, not every keystroke */}
+        <p role="status" className="min-w-0 flex-1 text-sm">
+          {problem ? (
+            <span className="text-stop">{problem}</span>
           ) : (
-            <span className="text-stop">Use whole numbers, and give every place a name</span>
+            open && (
+              <>
+                {count} unsaved change{count === 1 ? '' : 's'}
+              </>
+            )
           )}
         </p>
         <Button variant="ghost" size="sm" onClick={onDiscard}>
           Discard
         </Button>
-        <Button variant="primary" size="sm" onClick={onSave} disabled={!valid} pending={pending}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={onSave}
+          disabled={Boolean(problem)}
+          pending={pending}
+        >
           Save
         </Button>
       </div>
@@ -271,8 +243,7 @@ function StoreWindow({ value, onChange }: { value: number; onChange: (n: number)
             label="Days to keep roles"
             value={value}
             onChange={onChange}
-            min={7}
-            max={120}
+            {...LIMITS.storeWindowDays}
             suffix="days"
           />
         </span>
@@ -284,18 +255,22 @@ function StoreWindow({ value, onChange }: { value: number; onChange: (n: number)
 function SettingsForm({ payload, header }: { payload: SettingsPayload; header: ReactNode }) {
   const qc = useQueryClient()
   const toast = useToast()
-  const { draft, set, changed, valid, reset, commit, version } = useDraft(payload.settings)
+  const { draft, set, changed, problems, reset, commit, version } = useDraft(payload.settings)
   const [advanced, setAdvanced] = useState(false)
   const save = useMutation({
-    mutationFn: (json: Partial<Settings>) => unwrap(api.api.settings.$patch({ json })),
-    onSuccess: (data) => {
+    mutationFn: ({ json }: { json: Partial<Settings>; sent: Settings }) =>
+      unwrap(api.api.settings.$patch({ json })),
+    onSuccess: (data, { sent }) => {
       qc.setQueryData(queryKeys.settings, data)
-      commit(data.settings)
+      commit(data.settings, sent)
       void qc.invalidateQueries({ queryKey: queryKeys.allJobs })
       toast('Settings saved: they apply from the next poll')
     },
     onError: (err) => toast.error(err.message),
   })
+  const firstProblem = GROUPS.flatMap((g) => g.keys as readonly Key[])
+    .map((k) => [k, problems[k]] as const)
+    .find(([, p]) => p)
   const dirtyGroups = new Set(
     GROUPS.filter((g) => g.keys.some((k) => changed.includes(k))).map((g) => g.id),
   )
@@ -346,13 +321,13 @@ function SettingsForm({ payload, header }: { payload: SettingsPayload; header: R
               label="Hide roles asking for"
               hint="Years of experience, read from the description. 0 shows them all."
               htmlFor="experienceCutoff"
+              error={problems.experienceCutoffYears}
             >
               <NumberInput
                 id="experienceCutoff"
                 value={draft.experienceCutoffYears}
                 onChange={(n) => set('experienceCutoffYears', n)}
-                min={0}
-                max={20}
+                {...LIMITS.experienceCutoffYears}
                 suffix="+ years"
               />
             </Field>
@@ -360,12 +335,13 @@ function SettingsForm({ payload, header }: { payload: SettingsPayload; header: R
               label="Minimum salary"
               hint="Only when a posting lists pay. 0 shows them all."
               htmlFor="minSalary"
+              error={problems.minSalaryUsd}
             >
               <NumberInput
                 id="minSalary"
                 value={draft.minSalaryUsd}
                 onChange={(n) => set('minSalaryUsd', n)}
-                min={0}
+                {...LIMITS.minSalaryUsd}
                 suffix="USD/yr"
               />
             </Field>
@@ -378,6 +354,9 @@ function SettingsForm({ payload, header }: { payload: SettingsPayload; header: R
             dirty={dirtyGroups.has('places')}
           >
             <LocationsEditor value={draft.locations} onChange={(v) => set('locations', v)} />
+            {problems.locations && (
+              <p className="animate-fade-in px-5 py-3 text-xs text-stop">{problems.locations}</p>
+            )}
           </Card>
 
           <Card
@@ -386,13 +365,12 @@ function SettingsForm({ payload, header }: { payload: SettingsPayload; header: R
             description={`Last push ${relative(payload.lastPushAt)}.`}
             dirty={dirtyGroups.has('notifications')}
           >
-            <Field label="Push every" htmlFor="pushEvery">
+            <Field label="Push every" htmlFor="pushEvery" error={problems.pushEveryMinutes}>
               <NumberInput
                 id="pushEvery"
                 value={draft.pushEveryMinutes}
                 onChange={(n) => set('pushEveryMinutes', n)}
-                min={5}
-                max={1440}
+                {...LIMITS.pushEveryMinutes}
                 suffix="min"
               />
             </Field>
@@ -400,37 +378,43 @@ function SettingsForm({ payload, header }: { payload: SettingsPayload; header: R
               label="Only push roles newer than"
               hint="Older ones still show in the feed."
               htmlFor="maxAge"
+              error={problems.maxJobAgeHours}
             >
               <NumberInput
                 id="maxAge"
                 value={draft.maxJobAgeHours}
                 onChange={(n) => set('maxJobAgeHours', n)}
-                min={1}
-                max={168}
+                {...LIMITS.maxJobAgeHours}
                 suffix="hours"
               />
             </Field>
             <Field
               label="Quiet hours"
               hint="Eastern time. No pushes in between; the same time twice turns it off."
+              error={problems.quietHours}
+              errorId="quietHours-error"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <Input
                   type="time"
                   aria-label="Quiet hours start"
+                  aria-invalid={!draft.quietHours.start}
+                  aria-describedby={problems.quietHours && 'quietHours-error'}
                   value={draft.quietHours.start}
                   onChange={(e) =>
                     set('quietHours', { ...draft.quietHours, start: e.target.value })
                   }
-                  className="w-32 font-mono"
+                  className="w-32 font-mono aria-invalid:border-stop/60"
                 />
                 <span className="text-sm text-dim">to</span>
                 <Input
                   type="time"
                   aria-label="Quiet hours end"
+                  aria-invalid={!draft.quietHours.end}
+                  aria-describedby={problems.quietHours && 'quietHours-error'}
                   value={draft.quietHours.end}
                   onChange={(e) => set('quietHours', { ...draft.quietHours, end: e.target.value })}
-                  className="w-32 font-mono"
+                  className="w-32 font-mono aria-invalid:border-stop/60"
                 />
               </div>
             </Field>
@@ -545,19 +529,24 @@ function SettingsForm({ payload, header }: { payload: SettingsPayload; header: R
             </button>
             <Reveal open={advanced} id="advanced-body">
               <div className="divide-y divide-line/70 border-t border-line/70">
-                <Field label="Check for new roles every" htmlFor="pollEvery">
+                <Field
+                  label="Check for new roles every"
+                  htmlFor="pollEvery"
+                  error={problems.pollEveryMinutes}
+                >
                   <NumberInput
                     id="pollEvery"
                     value={draft.pollEveryMinutes}
                     onChange={(n) => set('pollEveryMinutes', n)}
-                    min={5}
-                    max={1440}
+                    {...LIMITS.pollEveryMinutes}
                     suffix="min"
                   />
                 </Field>
                 <Field
                   label="Keep roles posted within"
                   hint="Older roles still open sink down the feed. New-grad board roles stay up to 180 days."
+                  error={problems.storeWindowDays}
+                  errorId="storeWindow-error"
                 >
                   <StoreWindow
                     key={version}
@@ -582,12 +571,14 @@ function SettingsForm({ payload, header }: { payload: SettingsPayload; header: R
                 <KeywordField
                   label="Role keywords"
                   hint="A title needs one of these."
+                  error={problems.roleKeywords}
                   value={draft.roleKeywords}
                   onChange={(v) => set('roleKeywords', v)}
                 />
                 <KeywordField
                   label="Level keywords"
                   hint="These mark a title as entry level."
+                  error={problems.levelKeywords}
                   value={draft.levelKeywords}
                   onChange={(v) => set('levelKeywords', v)}
                 />
@@ -612,10 +603,13 @@ function SettingsForm({ payload, header }: { payload: SettingsPayload; header: R
 
       <SaveBar
         count={changed.length}
-        valid={valid}
+        problem={firstProblem && `${PROBLEM_LABELS[firstProblem[0]]}: ${firstProblem[1]}`}
         pending={save.isPending}
         onSave={() =>
-          save.mutate(Object.fromEntries(changed.map((k) => [k, draft[k]])) as Partial<Settings>)
+          save.mutate({
+            json: Object.fromEntries(changed.map((k) => [k, draft[k]])) as Partial<Settings>,
+            sent: draft,
+          })
         }
         onDiscard={reset}
       />
@@ -645,17 +639,20 @@ function KeywordField({
   value,
   onChange,
   tone,
+  error,
 }: {
   label: string
   hint: ReactNode
   value: string[]
   onChange: (v: string[]) => void
   tone?: 'stop'
+  error?: string
 }) {
   return (
     <div className="px-5 py-3.5">
       <ChipsInput label={label} value={value} onChange={onChange} tone={tone} />
       <p className="mt-1.5 text-xs text-dim">{hint}</p>
+      {error && <p className="mt-0.5 animate-fade-in text-xs text-stop">{error}</p>}
     </div>
   )
 }

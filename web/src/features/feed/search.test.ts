@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  countsAsVisit,
   defaultSort,
   forgetSearches,
   isBlankSearch,
@@ -63,6 +64,20 @@ describe('feed search params', () => {
     localStorage.setItem('jobvr.filters', 'not json')
     forgetSearches()
     expect(recallSearch('feed')).toEqual({})
+  })
+
+  it('drops the applied-date order outside Applied', () => {
+    expect(parseFeedSearch({ sort: 'applied' }).sort).toBeUndefined()
+    expect(parseFeedSearch({ view: 'saved', sort: 'applied' }).sort).toBeUndefined()
+    expect(parseFeedSearch({ view: 'applied', sort: 'applied' }).sort).toBe('applied')
+    expect(parseFeedSearch({ view: 'saved', sort: 'best' }).sort).toBe('best')
+  })
+
+  it('counts the feed as a visit whatever its remembered filters, but not a search', () => {
+    expect(countsAsVisit({})).toBe(true)
+    expect(countsAsVisit({ age: '1w', tier: ['Mid'], sort: 'newest' })).toBe(true)
+    expect(countsAsVisit({ q: 'stripe' })).toBe(false)
+    expect(countsAsVisit({ view: 'saved' })).toBe(false)
   })
 
   it('treats a search with only a view as blank', () => {

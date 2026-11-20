@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { FilterBar } from './filter-bar'
@@ -62,5 +62,19 @@ describe('FilterBar', () => {
     expect(screen.queryByText('Location')).toBeNull()
     expect(screen.queryByText('Source')).toBeNull()
     expect(screen.queryByLabelText('Company')).toBeNull()
+  })
+
+  it('drops a pending search when it unmounts', () => {
+    vi.useFakeTimers()
+    try {
+      const onChange = vi.fn()
+      const { unmount } = render(<FilterBar search={{}} onChange={onChange} onView={vi.fn()} />)
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'stripe' } })
+      unmount()
+      vi.advanceTimersByTime(500)
+      expect(onChange).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

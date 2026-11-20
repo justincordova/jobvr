@@ -83,6 +83,11 @@ const subscribe = (l: () => void) => {
 // eslint-disable-next-line react-refresh/only-export-components
 export const useToast = () => toast
 
+/** Whether a toast is on screen (things at the bottom center step aside). */
+// eslint-disable-next-line react-refresh/only-export-components
+export const useToastShowing = () =>
+  useSyncExternalStore(subscribe, () => items.some((t) => t.open))
+
 export function Toaster() {
   const list = useSyncExternalStore(subscribe, () => items)
   return (

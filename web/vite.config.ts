@@ -54,7 +54,7 @@ export default defineConfig({
             // response only when the request fails. Writes are never cached.
             urlPattern: ({ url, request }) =>
               request.method === 'GET' &&
-              /^\/api\/(jobs|settings|companies|suggestions)(\/|$)/.test(url.pathname),
+              /^\/api\/(jobs|settings|companies)(\/|$)/.test(url.pathname),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'jobvr-api',

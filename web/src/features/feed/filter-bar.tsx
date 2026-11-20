@@ -1,5 +1,5 @@
 import { ChevronDown, Layers, Search, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -58,6 +58,8 @@ function SearchField({
     window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => onChange(next.trim() || undefined), delay)
   }
+  // Leaving the page mid-pause must not navigate back to the search
+  useEffect(() => () => window.clearTimeout(timer.current), [])
   return (
     <div className="relative order-first w-full sm:order-none sm:ml-auto sm:w-56">
       <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />

@@ -459,7 +459,7 @@ export function CompaniesPage() {
                         </span>
                       </td>
                       <td className="hidden px-2 py-2.5 font-mono text-xs text-faint sm:table-cell">
-                        {c.stats.lastRoleAt ? shortAge(c.stats.lastRoleAt) : '—'}
+                        {c.stats.lastRoleAt ? shortAge(c.stats.lastRoleAt) : 'never'}
                       </td>
                       <td className="px-2 py-2.5 whitespace-nowrap">
                         <span
