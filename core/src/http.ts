@@ -21,7 +21,10 @@ export type TextResult =
 export interface GetOptions {
   etag?: string | null;
   signal?: AbortSignal;
-  /** Overrides the client's per-request timeout (whole boards of big companies are slow). */
+  /**
+   * Overrides the client's per-request timeout (whole boards of big companies are slow).
+   * A request that runs out of its own timeout is not retried.
+   */
   timeoutMs?: number;
 }
 
@@ -88,7 +91,8 @@ const retryAfterMs = (header: string | null): number | null => {
 
 /**
  * HTTP helper shared by all adapters: per-request timeout, one retry (jittered,
- * honoring Retry-After) on network errors, 5xx, and 429; ETag support; size cap.
+ * honoring Retry-After) on network errors, 5xx, and 429 (not after an explicit
+ * `timeoutMs` runs out); ETag support; size cap.
  */
 export const createHttpClient = (deps: HttpClientDeps = {}): HttpClient => {
   const doFetch = deps.fetch ?? fetch;
@@ -102,8 +106,15 @@ export const createHttpClient = (deps: HttpClientDeps = {}): HttpClient => {
     options: GetOptions,
     json: boolean,
   ): Promise<{ result?: JsonResult; retryable: boolean; error?: HttpError; waitMs?: number }> => {
-    const signals = [AbortSignal.timeout(options.timeoutMs ?? timeoutMs)];
+    const limitMs = options.timeoutMs ?? timeoutMs;
+    const timeout = AbortSignal.timeout(limitMs);
+    const signals = [timeout];
     if (options.signal) signals.push(options.signal);
+    // A request given its own (long) timeout isn't retried after it: a hung board costs one wait
+    const timedOut = () =>
+      options.timeoutMs !== undefined && timeout.aborted
+        ? { retryable: false, error: new HttpError(`Timed out after ${limitMs} ms: ${url}`) }
+        : null;
     const headers: Record<string, string> = {
       "User-Agent": USER_AGENT,
       Accept: json ? "application/json" : "text/plain, text/markdown, */*",
@@ -116,6 +127,8 @@ export const createHttpClient = (deps: HttpClientDeps = {}): HttpClient => {
       res = await doFetch(url, { headers, signal: AbortSignal.any(signals) });
     } catch (err) {
       if (options.signal?.aborted) throw new HttpError("Aborted");
+      const timeoutResult = timedOut();
+      if (timeoutResult) return timeoutResult;
       const message = err instanceof Error ? err.message : String(err);
       return { retryable: true, error: new HttpError(`Network error: ${message}`) };
     }
@@ -138,6 +151,8 @@ export const createHttpClient = (deps: HttpClientDeps = {}): HttpClient => {
       } catch (err) {
         if (err instanceof HttpError) return { retryable: false, error: err };
         if (options.signal?.aborted) throw new HttpError("Aborted");
+        const timeoutResult = timedOut();
+        if (timeoutResult) return timeoutResult;
         const message = err instanceof Error ? err.message : String(err);
         // Timeouts while streaming are transient; invalid JSON is not
         return {

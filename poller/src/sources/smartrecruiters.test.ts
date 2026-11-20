@@ -1,4 +1,4 @@
-import { parseAtsUrl } from "@jobvr/core";
+import { type GetOptions, parseAtsUrl } from "@jobvr/core";
 import { fakeHttp } from "@jobvr/core/testing";
 import { describe, expect, it } from "vitest";
 import { adapters } from "./index";
@@ -68,6 +68,92 @@ describe("smartrecruiters adapter", () => {
     expect(res.jobs[1]?.locations).toEqual(["North Chicago, IL, United States", "Remote - US"]);
   });
 
+  it("holds closures (as id-less invalid items) when the board stops at MAX_PAGES", async () => {
+    const replies: Record<string, ReturnType<typeof ok>> = {};
+    for (let p = 0; p < 25; p++) {
+      replies[page(p * 100)] = ok({
+        totalFound: 2500,
+        content: Array.from({ length: 100 }, (_, i) => posting(1_000_000 + p * 100 + i)),
+      });
+    }
+    const { http, calls } = fakeHttp(replies);
+    const res = await smartrecruiters.fetch({ slug: "AbbVie", http });
+    if (res.status !== "ok") throw new Error("expected ok");
+    expect(calls).toHaveLength(20);
+    expect(res.jobs).toHaveLength(2000);
+    expect(res.invalidCount).toBe(500);
+    expect(res.invalidIds).toEqual([]);
+  });
+
+  it("holds closures when the pages hold fewer postings than totalFound", async () => {
+    const { http } = fakeHttp({
+      [page(0)]: ok({
+        totalFound: 250,
+        content: Array.from({ length: 100 }, (_, i) => posting(1_000_000 + i)),
+      }),
+      // A short page ends the read early
+      [page(100)]: ok({ totalFound: 250, content: [posting(2_000_000)] }, null),
+    });
+    const res = await smartrecruiters.fetch({ slug: "AbbVie", http });
+    if (res.status !== "ok") throw new Error("expected ok");
+    expect(res.jobs).toHaveLength(101);
+    expect(res.invalidCount).toBe(149);
+    expect(res.invalidIds).toEqual([]);
+  });
+
+  it("keeps one copy of a posting seen on two pages, holding closures for the one it hid", async () => {
+    const { http } = fakeHttp({
+      [page(0)]: ok({
+        totalFound: 150,
+        content: Array.from({ length: 100 }, (_, i) => posting(1_000_000 + i)),
+      }),
+      // A new posting on top pushed #1000099 down onto page 2; #1000150 slipped off the end
+      [page(100)]: ok(
+        {
+          totalFound: 150,
+          content: Array.from({ length: 50 }, (_, i) => posting(1_000_099 + i)),
+        },
+        null,
+      ),
+    });
+    const res = await smartrecruiters.fetch({ slug: "AbbVie", http });
+    if (res.status !== "ok") throw new Error("expected ok");
+    const ids = res.jobs.map((j) => j.sourceJobId);
+    expect(ids).toHaveLength(149);
+    expect(new Set(ids).size).toBe(149);
+    expect(res.invalidCount).toBe(1);
+    expect(res.invalidIds).toEqual([]);
+  });
+
+  it("closes nothing extra on a complete board", async () => {
+    const { http } = fakeHttp({
+      [page(0)]: ok({ totalFound: 2, content: [posting(1_000_001), posting(1_000_002)] }),
+    });
+    const res = await smartrecruiters.fetch({ slug: "AbbVie", http });
+    if (res.status !== "ok") throw new Error("expected ok");
+    expect(res.invalidCount).toBe(0);
+  });
+
+  it("reads pages with the default timeout", async () => {
+    const { http } = fakeHttp({
+      [page(0)]: ok({
+        totalFound: 101,
+        content: Array.from({ length: 100 }, (_, i) => posting(1_000_000 + i)),
+      }),
+      [page(100)]: ok({ totalFound: 101, content: [posting(2_000_000)] }, null),
+    });
+    const timeouts: Array<number | undefined> = [];
+    const spy = {
+      ...http,
+      getJson: (url: string, options?: GetOptions) => {
+        timeouts.push(options?.timeoutMs);
+        return http.getJson(url, options);
+      },
+    };
+    await smartrecruiters.fetch({ slug: "AbbVie", http: spy });
+    expect(timeouts).toEqual([undefined, undefined]);
+  });
+
   it("returns not_modified when the first page hasn't changed", async () => {
     const { http, calls } = fakeHttp({ [page(0)]: { status: "not_modified" } });
     const res = await smartrecruiters.fetch({ slug: "AbbVie", etag: 'W/"p1"', http });
@@ -123,6 +209,21 @@ describe("smartrecruiters adapter", () => {
     expect(smartrecruiters.boardSlug?.("https://careers.smartrecruiters.com/ServiceNow")).toBe(
       "ServiceNow",
     );
+    expect(
+      smartrecruiters.boardSlug?.(
+        "https://jobs.smartrecruiters.com/oneclick-ui/company/Visa/publication/0b5b2b8e-8f7c-4a3e-9d1a-2f6c1e7b9a10?dcr_ci=Visa",
+      ),
+    ).toBe("Visa");
+    expect(
+      smartrecruiters.boardSlug?.("https://jobs.smartrecruiters.com/oneclick-ui/company/Acme%E0/x"),
+    ).toBeNull();
+    expect(smartrecruiters.boardSlug?.("https://jobs.smartrecruiters.com/oneclick-ui/")).toBeNull();
+    // Its posting id is a uuid, not the numeric id the board lists
+    expect(
+      parseSmartRecruitersUrl(
+        "https://jobs.smartrecruiters.com/oneclick-ui/company/Visa/publication/0b5b2b8e-8f7c-4a3e-9d1a-2f6c1e7b9a10",
+      ),
+    ).toBeNull();
   });
 
   it("is what the lists' SmartRecruiters links resolve to", () => {

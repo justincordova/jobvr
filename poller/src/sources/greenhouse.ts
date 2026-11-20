@@ -8,7 +8,7 @@ import {
   validateItems,
 } from "@jobvr/core";
 import { z } from "zod";
-import { boardSlugOn, decodeSlug, htmlToText, probeBoard } from "./shared";
+import { boardSlugOn, decodeSlug, htmlToText, probeBoard, querySlug } from "./shared";
 
 const HOSTS = new Set([
   "boards.greenhouse.io",
@@ -58,6 +58,16 @@ const toSalary = (ranges: z.output<typeof Detail>["pay_input_ranges"]): JobDetai
 
 const boardUrl = (slug: string) =>
   `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(slug)}/jobs`;
+
+/** The board a link is on; embedded boards name it in `for` (/embed/job_board?for=acme). */
+const greenhouseBoardSlug = (raw: string): string | null => {
+  if (!URL.canParse(raw)) return null;
+  const url = new URL(raw);
+  if (!HOSTS.has(url.hostname.toLowerCase())) return null;
+  const [first, second] = url.pathname.split("/").filter(Boolean);
+  if (first !== "embed") return boardSlugOn(raw, HOSTS);
+  return second === "job_board" || second === "job_app" ? querySlug(url, "for") : null;
+};
 
 export const parseGreenhouseUrl = (raw: string): ParsedUrl | null => {
   let url: URL;
@@ -133,7 +143,7 @@ export const greenhouse: SourceAdapter = {
   },
 
   parseUrl: parseGreenhouseUrl,
-  boardSlug: (url) => boardSlugOn(url, HOSTS),
+  boardSlug: greenhouseBoardSlug,
 
   probe: (slug, ctx) => probeBoard(boardUrl(slug), ctx, (data) => Response.parse(data).jobs.length),
 };

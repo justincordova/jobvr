@@ -1,4 +1,4 @@
-import { parseAtsUrl } from "@jobvr/core";
+import { type GetOptions, parseAtsUrl } from "@jobvr/core";
 import { fakeHttp } from "@jobvr/core/testing";
 import { describe, expect, it } from "vitest";
 import { adapters } from "./index";
@@ -87,6 +87,43 @@ describe("workable adapter", () => {
     expect(res.jobs[2]?.locations).toEqual(["London, England, United Kingdom"]);
   });
 
+  it("lists no places when every one is hidden, not the hidden one at the top level", async () => {
+    const hidden = {
+      title: "Software Engineer",
+      shortcode: "HIDDEN0001",
+      published_on: "2026-11-17",
+      telecommuting: true,
+      country: "United States",
+      city: "Secret",
+      state: "Virginia",
+      locations: [
+        { country: "United States", countryCode: "US", city: "Secret", region: "VA", hidden: true },
+      ],
+    };
+    const onSite = { ...hidden, shortcode: "HIDDEN0002", telecommuting: false };
+    const { http } = fakeHttp({ [LIST]: ok({ jobs: [hidden, onSite] }) });
+    const res = await workable.fetch({ slug: "interimage", http });
+    if (res.status !== "ok") throw new Error("expected ok");
+    expect(res.jobs[0]?.locations).toEqual(["Remote - US"]);
+    expect(res.jobs[1]?.locations).toEqual([]);
+  });
+
+  it("reads lists and details with the default timeout", async () => {
+    const { http } = fakeHttp({ [LIST]: ok(board), [DETAIL]: ok({ description: "x" }) });
+    const timeouts: Array<number | undefined> = [];
+    const spy = {
+      ...http,
+      getJson: (url: string, options?: GetOptions) => {
+        timeouts.push(options?.timeoutMs);
+        return http.getJson(url, options);
+      },
+    };
+    await workable.fetch({ slug: "interimage", http: spy });
+    await workable.fetchDetail?.("interimage", "1A2B3C4D5E", { http: spy });
+    await workable.probe?.("interimage", { http: spy });
+    expect(timeouts).toEqual([undefined, undefined, undefined]);
+  });
+
   it("fetches one job's description and pay", async () => {
     const { http } = fakeHttp({
       [DETAIL]: ok({
@@ -132,6 +169,14 @@ describe("workable adapter", () => {
     expect(parseWorkableUrl("https://www.workable.com/j/212FC0AB03")).toBeNull();
     expect(workable.boardSlug?.("https://apply.workable.com/rokt/")).toBe("rokt");
     expect(workable.boardSlug?.("https://apply.workable.com/j/212FC0AB03")).toBeNull();
+    expect(workable.boardSlug?.("https://acme.workable.com/j/212FC0AB03")).toBe("acme");
+    // Workable's own sites aren't accounts
+    expect(workable.boardSlug?.("https://help.workable.com/hc/en-us/articles/115012771647")).toBe(
+      null,
+    );
+    expect(workable.boardSlug?.("https://resources.workable.com/job-descriptions")).toBeNull();
+    expect(workable.boardSlug?.("https://acme.workable.com/")).toBeNull();
+    expect(parseWorkableUrl("https://help.workable.com/j/212FC0AB03")).toBeNull();
   });
 
   it("is what the lists' Workable links resolve to", () => {

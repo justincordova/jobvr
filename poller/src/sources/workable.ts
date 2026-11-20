@@ -1,5 +1,4 @@
 import {
-  BOARD_TIMEOUT_MS,
   HttpError,
   type JobDetail,
   type ParsedUrl,
@@ -12,9 +11,9 @@ import { z } from "zod";
 import { decodeSlug, htmlToText, probeBoard, REMOTE_US } from "./shared";
 
 const HOST = "apply.workable.com";
-/** Old-style boards on their own subdomain: acme.workable.com/j/<code>. */
+/** Old-style boards on their own subdomain: acme.workable.com/j/<code> (job links only). */
 const SUBDOMAIN = /^([a-z0-9-]+)\.workable\.com$/i;
-const NOT_BOARDS = new Set(["apply", "www", "jobs", "api"]);
+const NOT_BOARDS = new Set(["apply", "www", "jobs", "api", "help", "resources"]);
 /** Shortcodes are global: apply.workable.com/j/<code> works without the account. */
 const SHORTCODE = /^[A-Z0-9]{6,12}$/i;
 
@@ -83,7 +82,7 @@ const toSalary = (d: z.output<typeof Detail>): Salary | undefined => {
   };
 };
 
-/** The account a Workable link belongs to (apply.workable.com/acme/..., acme.workable.com). */
+/** The account a Workable link belongs to (apply.workable.com/acme/..., acme.workable.com/j/...). */
 const accountOf = (url: URL): { slug: string | null; rest: string[] } | null => {
   const host = url.hostname.toLowerCase();
   const parts = url.pathname.split("/").filter(Boolean);
@@ -93,7 +92,8 @@ const accountOf = (url: URL): { slug: string | null; rest: string[] } | null => 
     return { slug: decodeSlug(parts[0]), rest: parts.slice(1) };
   }
   const sub = SUBDOMAIN.exec(host)?.[1];
-  if (!sub || NOT_BOARDS.has(sub)) return null;
+  // Only job links: help.workable.com/hc/... and resources.workable.com/... aren't boards
+  if (!sub || NOT_BOARDS.has(sub) || parts[0] !== "j") return null;
   return { slug: sub, rest: parts };
 };
 
@@ -119,17 +119,15 @@ export const workable: SourceAdapter = {
     if (!ctx.slug) throw new Error("workable: slug is required");
     const slug = ctx.slug;
     // No ETag from Workable: every poll reads the list (~1 KB a job, without descriptions)
-    const res = await ctx.http.getJson(boardUrl(slug), {
-      signal: ctx.signal,
-      timeoutMs: BOARD_TIMEOUT_MS,
-    });
+    const res = await ctx.http.getJson(boardUrl(slug), { signal: ctx.signal });
     if (res.status === "not_modified") return res;
     const { jobs: items } = Response.parse(res.data);
     const companyName = ctx.companyName ?? slug;
     const { jobs, invalidCount, invalidIds } = validateItems("workable", items, RawJob, (j) => {
       const places = (j.locations ?? []).filter((p) => !p.hidden);
+      // Every place hidden: the top-level city/state/country is one of them, so it stays hidden too
       const locations = (
-        places.length > 0 ? places : [{ city: j.city, region: j.state, country: j.country }]
+        j.locations?.length ? places : [{ city: j.city, region: j.state, country: j.country }]
       )
         .map(placeText)
         .filter(Boolean);

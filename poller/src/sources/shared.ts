@@ -1,4 +1,4 @@
-import { BOARD_TIMEOUT_MS, HttpError, type ProbeCtx } from "@jobvr/core";
+import { HttpError, type ProbeCtx } from "@jobvr/core";
 
 /** Location appended by adapters to remote US jobs (matched by the Remote-US rule). */
 export const REMOTE_US = "Remote - US";
@@ -20,11 +20,18 @@ export const boardSlugOn = (raw: string, hosts: ReadonlySet<string>): string | n
   if (!URL.canParse(raw)) return null;
   const url = new URL(raw);
   if (!hosts.has(url.hostname.toLowerCase())) return null;
-  // Greenhouse's embedded board: /embed/job_board?for=acme
-  const embedded = url.searchParams.get("for");
-  if (embedded) return embedded;
   const [first] = url.pathname.split("/").filter(Boolean);
   return first && first !== "embed" ? decodeSlug(first) : null;
+};
+
+/** A query parameter decoded like a path segment (so "acme%E0" is null, not "acme\uFFFD"). */
+export const querySlug = (url: URL, name: string): string | null => {
+  const pair = url.search
+    .slice(1)
+    .split("&")
+    .find((p) => p.startsWith(`${name}=`));
+  const value = pair?.slice(name.length + 1);
+  return value ? decodeSlug(value) : null;
 };
 
 /** GET a board for `discover`/`seed`: 404 means "no board with that slug". */
@@ -34,7 +41,7 @@ export const probeBoard = async (
   count: (data: unknown) => number,
 ): Promise<{ found: boolean; jobCount: number }> => {
   try {
-    const res = await ctx.http.getJson(url, { signal: ctx.signal, timeoutMs: BOARD_TIMEOUT_MS });
+    const res = await ctx.http.getJson(url, { signal: ctx.signal });
     return { found: true, jobCount: res.status === "ok" ? count(res.data) : 0 };
   } catch (err) {
     if (err instanceof HttpError && err.status === 404) return { found: false, jobCount: 0 };

@@ -93,6 +93,47 @@ describe("http client", () => {
     });
   });
 
+  it("does not retry a request that ran out of its own timeout", async () => {
+    let calls = 0;
+    const hung = (async (_url: string, init: RequestInit) => {
+      calls++;
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      init.signal?.throwIfAborted();
+      return json({ ok: true });
+    }) as unknown as typeof fetch;
+    const sleeps: number[] = [];
+    const client = createHttpClient({
+      fetch: hung,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+    });
+    await expect(client.getJson("https://x.test/board", { timeoutMs: 20 })).rejects.toThrow(
+      "Timed out after 20 ms: https://x.test/board",
+    );
+    expect(calls).toBe(1);
+    expect(sleeps).toEqual([]);
+  });
+
+  it("does not retry a body that stalls past its own timeout", async () => {
+    let calls = 0;
+    const stalling = (async (_url: string, init: RequestInit) => {
+      calls++;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("{"));
+          init.signal?.addEventListener("abort", () => controller.error(init.signal?.reason));
+        },
+      });
+      return new Response(body);
+    }) as unknown as typeof fetch;
+    const client = createHttpClient({ fetch: stalling, sleep: async () => {} });
+    await expect(client.getJson("https://x.test/board", { timeoutMs: 20 })).rejects.toThrow(
+      /Timed out after 20 ms/,
+    );
+    expect(calls).toBe(1);
+  });
+
   it("returns text as is, with its etag, retrying a 5xx like JSON", async () => {
     const { client, requests } = scripted(
       new Response("", { status: 503 }),

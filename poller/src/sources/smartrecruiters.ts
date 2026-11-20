@@ -1,5 +1,4 @@
 import {
-  BOARD_TIMEOUT_MS,
   HttpError,
   type JobDetail,
   type ParsedUrl,
@@ -58,6 +57,11 @@ const detailUrl = (slug: string, id: string) =>
 /** Sections worth reading, in order; the company blurb is skipped. */
 const SECTIONS = ["jobDescription", "qualifications", "additionalInformation"];
 
+const postingId = (item: unknown): string | null => {
+  const id = item && typeof item === "object" ? (item as { id?: unknown }).id : undefined;
+  return typeof id === "string" || typeof id === "number" ? String(id) : null;
+};
+
 export const parseSmartRecruitersUrl = (raw: string): ParsedUrl | null => {
   if (!URL.canParse(raw)) return null;
   const url = new URL(raw);
@@ -85,26 +89,34 @@ export const smartrecruiters: SourceAdapter = {
     const first = await ctx.http.getJson(pageUrl(slug, 0), {
       etag: ctx.etag,
       signal: ctx.signal,
-      timeoutMs: BOARD_TIMEOUT_MS,
     });
     if (first.status === "not_modified") return first;
     const head = Page.parse(first.data);
     const items = [...head.content];
     const pages = Math.min(MAX_PAGES, Math.ceil(head.totalFound / PAGE));
     for (let p = 1; p < pages; p++) {
-      const res = await ctx.http.getJson(pageUrl(slug, p * PAGE), {
-        signal: ctx.signal,
-        timeoutMs: BOARD_TIMEOUT_MS,
-      });
-      if (res.status !== "ok") break;
+      const res = await ctx.http.getJson(pageUrl(slug, p * PAGE), { signal: ctx.signal });
+      if (res.status !== "ok") throw new Error(`smartrecruiters: page ${p} answered not_modified`);
       const page = Page.parse(res.data);
       items.push(...page.content);
       if (page.content.length < PAGE) break;
     }
+    // Postings published mid-read shift the pages: one can show up twice, and another not at all
+    const seen = new Set<string>();
+    const unique = items.filter((item) => {
+      const id = postingId(item);
+      if (id === null) return true;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+    // A partial board (past MAX_PAGES, a short page, shifted pages) would close every posting
+    // it missed. Counted as invalid items without an id, they hold this poll's closures
+    const missing = Math.max(0, head.totalFound - unique.length);
     const companyName = ctx.companyName ?? slug;
     const { jobs, invalidCount, invalidIds } = validateItems(
       "smartrecruiters",
-      items,
+      unique,
       RawJob,
       (j) => {
         const loc = j.location;
@@ -130,7 +142,13 @@ export const smartrecruiters: SourceAdapter = {
         };
       },
     );
-    return { status: "ok", etag: first.etag, jobs, invalidCount, invalidIds };
+    return {
+      status: "ok",
+      etag: first.etag,
+      jobs,
+      invalidCount: invalidCount + missing,
+      invalidIds,
+    };
   },
 
   // The list has no description; it's fetched per job, only for matching listings
@@ -150,7 +168,15 @@ export const smartrecruiters: SourceAdapter = {
   },
 
   parseUrl: parseSmartRecruitersUrl,
-  boardSlug: (url) => boardSlugOn(url, HOSTS),
+  boardSlug: (raw) => {
+    if (!URL.canParse(raw)) return null;
+    const url = new URL(raw);
+    if (!HOSTS.has(url.hostname.toLowerCase())) return null;
+    const [first, kind, company] = url.pathname.split("/").filter(Boolean);
+    // Apply links: /oneclick-ui/company/Acme/publication/<uuid>
+    if (first === "oneclick-ui") return kind === "company" && company ? decodeSlug(company) : null;
+    return boardSlugOn(raw, HOSTS);
+  },
 
   // An unknown company answers like an empty one, so only a board with US roles counts
   probe: async (slug, ctx) => {

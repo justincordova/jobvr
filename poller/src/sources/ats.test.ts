@@ -1,4 +1,4 @@
-import { HttpError, SchemaDriftError } from "@jobvr/core";
+import { BOARD_TIMEOUT_MS, type GetOptions, HttpError, SchemaDriftError } from "@jobvr/core";
 import { fakeHttp } from "@jobvr/core/testing";
 import { describe, expect, it } from "vitest";
 import { ashby, parseAshbyUrl } from "./ashby";
@@ -13,6 +13,33 @@ const LV = "https://api.lever.co/v0/postings/gopuff?mode=json";
 const AB = "https://api.ashbyhq.com/posting-api/job-board/livekit?includeCompensation=true";
 
 const ok = (data: unknown, etag = '"v1"') => ({ status: "ok" as const, etag, data });
+
+describe("board timeouts", () => {
+  it("gives whole Greenhouse, Lever and Ashby boards the long timeout, and probes the default", async () => {
+    const { http } = fakeHttp({
+      [GH]: ok(greenhouseFixture),
+      [LV]: ok(leverFixture),
+      [AB]: ok(ashbyFixture),
+    });
+    const timeouts: Array<number | undefined> = [];
+    const spy = {
+      ...http,
+      getJson: (url: string, options?: GetOptions) => {
+        timeouts.push(options?.timeoutMs);
+        return http.getJson(url, options);
+      },
+    };
+    await greenhouse.fetch({ slug: "airtable", http: spy });
+    await lever.fetch({ slug: "gopuff", http: spy });
+    await ashby.fetch({ slug: "livekit", http: spy });
+    expect(timeouts).toEqual([BOARD_TIMEOUT_MS, BOARD_TIMEOUT_MS, BOARD_TIMEOUT_MS]);
+    timeouts.length = 0;
+    await greenhouse.probe?.("airtable", { http: spy });
+    await lever.probe?.("gopuff", { http: spy });
+    await ashby.probe?.("livekit", { http: spy });
+    expect(timeouts).toEqual([undefined, undefined, undefined]);
+  });
+});
 
 describe("greenhouse adapter", () => {
   it("maps jobs, skips invalid items, and returns the etag", async () => {
@@ -139,6 +166,24 @@ describe("greenhouse adapter", () => {
       ),
     ).toBeNull();
     expect(parseGreenhouseUrl("https://job-boards.greenhouse.io/acme")).toBeNull();
+  });
+
+  it("reads the board from Greenhouse embed links' `for`, decoded like any slug", () => {
+    expect(greenhouse.boardSlug?.("https://boards.greenhouse.io/embed/job_board?for=acme")).toBe(
+      "acme",
+    );
+    expect(
+      greenhouse.boardSlug?.("https://boards.greenhouse.io/embed/job_app?token=77&for=acme%20co"),
+    ).toBe("acme co");
+    expect(greenhouse.boardSlug?.("https://boards.greenhouse.io/embed/job_board?for=acme%E0")).toBe(
+      null,
+    );
+    expect(greenhouse.boardSlug?.("https://boards.greenhouse.io/embed/job_board")).toBeNull();
+    expect(greenhouse.boardSlug?.("https://boards.greenhouse.io/embed/other?for=acme")).toBeNull();
+    // Only embed links name the board in `for`; elsewhere it's the path's
+    expect(greenhouse.boardSlug?.("https://job-boards.greenhouse.io/acme?for=other")).toBe("acme");
+    expect(lever.boardSlug?.("https://jobs.lever.co/acme?for=other")).toBe("acme");
+    expect(lever.boardSlug?.("https://jobs.lever.co/embed/job_board?for=other")).toBeNull();
   });
 });
 
