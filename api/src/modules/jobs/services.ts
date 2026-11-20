@@ -17,7 +17,8 @@ export const toJobDto = (j: JobWithFlags): z.infer<typeof JobSchema> => ({
   salaryMinUsd: j.salaryMinUsd,
   salaryMaxUsd: j.salaryMaxUsd,
   state: j.state,
-  appliedAt: isoOrNull(j.appliedAt),
+  // Kept in the database after an undo; it only means something while applied
+  appliedAt: j.state === "applied" ? isoOrNull(j.appliedAt) : null,
   baseline: j.baseline,
   closedAt: isoOrNull(j.closedAt),
   isNew: j.isNew,

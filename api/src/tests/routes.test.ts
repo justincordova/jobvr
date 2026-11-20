@@ -303,6 +303,24 @@ describe("jobs routes", () => {
     expect(feed.data.jobs[0]).toMatchObject({ id: "gh:1", state: "new", appliedAt: null });
   });
 
+  it("keeps the first applied date when an undo marks it applied again", async () => {
+    await insertJob("gh:1");
+    const param = { id: "gh:1" };
+    const first = ctx.clock;
+    await client.api.jobs[":id"].$patch({ param, json: { state: "applied" } });
+    ctx.clock = new Date(first.getTime() + HOUR);
+    await client.api.jobs[":id"].$patch({ param, json: { state: "new" } });
+    ctx.clock = new Date(first.getTime() + 2 * HOUR);
+    // Undo of "Not applied"
+    await client.api.jobs[":id"].$patch({ param, json: { state: "applied" } });
+    const applied = await body<{ data: { jobs: { id: string; appliedAt: string }[] } }>(
+      await client.api.jobs.$get({ query: { view: "applied" } }),
+    );
+    expect(applied.data.jobs.map((j) => [j.id, j.appliedAt])).toEqual([
+      ["gh:1", first.toISOString()],
+    ]);
+  });
+
   it("lists applied jobs latest applied first, keeping the date on a repeat", async () => {
     await insertJob("gh:old", { effectiveAt: at(48) });
     await insertJob("gh:fresh");

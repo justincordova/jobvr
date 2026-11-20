@@ -401,7 +401,9 @@ export const markVisit = (db: DbOrTx, now: Date): Promise<void> =>
 
 /**
  * Moves a job between new / saved / hidden / applied. Marking applied stamps
- * `applied_at` (kept if it already is applied); any other state clears it.
+ * `applied_at` the first time only; leaving applied keeps it, so undoing a
+ * "not applied" restores the original date. Only an applied job's date means
+ * anything (the API shows it for those only).
  */
 export const setJobState = async (
   db: DbOrTx,
@@ -409,10 +411,13 @@ export const setJobState = async (
   state: JobState,
   now: Date,
 ): Promise<void> => {
-  const appliedAt = state === "applied" ? sql`coalesce(${jobs.appliedAt}, ${now})` : null;
   const [row] = await db
     .update(jobs)
-    .set({ state, appliedAt, updatedAt: now })
+    .set({
+      state,
+      ...(state === "applied" && { appliedAt: sql`coalesce(${jobs.appliedAt}, ${now})` }),
+      updatedAt: now,
+    })
     .where(eq(jobs.id, id))
     .returning({ id: jobs.id });
   if (!row) throw new NotFoundError("Job not found");
