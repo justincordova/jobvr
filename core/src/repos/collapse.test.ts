@@ -50,4 +50,17 @@ describe("collapseReposts", () => {
       ["ab:5", []],
     ]);
   });
+
+  it("names the US one way: Jobright's two copies of one MJH role are one row", () => {
+    const mjh = { companyName: "MJH Life Sciences®", title: "Associate Product Engineer" };
+    const out = collapseReposts([
+      job("jr:1", { ...mjh, locations: ["United States, US", "Remote - US"] }),
+      job("jr:2", { ...mjh, locations: ["United States", "Remote - US"] }),
+      job("jr:3", { ...mjh, locations: ["Austin, TX, United States"] }),
+    ]);
+    expect(out.map((j) => [j.id, j.duplicateIds])).toEqual([
+      ["jr:1", ["jr:2"]],
+      ["jr:3", []],
+    ]);
+  });
 });

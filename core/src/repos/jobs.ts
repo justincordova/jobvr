@@ -94,18 +94,30 @@ export type JobWithFlags = JobRecord & {
 };
 
 /**
- * Same company, same title, same locations: a company posting one role
- * several times (H2O.ai's three "Software Engineer" listings). Distinct
- * postings stay separate in the database; the feed shows one row.
+ * The words of a job's places, with the US named one way: Jobright lists one
+ * role as both "United States, US" and "United States".
+ */
+const placeWords = (locations: readonly string[]): string => {
+  const words = new Set<string>();
+  for (const l of locations) {
+    const text = tokenize(l)
+      .join(" ")
+      .replace(/\bunited states( of america)?\b|\busa\b/g, "us");
+    for (const w of text.split(" ").filter(Boolean)) words.add(w);
+  }
+  return [...words].sort().join(" ");
+};
+
+/**
+ * Same company, same title, same places: a company posting one role several
+ * times (H2O.ai's three "Software Engineer" listings). Distinct postings stay
+ * separate in the database; the feed shows one row.
  */
 const repostKey = (j: JobRecord) =>
   [
     j.companyId ?? normalizeCompanyName(j.companyName),
     tokenize(j.title).join(" "),
-    j.locations
-      .map((l) => tokenize(l).join(" "))
-      .sort()
-      .join("|"),
+    placeWords(j.locations),
   ].join("\u0000");
 
 /** Keeps the first (newest) job of each repost group and lists the others on it. */
