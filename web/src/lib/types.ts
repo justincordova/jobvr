@@ -13,5 +13,5 @@ export type Tier = Company['tier']
 export type TierFilter = Job['tier']
 export type NamedLocation = Settings['locations'][number]
 
-export const TIERS: Tier[] = ['S', 'A', 'Mid', 'Startup', 'Corporate']
+export const TIERS: Tier[] = ['S', 'A', 'B', 'C', 'D']
 export const TIER_FILTERS: TierFilter[] = [...TIERS, 'Unlisted']

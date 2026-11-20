@@ -477,7 +477,7 @@ function SettingsForm({ payload, header }: { payload: SettingsPayload; header: R
               hint={
                 payload.tierModel
                   ? `Companies hiring on the lists are added and rated by ${payload.tierModel}.`
-                  : 'Companies hiring on the lists are added as Startup (add an OpenAI key to rate them).'
+                  : 'Companies hiring on the lists are added as C tier (add an OpenAI key to rate them).'
               }
               checked={draft.suggestCompanies}
               onChange={(v) => set('suggestCompanies', v)}

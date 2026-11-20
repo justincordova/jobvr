@@ -28,6 +28,12 @@ describe("settings", () => {
     ).toEqual([]);
   });
 
+  it("reads tiers saved under their old names", () => {
+    const stored = { tiersToTrack: ["S", "Mid", "Startup", "Corporate", "Unlisted"] };
+    expect(parseStoredSettings(stored).tiersToTrack).toEqual(["S", "B", "C", "D", "Unlisted"]);
+    expect(stored.tiersToTrack).toContain("Mid");
+  });
+
   it("rejects duplicate labels, no enabled location, and a removed Remote-US entry", () => {
     const base = DEFAULT_SETTINGS.locations;
     const dup = [...base, { label: "nj", aliases: ["x"], enabled: true }];

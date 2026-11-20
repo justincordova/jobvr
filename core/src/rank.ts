@@ -40,9 +40,9 @@ const FRESHNESS: readonly [maxDays: number, points: number][] = [
 const TIER_POINTS: Record<TierFilter, number> = {
   S: 20,
   A: 15,
-  Mid: 8,
-  Startup: 8,
-  Corporate: 5,
+  B: 10,
+  C: 6,
+  D: 3,
   Unlisted: 0,
 };
 

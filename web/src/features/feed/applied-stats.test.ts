@@ -9,12 +9,12 @@ describe('appliedStats', () => {
   it('counts this week, last week, and the current streak', () => {
     const s = appliedStats(
       [
-        { appliedAt: at(18), tier: 'Mid' },
-        { appliedAt: at(17), tier: 'Mid' },
-        { appliedAt: at(16), tier: 'Startup' },
-        { appliedAt: at(14), tier: 'Startup' },
+        { appliedAt: at(18), tier: 'B' },
+        { appliedAt: at(17), tier: 'B' },
+        { appliedAt: at(16), tier: 'C' },
+        { appliedAt: at(14), tier: 'C' },
         { appliedAt: at(10), tier: 'Unlisted' },
-        { appliedAt: null, tier: 'Corporate' },
+        { appliedAt: null, tier: 'D' },
       ],
       NOW,
     )
@@ -26,9 +26,9 @@ describe('appliedStats', () => {
     expect(s.streak).toBe(3)
     expect(s.bestDay).toEqual({ date: '2026-11-18', count: 1 })
     expect(s.tiers).toEqual([
-      { tier: 'Mid', count: 2 },
-      { tier: 'Startup', count: 2 },
-      { tier: 'Corporate', count: 1 },
+      { tier: 'B', count: 2 },
+      { tier: 'C', count: 2 },
+      { tier: 'D', count: 1 },
       { tier: 'Unlisted', count: 1 },
     ])
   })
@@ -36,10 +36,10 @@ describe('appliedStats', () => {
   it('counts today, yesterday and this month, and averages per day', () => {
     const s = appliedStats(
       [
-        { appliedAt: at(18), tier: 'Mid' },
-        { appliedAt: at(18, 9), tier: 'Mid' },
-        { appliedAt: at(17), tier: 'Mid' },
-        { appliedAt: new Date(2026, 9, 30, 12).toISOString(), tier: 'Mid' },
+        { appliedAt: at(18), tier: 'B' },
+        { appliedAt: at(18, 9), tier: 'B' },
+        { appliedAt: at(17), tier: 'B' },
+        { appliedAt: new Date(2026, 9, 30, 12).toISOString(), tier: 'B' },
       ],
       NOW,
     )
@@ -54,20 +54,20 @@ describe('appliedStats', () => {
   it('averages over at most 30 days, and has no average without dates', () => {
     const old = appliedStats(
       [
-        { appliedAt: new Date(2026, 5, 1, 12).toISOString(), tier: 'Mid' },
-        { appliedAt: at(18), tier: 'Mid' },
+        { appliedAt: new Date(2026, 5, 1, 12).toISOString(), tier: 'B' },
+        { appliedAt: at(18), tier: 'B' },
       ],
       NOW,
     )
     expect(old.perDay).toBeCloseTo(1 / 30)
-    expect(appliedStats([{ appliedAt: null, tier: 'Mid' }], NOW).perDay).toBeNull()
+    expect(appliedStats([{ appliedAt: null, tier: 'B' }], NOW).perDay).toBeNull()
   })
 
   it('keeps a streak alive until the day is over', () => {
     const s = appliedStats(
       [
-        { appliedAt: at(17), tier: 'Mid' },
-        { appliedAt: at(16), tier: 'Mid' },
+        { appliedAt: at(17), tier: 'B' },
+        { appliedAt: at(16), tier: 'B' },
       ],
       NOW,
     )
@@ -77,9 +77,9 @@ describe('appliedStats', () => {
   it('lays out whole weeks, Monday first, ending with this week', () => {
     const s = appliedStats(
       [
-        { appliedAt: at(18), tier: 'Mid' },
-        { appliedAt: at(18, 16), tier: 'Mid' },
-        { appliedAt: at(17), tier: 'Mid' },
+        { appliedAt: at(18), tier: 'B' },
+        { appliedAt: at(18, 16), tier: 'B' },
+        { appliedAt: at(17), tier: 'B' },
       ],
       NOW,
       4,

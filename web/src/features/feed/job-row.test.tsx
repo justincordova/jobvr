@@ -9,7 +9,7 @@ const job = (extra: Partial<Job> = {}): Job => ({
   title: 'Software Engineer, New Grad',
   companyId: null,
   companyName: 'Acme',
-  tier: 'Startup',
+  tier: 'C',
   locations: ['New York, NY'],
   url: 'https://boards.greenhouse.io/acme/jobs/1',
   primarySource: 'greenhouse',
@@ -62,7 +62,7 @@ describe('JobRow', () => {
     expect(screen.getByText('2h')).toBeInTheDocument()
     expect(screen.getByText('NEW')).toBeInTheDocument()
     expect(screen.getByText('$120k–$150k')).toBeInTheDocument()
-    expect(screen.getByText('Startup')).toBeInTheDocument()
+    expect(screen.getByText('C')).toBeInTheDocument()
     expect(screen.getByText('Greenhouse · simplify')).toBeInTheDocument()
     expect(screen.getByText('Entry level')).toBeInTheDocument()
     expect(screen.queryByText(/yrs/)).not.toBeInTheDocument()

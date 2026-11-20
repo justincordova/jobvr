@@ -63,7 +63,7 @@ describe("addCompanyFrom", () => {
       slug: "blue-matrix",
       track: true,
       status: "ok",
-      tier: "Startup",
+      tier: "C",
       tierSource: "pending",
     });
   });
@@ -112,7 +112,7 @@ describe("runHealCompanies", () => {
   const broken = async (name: string, slug: string | null, since = NOW) => {
     const c = await createCompany(database.db, {
       name,
-      tier: "Mid",
+      tier: "B",
       track: Boolean(slug),
       ats: "greenhouse",
       slug,
@@ -208,7 +208,7 @@ describe("runFindListBoards", () => {
   const listOnly = (name: string) =>
     createCompany(database.db, {
       name,
-      tier: "Startup",
+      tier: "C",
       track: false,
       ats: "other",
       slug: null,

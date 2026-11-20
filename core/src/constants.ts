@@ -53,7 +53,14 @@ export const ANNUALIZE = { hour: 2080, week: 52, month: 12, year: 1 } as const;
 
 export const TIMEZONE = "America/New_York";
 
-export const TIERS = ["S", "A", "Mid", "Startup", "Corporate"] as const;
+/** How good a company is for a new-grad SWE, best first (see the AI rater's instructions). */
+export const TIERS = ["S", "A", "B", "C", "D"] as const;
+/** Tier names before Nov 2026's letter tiers, and what each became. */
+export const LEGACY_TIERS: Record<string, (typeof TIERS)[number]> = {
+  Mid: "B",
+  Startup: "C",
+  Corporate: "D",
+};
 export const TIER_FILTERS = [...TIERS, "Unlisted"] as const;
 
 /**

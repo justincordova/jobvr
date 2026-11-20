@@ -33,8 +33,8 @@ describe('FilterBar', () => {
 
     rerender(<FilterBar search={{ tier: ['Unlisted'] }} onChange={onChange} onView={vi.fn()} />)
     // The menu stays open while picking
-    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Mid' }))
-    expect(onChange).toHaveBeenLastCalledWith({ tier: ['Mid', 'Unlisted'] })
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'B' }))
+    expect(onChange).toHaveBeenLastCalledWith({ tier: ['B', 'Unlisted'] })
     await userEvent.click(screen.getByRole('menuitem', { name: /Clear/ }))
     expect(onChange).toHaveBeenLastCalledWith({ tier: undefined })
   })
@@ -42,12 +42,12 @@ describe('FilterBar', () => {
   it('names the picked tiers on the button', () => {
     render(
       <FilterBar
-        search={{ tier: ['Mid', 'Startup', 'Corporate', 'Unlisted'] }}
+        search={{ tier: ['B', 'C', 'D', 'Unlisted'] }}
         onChange={vi.fn()}
         onView={vi.fn()}
       />,
     )
-    expect(screen.getByRole('button', { name: /^Tiers: Mid, Startup/ })).toHaveTextContent('Mid +3')
+    expect(screen.getByRole('button', { name: /^Tiers: B, C/ })).toHaveTextContent('B +3')
   })
 
   it('puts the order toggle before the tiers', () => {

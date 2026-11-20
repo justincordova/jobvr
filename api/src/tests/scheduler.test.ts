@@ -63,7 +63,7 @@ describe("scheduler", () => {
   it("stop() aborts a board search in flight", async () => {
     await createCompany(ctx.database.db, {
       name: "Initech",
-      tier: "Mid",
+      tier: "B",
       track: false,
       ats: "greenhouse",
       slug: "initech-old",

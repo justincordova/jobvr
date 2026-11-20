@@ -17,8 +17,8 @@ const job = (extra: Partial<RankInput>): RankInput => ({
 describe("rankScore", () => {
   it("adds up freshness, level, experience, tier, and place", () => {
     // CrossCountry "Junior Forward Deployed Software Engineer", Philadelphia, today
-    expect(rankScore(job({ tier: "Mid", entryTitle: true, namedPlace: true }), NOW)).toBe(
-      30 + 20 + 8 + 4,
+    expect(rankScore(job({ tier: "B", entryTitle: true, namedPlace: true }), NOW)).toBe(
+      30 + 20 + 10 + 4,
     );
     // HRT "Software Engineer – 2027 Grads", four months old
     expect(
@@ -28,9 +28,9 @@ describe("rankScore", () => {
       ),
     ).toBe(0 + 20 + 20 + 4);
     // A plain board title asking for 2 years
-    expect(
-      rankScore(job({ tier: "Startup", requiredYears: 2, effectiveAt: daysAgo(5) }), NOW),
-    ).toBe(18 - 6 + 8);
+    expect(rankScore(job({ tier: "C", requiredYears: 2, effectiveAt: daysAgo(5) }), NOW)).toBe(
+      18 - 6 + 6,
+    );
     // SimplifyJobs-only row, title doesn't say new grad
     expect(rankScore(job({ onNewGradList: true, effectiveAt: daysAgo(2) }), NOW)).toBe(24 + 12);
   });

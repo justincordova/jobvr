@@ -38,15 +38,15 @@ export interface TierRater {
   rate(input: TierRaterInput, options?: { signal?: AbortSignal }): Promise<TierRating>;
 }
 
-const INSTRUCTIONS = `You place companies on a tier list for someone looking for US new-grad software engineering jobs. Tiers:
-- S: elite pay and prestige for new grads: the biggest tech companies, top AI labs, top trading firms and the hottest high-paying tech companies (e.g. Google, Meta, Microsoft, Amazon, OpenAI, Anthropic, Jane Street, Citadel, Hudson River Trading, Stripe, Databricks, Ramp).
-- A: strong, well-known tech companies with excellent engineering (e.g. Datadog, Plaid, Brex, MongoDB, Twilio, Atlassian, Pinterest, Shopify, CrowdStrike, Duolingo).
-- Mid: solid established product, enterprise and fintech software companies (e.g. Dropbox, Etsy, Zillow, Elastic, SoFi, PayPal, Autodesk, Epic Games, Affirm).
-- Startup: smaller or younger venture-backed product companies. A well-known, well-funded one goes by its standing instead (e.g. Vercel is A; Render, Tailscale and PlanetScale are Mid).
-- Corporate: traditional enterprises where software isn't the core business: banks, insurers, asset managers, retailers, manufacturers, government and defense contractors, consultancies, IT services firms, staffing and recruiting agencies and job boards, whatever their size (e.g. Chubb, American Express, BlackRock, Booz Allen Hamilton).
+const INSTRUCTIONS = `You place companies on a tier list for someone looking for US new-grad software engineering jobs. The tier is how good the company is for a new-grad software engineer: pay first (first-year total compensation), then engineering quality and prestige, then size and stability. Startups and big enterprises are placed by the same measure. Tiers:
+- S: elite, about $200k+ for new grads: the biggest tech companies, top AI labs, top trading firms and the hottest high-paying tech companies (e.g. Google, Meta, Microsoft, Amazon, OpenAI, Anthropic, Jane Street, Citadel, Hudson River Trading, Stripe, Databricks, Ramp).
+- A: excellent, about $150-200k, strong engineering reputation: well-known tech companies and the top well-funded startups (e.g. Datadog, Plaid, Brex, Coinbase, Robinhood, MongoDB, Atlassian, Pinterest, Dropbox, Vercel, Render, Mercor).
+- B: good, about $110-150k: solid product, enterprise and fintech software companies, quant shops below the top, and funded startups with real traction (e.g. SoFi, PayPal, Autodesk, Etsy, Wayfair, GoDaddy, Oracle).
+- C: okay, about $80-110k, or not known to pay well: big enterprises where software isn't the core business (banks, insurers, retailers, manufacturers, large defense and government contractors), lower-paying tech (e.g. IBM), and small or early startups without a known track record (e.g. JPMorgan Chase, Lockheed Martin, Booz Allen Hamilton, Home Depot).
+- D: weak picks for a new grad: staffing and recruiting agencies, IT services and outsourcing firms, OPT-only employers, small consultancies and contractors, job boards, and small firms where software is a side job.
 A company acquired by another goes by its parent's tier.
-If you don't recognize the company, judge from its name, careers page and job titles: one that sells services, consulting, staffing or government contracting (often "Solutions", "Consulting" or "Group" names, roles for clients, or OPT-only hiring) is Corporate; otherwise answer Startup.
-reason: one plain sentence of at most 15 words, e.g. "Well-funded AI coding startup" or "Large insurer; software supports the business".
+If you don't recognize the company, judge from its name, careers page and job titles: one that sells services, consulting, staffing or contracting (often "Solutions", "Consulting" or "Group" names, roles for clients, or OPT-only hiring) is D; otherwise answer C.
+reason: one plain sentence of at most 15 words, e.g. "Well-funded AI coding startup with top pay" or "Large insurer; software supports the business".
 sameAs: when the company is one already in knownCompanies under another name, that exact name from the list; otherwise null. Only when you're sure: a parent, a subsidiary or a different company with a similar name is not the same.`;
 
 const RESPONSE_FORMAT = {

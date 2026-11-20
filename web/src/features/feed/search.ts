@@ -52,7 +52,7 @@ function loadSaved(): Map<View, FeedSearch> {
 }
 
 /**
- * Each view keeps its own filters: narrowing the feed to Mid and Startup
+ * Each view keeps its own filters: narrowing the feed to B and C
  * doesn't narrow Applied, and coming back restores them. They're kept in this
  * browser too, so a reload or the home-screen app opens with them.
  */

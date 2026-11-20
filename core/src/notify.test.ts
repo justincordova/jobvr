@@ -89,7 +89,7 @@ describe("selectPushable", () => {
     });
     const corp = await createCompany(database.db, {
       name: "Bloomberg",
-      tier: "Corporate",
+      tier: "D",
       track: false,
       ats: "other",
       status: "manual_only",

@@ -1,5 +1,5 @@
 import type { RouteHandler } from "@hono/zod-openapi";
-import { addSuggestion, dismissSuggestion, listOpenSuggestions } from "@jobvr/core";
+import { addSuggestion, dismissSuggestion, listOpenSuggestions, UNRATED_TIER } from "@jobvr/core";
 import type { AppBindings } from "@/lib/create-app";
 import { toCompanyDto } from "@/modules/companies/services";
 import { created, ok } from "@/utils/response";
@@ -13,7 +13,7 @@ export const listHandler: RouteHandler<typeof routes.list, AppBindings> = async 
 
 export const addHandler: RouteHandler<typeof routes.add, AppBindings> = async (c) => {
   const { database, registry } = c.var.deps;
-  const tier = c.req.valid("json")?.tier ?? "Startup";
+  const tier = c.req.valid("json")?.tier ?? UNRATED_TIER;
   const company = await addSuggestion(database.db, registry, c.req.valid("param").id, tier);
   return created(c, toCompanyDto(company), "Company added");
 };

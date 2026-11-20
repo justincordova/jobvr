@@ -28,14 +28,14 @@ describe("createOpenAiTierRater", () => {
         sent = { url, init };
         return new Response(
           JSON.stringify({
-            choices: [{ message: { content: '{"tier":"Corporate","reason":"Large insurer"}' } }],
+            choices: [{ message: { content: '{"tier":"D","reason":"Large insurer"}' } }],
           }),
         );
       }) as unknown as typeof fetch,
     });
     expect(
       await rater.rate({ name: "Chubb", careersUrl: null, titles: ["Software Engineer I"] }),
-    ).toEqual({ tier: "Corporate", reason: "Large insurer" });
+    ).toEqual({ tier: "D", reason: "Large insurer" });
     if (!sent) throw new Error("no request sent");
     expect(sent.url).toBe("https://api.openai.com/v1/chat/completions");
     expect((sent.init.headers as Record<string, string>).Authorization).toBe("Bearer sk-test");
@@ -48,9 +48,9 @@ describe("createOpenAiTierRater", () => {
     expect(body.response_format.json_schema.schema.properties.tier.enum).toEqual([
       "S",
       "A",
-      "Mid",
-      "Startup",
-      "Corporate",
+      "B",
+      "C",
+      "D",
     ]);
     expect(body.messages[1].content).toContain("Software Engineer I");
   });
@@ -85,7 +85,7 @@ describe("createOpenAiTierRater", () => {
         apiKey: "k",
         fetch: reply(200, { choices: [{ message: { content }, finish_reason }] }),
       }).rate({ name: "A", careersUrl: null, titles: [] });
-    await expect(answering('{"tier":"B","reason":"x"}')).rejects.toThrow(
+    await expect(answering('{"tier":"Mid","reason":"x"}')).rejects.toThrow(
       "OpenAI's rating doesn't fit (tier:",
     );
     await expect(answering(`{"tier":"A","reason":"${"x".repeat(201)}"}`)).rejects.toThrow(
@@ -138,7 +138,7 @@ describe("runAutoTier", () => {
   ) =>
     createCompany(database.db, {
       name,
-      tier: "Startup",
+      tier: "C",
       tierSource,
       track: true,
       ats: "lever",
@@ -183,8 +183,8 @@ describe("runAutoTier", () => {
     expect([...(seen[0]?.knownCompanies ?? [])].sort()).toEqual(["Globex", "Hooli"]);
     expect(await tiers()).toEqual({
       Initech: ["A", "auto", "Rated Initech"],
-      Globex: ["Startup", "seed", null],
-      Hooli: ["Startup", "manual", null],
+      Globex: ["C", "seed", null],
+      Hooli: ["C", "manual", null],
     });
   });
 
@@ -230,7 +230,7 @@ describe("runAutoTier", () => {
   ) =>
     createCompany(database.db, {
       name,
-      tier: tierSource === "pending" ? "Startup" : "Corporate",
+      tier: tierSource === "pending" ? "C" : "D",
       tierSource,
       track: false,
       ats: "other",
@@ -239,7 +239,7 @@ describe("runAutoTier", () => {
     });
   const sameAs = (name: string): TierRater => ({
     model: "test-model",
-    rate: async () => ({ tier: "Startup", reason: "Health startup", sameAs: name }),
+    rate: async () => ({ tier: "C", reason: "Health startup", sameAs: name }),
   });
   const runWith = (r: TierRater) =>
     runAutoTier({ database, rater: r, state: createAutoTierState(), now: () => NOW });
@@ -268,7 +268,7 @@ describe("runAutoTier", () => {
     expect(rows).toEqual([
       expect.objectContaining({
         id: health.id,
-        tier: "Corporate",
+        tier: "D",
         ats: "lever",
         slug: "bask",
         track: true,

@@ -106,7 +106,7 @@ function SearchField({
   )
 }
 
-/** "Mid, Startup" for two, "Mid +3" for more. */
+/** "B, C" for two, "B +3" for more. */
 const tierSummary = (tiers: TierFilter[]) =>
   tiers.length <= 2 ? tiers.join(', ') : `${tiers[0]} +${tiers.length - 1}`
 

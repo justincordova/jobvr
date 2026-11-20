@@ -134,7 +134,7 @@ describe("App", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: "x".repeat(BODY_LIMIT_BYTES + 1),
-        tier: "Startup",
+        tier: "C",
         ats: "lever",
       }),
     });

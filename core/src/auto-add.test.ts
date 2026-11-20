@@ -80,7 +80,7 @@ describe("runAutoAddCompanies", () => {
     const [company] = await database.db.select().from(companies);
     expect(company).toMatchObject({
       name: "Initech",
-      tier: "Startup",
+      tier: "C",
       ats: "greenhouse",
       slug: "initech",
       track: true,
@@ -95,7 +95,7 @@ describe("runAutoAddCompanies", () => {
   it("keeps list-only companies for their jobs, and skips dismissed ones and known ones", async () => {
     await createCompany(database.db, {
       name: "Kira Learning",
-      tier: "Mid",
+      tier: "B",
       track: true,
       ats: "greenhouse",
       slug: "kira",
@@ -125,7 +125,7 @@ describe("runAutoAddCompanies", () => {
   it("marks a suggestion whose board a differently named company owns, without probing it", async () => {
     await createCompany(database.db, {
       name: "Initech Corporation of America",
-      tier: "Mid",
+      tier: "B",
       track: true,
       ats: "greenhouse",
       slug: "initech",

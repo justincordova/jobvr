@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { DAY_MS, ENTRY_LEVEL_STORE_DAYS, RETENTION_MARGIN_DAYS, TIER_FILTERS } from "./constants";
+import {
+  DAY_MS,
+  ENTRY_LEVEL_STORE_DAYS,
+  LEGACY_TIERS,
+  RETENTION_MARGIN_DAYS,
+  TIER_FILTERS,
+} from "./constants";
 
 export const REMOTE_US_LABEL = "Remote-US";
 
@@ -89,7 +95,7 @@ export const DEFAULT_SETTINGS: Settings = {
     },
     { label: REMOTE_US_LABEL, aliases: [], enabled: true, builtin: "remote_us" },
   ],
-  tiersToTrack: ["S", "A", "Mid", "Startup", "Corporate", "Unlisted"],
+  tiersToTrack: ["S", "A", "B", "C", "D", "Unlisted"],
   entryLevelOnly: false,
   roleKeywords: [
     "software",
@@ -223,12 +229,18 @@ const LEGACY_SOURCES = ["greenhouse", "lever", "ashby", "simplify"];
  * defaults, so adding a setting never needs a migration.
  */
 export const parseStoredSettings = (data: unknown): Settings => {
-  const raw = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  const raw = { ...(data && typeof data === "object" ? data : {}) } as Record<string, unknown>;
   const out = structuredClone(DEFAULT_SETTINGS) as Record<string, unknown>;
   // Before Nov 2026 the on list was stored; every source then was one of these four
   if (!("disabledSources" in raw) && Array.isArray(raw.enabledSources)) {
     const on = new Set(raw.enabledSources);
     out.disabledSources = LEGACY_SOURCES.filter((s) => !on.has(s));
+  }
+  // Before the letter tiers: Mid, Startup and Corporate
+  if (Array.isArray(raw.tiersToTrack)) {
+    raw.tiersToTrack = [
+      ...new Set(raw.tiersToTrack.map((t) => (typeof t === "string" ? (LEGACY_TIERS[t] ?? t) : t))),
+    ];
   }
   for (const [key, schema] of Object.entries(fields)) {
     if (!(key in raw)) continue;

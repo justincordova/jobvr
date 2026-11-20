@@ -141,7 +141,7 @@ describe("jobs routes", () => {
         .map((j) => j.id)
         .sort();
 
-    await client.api.settings.$patch({ json: { tiersToTrack: ["Mid", "Startup"] } });
+    await client.api.settings.$patch({ json: { tiersToTrack: ["B", "C"] } });
     expect(await ids()).toEqual([]);
     // Picking a tier in Filters still shows it
     expect(await ids({ tier: "Unlisted" })).toEqual(["gh:grad", "gh:plain"]);
@@ -236,7 +236,7 @@ describe("jobs routes", () => {
 
   it("reports each company's recent roles", async () => {
     const res = await client.api.companies.$post({
-      json: { name: "Acme", tier: "Startup", ats: "lever", slug: "acme" },
+      json: { name: "Acme", tier: "C", ats: "lever", slug: "acme" },
     });
     const acme = await res.json();
     if (!acme.success) throw new Error("expected success");
@@ -350,7 +350,7 @@ describe("jobs routes", () => {
 describe("companies routes", () => {
   it("creates with defaults, rejects duplicates and bad ATS, and resets health on slug change", async () => {
     const res = await client.api.companies.$post({
-      json: { name: "Acme", tier: "Startup", ats: "lever", slug: "Acme" },
+      json: { name: "Acme", tier: "C", ats: "lever", slug: "Acme" },
     });
     expect(res.status).toBe(201);
     const created = await res.json();
@@ -364,20 +364,20 @@ describe("companies routes", () => {
     expect(await top.json()).toMatchObject({ data: { track: true, status: "ok" } });
 
     const other = await client.api.companies.$post({
-      json: { name: "Big Corp", tier: "Corporate", ats: "other" },
+      json: { name: "Big Corp", tier: "D", ats: "other" },
     });
     expect(await other.json()).toMatchObject({ data: { status: "manual_only", track: false } });
 
     const dup = await client.api.companies.$post({
-      json: { name: "ACME Inc.", tier: "Mid", ats: "lever", slug: "x" },
+      json: { name: "ACME Inc.", tier: "B", ats: "lever", slug: "x" },
     });
     expect(dup.status).toBe(409);
     const badAts = await client.api.companies.$post({
-      json: { name: "Z", tier: "Mid", ats: "workday" },
+      json: { name: "Z", tier: "B", ats: "workday" },
     });
     expect(badAts.status).toBe(400);
     const badUrl = await client.api.companies.$post({
-      json: { name: "Y", tier: "Mid", ats: "lever", slug: "y", careersUrl: "javascript:alert(1)" },
+      json: { name: "Y", tier: "B", ats: "lever", slug: "y", careersUrl: "javascript:alert(1)" },
     });
     // The message names the field instead of only "Request validation failed"
     expect(await badUrl.json()).toMatchObject({ message: "careers URL: Invalid URL" });
@@ -389,9 +389,9 @@ describe("companies routes", () => {
 
     const patched = await client.api.companies[":id"].$patch({
       param: { id: created.data.id },
-      json: { tier: "Mid", notes: "Great team" },
+      json: { tier: "B", notes: "Great team" },
     });
-    expect(await patched.json()).toMatchObject({ data: { tier: "Mid", notes: "Great team" } });
+    expect(await patched.json()).toMatchObject({ data: { tier: "B", notes: "Great team" } });
 
     expect(
       (await client.api.companies[":id"].$delete({ param: { id: created.data.id } })).status,
@@ -434,10 +434,10 @@ describe("companies routes", () => {
       const id = added.data.id;
       const picked = await client.api.companies[":id"].$patch({
         param: { id },
-        json: { tier: "Mid" },
+        json: { tier: "B" },
       });
       expect(await picked.json()).toMatchObject({
-        data: { tier: "Mid", tierSource: "manual", tierReason: null },
+        data: { tier: "B", tierSource: "manual", tierReason: null },
       });
       const handedBack = await client.api.companies[":id"].$patch({
         param: { id },
@@ -489,18 +489,18 @@ describe("suggestions routes", () => {
 
     const add = await client.api.suggestions[":id"].add.$post({
       param: { id: "globex" },
-      json: { tier: "Mid" },
+      json: { tier: "B" },
     });
     expect(add.status).toBe(201);
     expect(await add.json()).toMatchObject({
-      data: { name: "Globex", tier: "Mid", track: true, status: "ok" },
+      data: { name: "Globex", tier: "B", track: true, status: "ok" },
     });
     const noSlug = await client.api.suggestions[":id"].add.$post({
       param: { id: "initech" },
       json: {},
     });
     expect(await noSlug.json()).toMatchObject({
-      data: { track: false, status: "needs_review", tier: "Startup" },
+      data: { track: false, status: "needs_review", tier: "C" },
     });
     expect(
       (await client.api.suggestions[":id"].add.$post({ param: { id: "globex" }, json: {} })).status,

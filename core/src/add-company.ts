@@ -11,7 +11,7 @@ import { OTHER_ATS_ID } from "./sources/registry";
 import type { Registry } from "./sources/types";
 
 /** Tier a company starts with until it's rated (the AI rater, or someone, changes it). */
-export const UNRATED_TIER = "Startup" as const;
+export const UNRATED_TIER = "C" as const;
 /** Same cap as a company created or renamed through the API. */
 const MAX_COMPANY_NAME = 200;
 

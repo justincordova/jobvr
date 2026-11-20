@@ -41,7 +41,7 @@ describe("settings repo", () => {
 });
 
 describe("companies repo", () => {
-  const base = { tier: "Startup", track: true, ats: "lever", status: "ok" } as const;
+  const base = { tier: "C", track: true, ats: "lever", status: "ok" } as const;
 
   it("enforces invariants and uniqueness", async () => {
     const { db } = database;
@@ -91,7 +91,7 @@ describe("companies repo", () => {
     const { db } = database;
     const c = await createCompany(db, {
       name: "Zephyrtech",
-      tier: "Startup",
+      tier: "C",
       ats: "other",
       track: false,
       status: "manual_only",
@@ -108,7 +108,7 @@ describe("companies repo", () => {
     const { db } = database;
     const c = await createCompany(db, {
       name: "Kira Learning",
-      tier: "Startup",
+      tier: "C",
       ats: "ashby",
       slug: "kira-ai",
       track: true,
@@ -172,7 +172,7 @@ describe("companies repo", () => {
       ]);
     const c = await createCompany(db, {
       name: "Honeywell Aerospace",
-      tier: "Corporate",
+      tier: "D",
       ats: "other",
       track: false,
       status: "manual_only",

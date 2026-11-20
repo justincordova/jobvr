@@ -14,11 +14,11 @@ import {
 describe('feed search params', () => {
   it('validates and normalizes, dropping the old place, source and company filters', () => {
     expect(
-      parseFeedSearch({ view: 'saved', age: 'nope', tier: ['Mid', 'X'], location: 'NYC,PA' }),
+      parseFeedSearch({ view: 'saved', age: 'nope', tier: ['B', 'X'], location: 'NYC,PA' }),
     ).toEqual({
       view: 'saved',
       age: undefined,
-      tier: ['Mid'],
+      tier: ['B'],
       sort: undefined,
       q: undefined,
     })
@@ -26,15 +26,15 @@ describe('feed search params', () => {
   })
 
   it('builds a compact API query', () => {
-    expect(toJobQuery({ age: '1h', tier: ['Mid', 'Startup'] })).toEqual({
+    expect(toJobQuery({ age: '1h', tier: ['B', 'C'] })).toEqual({
       age: '1h',
-      tier: 'Mid,Startup',
+      tier: 'B,C',
     })
     expect(toJobQuery({ tier: [] })).toEqual({})
   })
 
   it('keeps the feed at a plain URL and sorts Applied by applied date only', () => {
-    expect(searchFor('feed', { view: 'feed', tier: ['Mid'] })).toEqual({ tier: ['Mid'] })
+    expect(searchFor('feed', { view: 'feed', tier: ['B'] })).toEqual({ tier: ['B'] })
     expect(searchFor('applied', { sort: 'best', q: 'stripe' })).toEqual({
       view: 'applied',
       q: 'stripe',
@@ -47,20 +47,20 @@ describe('feed search params', () => {
   it('keeps filters per view, so the feed’s tiers never narrow Applied', () => {
     localStorage.clear()
     forgetSearches()
-    rememberSearch('feed', { tier: ['Mid', 'Startup'], q: 'backend' })
+    rememberSearch('feed', { tier: ['B', 'C'], q: 'backend' })
     expect(recallSearch('applied')).toEqual({ view: 'applied' })
     expect(recallSearch('saved')).toEqual({ view: 'saved' })
     rememberSearch('saved', { view: 'saved', age: '3d' })
-    expect(recallSearch('feed')).toEqual({ tier: ['Mid', 'Startup'], q: 'backend' })
+    expect(recallSearch('feed')).toEqual({ tier: ['B', 'C'], q: 'backend' })
     expect(recallSearch('saved')).toEqual({ age: '3d', view: 'saved' })
   })
 
   it('keeps filters across a reload, without the text search', () => {
     localStorage.clear()
     forgetSearches()
-    rememberSearch('feed', { tier: ['Mid', 'Startup', 'Corporate', 'Unlisted'], q: 'backend' })
+    rememberSearch('feed', { tier: ['B', 'C', 'D', 'Unlisted'], q: 'backend' })
     forgetSearches()
-    expect(recallSearch('feed')).toEqual({ tier: ['Mid', 'Startup', 'Corporate', 'Unlisted'] })
+    expect(recallSearch('feed')).toEqual({ tier: ['B', 'C', 'D', 'Unlisted'] })
     localStorage.setItem('jobvr.filters', 'not json')
     forgetSearches()
     expect(recallSearch('feed')).toEqual({})
@@ -75,7 +75,7 @@ describe('feed search params', () => {
 
   it('counts the feed as a visit whatever its remembered filters, but not a search', () => {
     expect(countsAsVisit({})).toBe(true)
-    expect(countsAsVisit({ age: '1w', tier: ['Mid'], sort: 'newest' })).toBe(true)
+    expect(countsAsVisit({ age: '1w', tier: ['B'], sort: 'newest' })).toBe(true)
     expect(countsAsVisit({ q: 'stripe' })).toBe(false)
     expect(countsAsVisit({ view: 'saved' })).toBe(false)
   })
@@ -83,7 +83,7 @@ describe('feed search params', () => {
   it('treats a search with only a view as blank', () => {
     expect(isBlankSearch({ view: 'saved' })).toBe(true)
     expect(isBlankSearch({ tier: [] })).toBe(true)
-    expect(isBlankSearch({ tier: ['Mid'] })).toBe(false)
+    expect(isBlankSearch({ tier: ['B'] })).toBe(false)
     expect(isBlankSearch({ age: '3d' })).toBe(false)
   })
 })

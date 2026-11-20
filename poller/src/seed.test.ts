@@ -29,14 +29,14 @@ describe("seedCompanies", () => {
         name: "BlueMatrix",
         city: "NYC/Remote",
         state: "NY",
-        tier: "Mid",
+        tier: "B",
         ats: "lever",
         slug: "BlueMatrix",
       },
       { name: "Duolingo", tier: "A", ats: "greenhouse", slug: "duolingo" },
-      { name: "Valon", tier: "Startup", ats: "greenhouse", slug: "valon" },
-      { name: "Aurora Innovation", tier: "Mid", ats: "greenhouse" },
-      { name: "Bloomberg", tier: "Corporate", ats: "other" },
+      { name: "Valon", tier: "C", ats: "greenhouse", slug: "valon" },
+      { name: "Aurora Innovation", tier: "B", ats: "greenhouse" },
+      { name: "Bloomberg", tier: "D", ats: "other" },
     ] as const;
     const first = await seedCompanies(database.db, adapters, http, entries);
     expect(first).toEqual([

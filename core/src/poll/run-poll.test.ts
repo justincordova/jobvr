@@ -160,10 +160,10 @@ const rowsOf = (jobId: string) =>
 const stateOf = async (key: string) =>
   (await database.db.select().from(sourceState).where(eq(sourceState.key, key)))[0];
 
-const addAcme = (extra: { tier?: "Startup" | "S" } = {}) =>
+const addAcme = (extra: { tier?: "C" | "S" } = {}) =>
   createCompany(database.db, {
     name: "Acme",
-    tier: extra.tier ?? "Startup",
+    tier: extra.tier ?? "C",
     track: true,
     ats: "greenhouse",
     slug: "acme",
@@ -229,7 +229,7 @@ describe("runPoll: baseline, filters, ETags", () => {
 
   it("doesn't poll companies whose tier isn't tracked", async () => {
     await updateSettings(database.db, {
-      tiersToTrack: ["Mid", "Startup", "Corporate", "Unlisted"],
+      tiersToTrack: ["B", "C", "D", "Unlisted"],
     });
     await addAcme({ tier: "S" });
     env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
@@ -559,7 +559,7 @@ describe("runPoll: health and transactions", () => {
     for (const slug of slugs) {
       await createCompany(database.db, {
         name: `Co ${slug}`,
-        tier: "Startup",
+        tier: "C",
         track: true,
         ats: "greenhouse",
         slug,
@@ -629,7 +629,7 @@ describe("runPoll: health and transactions", () => {
     for (const slug of ["a", "b", "c"]) {
       await createCompany(database.db, {
         name: `Co ${slug}`,
-        tier: "Startup",
+        tier: "C",
         track: true,
         ats: "greenhouse",
         slug,
@@ -653,7 +653,7 @@ describe("runPoll: health and transactions", () => {
     for (const slug of slugs) {
       await createCompany(database.db, {
         name: `Co ${slug}`,
-        tier: "Startup",
+        tier: "C",
         track: true,
         ats: "greenhouse",
         slug,
@@ -951,7 +951,7 @@ describe("runPoll: Simplify companies and suggestions", () => {
 
     const initech = await createCompany(database.db, {
       name: "Initech",
-      tier: "Mid",
+      tier: "B",
       track: false,
       ats: "other",
       status: "manual_only",
