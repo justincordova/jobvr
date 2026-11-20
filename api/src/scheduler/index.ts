@@ -21,6 +21,12 @@ import {
   type TierRater,
 } from "@jobvr/core";
 
+/**
+ * Time the tiers and heal steps each start new work for in one tick (a call
+ * or search in flight still finishes); the rest waits for the next tick.
+ */
+export const UPKEEP_BUDGET_MS = 60_000;
+
 export interface SchedulerOptions {
   database: Database;
   registry: Registry;
@@ -80,24 +86,55 @@ export const startScheduler = (options: SchedulerOptions) => {
       );
       // After a stop, nothing new starts (a push mid-send still finishes and is marked)
       if (stopping.signal.aborted) return;
+      // Right after the poll, so company upkeep never delays a push
+      await step("notify", () =>
+        runNotify({ database, registry, notifier, publicUrl: options.publicUrl, logger }),
+      );
+      if (stopping.signal.aborted) return;
+      const signal = stopping.signal;
       await step("auto-add", () =>
-        runAutoAddCompanies({ database, registry, http, logger, failures: autoAddFailures }),
+        runAutoAddCompanies({
+          database,
+          registry,
+          http,
+          logger,
+          failures: autoAddFailures,
+          signal,
+        }),
       );
       if (stopping.signal.aborted) return;
       await step("tiers", () =>
-        runAutoTier({ database, rater: options.tierRater ?? null, state: tierState, logger }),
+        runAutoTier({
+          database,
+          rater: options.tierRater ?? null,
+          state: tierState,
+          logger,
+          budgetMs: UPKEEP_BUDGET_MS,
+          signal,
+        }),
       );
       if (stopping.signal.aborted) return;
       await step("heal", () =>
-        runHealCompanies({ database, registry, http, logger, attempts: healAttempts }),
+        runHealCompanies({
+          database,
+          registry,
+          http,
+          logger,
+          attempts: healAttempts,
+          budgetMs: UPKEEP_BUDGET_MS,
+          signal,
+        }),
       );
       if (stopping.signal.aborted) return;
       await step("list boards", () =>
-        runFindListBoards({ database, registry, http, logger, attempts: listBoardAttempts }),
-      );
-      if (stopping.signal.aborted) return;
-      await step("notify", () =>
-        runNotify({ database, registry, notifier, publicUrl: options.publicUrl, logger }),
+        runFindListBoards({
+          database,
+          registry,
+          http,
+          logger,
+          attempts: listBoardAttempts,
+          signal,
+        }),
       );
       if (stopping.signal.aborted) return;
       await step("cleanup", () => runCleanup({ database, logger }));

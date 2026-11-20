@@ -89,11 +89,27 @@ describe("addCompanyFrom", () => {
     await expect(add("initech")).rejects.toBeInstanceOf(ConflictError);
     await expect(add("  ")).rejects.toBeInstanceOf(InvalidError);
     await expect(add("https://boards.greenhouse.io/nope")).rejects.toThrow("doesn't exist");
+    await expect(add("x".repeat(201))).rejects.toThrow("at most 200 characters");
+  });
+
+  it("creates the company and links its stored list jobs together", async () => {
+    await database.db.insert(jobs).values({
+      id: "sj:1",
+      companyName: "Globex Inc.",
+      title: "Software Engineer",
+      url: "https://example.com/1",
+      primarySource: "simplify",
+      firstSeenAt: NOW,
+      effectiveAt: NOW,
+    });
+    const { company } = await add("Globex");
+    const [job] = await database.db.select().from(jobs);
+    expect(job).toMatchObject({ companyId: company.id, companyName: "Globex" });
   });
 });
 
 describe("runHealCompanies", () => {
-  const broken = async (name: string, slug: string | null, updatedAt = NOW) => {
+  const broken = async (name: string, slug: string | null, since = NOW) => {
     const c = await createCompany(database.db, {
       name,
       tier: "Mid",
@@ -102,7 +118,10 @@ describe("runHealCompanies", () => {
       slug,
       status: "needs_review",
     });
-    await database.db.update(companies).set({ updatedAt }).where(eq(companies.id, c.id));
+    await database.db
+      .update(companies)
+      .set({ needsReviewSince: since })
+      .where(eq(companies.id, c.id));
     return c;
   };
   const get = async (id: string) =>
@@ -128,7 +147,60 @@ describe("runHealCompanies", () => {
       moved: [],
       gaveUp: ["Globex"],
     });
-    expect(await get(c.id)).toMatchObject({ status: "manual_only", track: false });
+    expect(await get(c.id)).toMatchObject({
+      status: "manual_only",
+      track: false,
+      needsReviewSince: null,
+    });
+  });
+
+  it("never gives up on the first search (after a restart), whatever the clock says", async () => {
+    const c = await broken("Globex", "globex", new Date(NOW.getTime() - 5 * HEAL_GIVE_UP_MS));
+    // Edited a minute ago: the clock is when it broke, not the last edit
+    await database.db.update(companies).set({ updatedAt: NOW }).where(eq(companies.id, c.id));
+    const attempts = new Map<string, number>();
+    const run = (now: Date) =>
+      runHealCompanies({ database, registry, http, now: () => now, attempts });
+    expect(await run(NOW)).toEqual({ moved: [], gaveUp: [] });
+    expect(await get(c.id)).toMatchObject({ status: "needs_review" });
+    expect(await run(new Date(NOW.getTime() + HEAL_RETRY_MS))).toEqual({
+      moved: [],
+      gaveUp: ["Globex"],
+    });
+  });
+
+  it("only moves to a board whose slug carries the company's name", async () => {
+    const c = await broken("Scale AI", "scaleai-old");
+    // "scale" is a guess from the shortened name: it can be another company's board
+    boards.set("scale", 40);
+    expect(await runHealCompanies({ database, registry, http, now: () => NOW })).toEqual({
+      moved: [],
+      gaveUp: [],
+    });
+    expect(await get(c.id)).toMatchObject({ slug: "scaleai-old", status: "needs_review" });
+    boards.set("scale-ai", 3);
+    expect(
+      await runHealCompanies({
+        database,
+        registry,
+        http,
+        now: () => new Date(NOW.getTime() + HEAL_RETRY_MS),
+      }),
+    ).toEqual({ moved: ["Scale AI"], gaveUp: [] });
+    expect(await get(c.id)).toMatchObject({ slug: "scale-ai", needsReviewSince: null });
+  });
+
+  it("stops at its time budget and when stopped", async () => {
+    await broken("Initech", "initech-old");
+    boards.set("initech", 5);
+    expect(
+      await runHealCompanies({ database, registry, http, now: () => NOW, budgetMs: 0 }),
+    ).toEqual({ moved: [], gaveUp: [] });
+    const stop = new AbortController();
+    stop.abort();
+    expect(
+      await runHealCompanies({ database, registry, http, now: () => NOW, signal: stop.signal }),
+    ).toEqual({ moved: [], gaveUp: [] });
   });
 });
 

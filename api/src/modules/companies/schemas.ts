@@ -85,7 +85,7 @@ export const UpdateCompanyBody = z
 export const AddCompanyBody = z
   .object({
     /** A careers or job-board link, or the company's name. */
-    query: z.string().trim().min(1).max(2000).openapi({ example: "https://jobs.lever.co/acme" }),
+    query: z.string().trim().min(1).max(300).openapi({ example: "https://jobs.lever.co/acme" }),
   })
   .openapi("AddCompanyBody");
 

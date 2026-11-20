@@ -597,7 +597,7 @@ export const processTarget = async (ctx: ProcessContext): Promise<TargetStats> =
   if (company?.status === "needs_review") {
     await tx
       .update(companies)
-      .set({ status: "ok", updatedAt: now })
+      .set({ status: "ok", needsReviewSince: null, updatedAt: now })
       .where(eq(companies.id, company.id));
   }
   return stats;
@@ -649,7 +649,7 @@ export const recordFailure = async (
     // Only reported once: the update matches while the company is still "ok"
     const moved = await tx
       .update(companies)
-      .set({ status: "needs_review", updatedAt: now })
+      .set({ status: "needs_review", needsReviewSince: now, updatedAt: now })
       .where(and(eq(companies.id, companyId), eq(companies.status, "ok")))
       .returning({ id: companies.id });
     needsReview = moved.length > 0;

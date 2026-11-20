@@ -1,6 +1,7 @@
 import { and, notInArray, sql } from "drizzle-orm";
 import type { Tx } from "../db/client";
 import { suggestions } from "../db/schema";
+import { suggestionIsCompany } from "../repos/companies";
 import { OTHER_ATS_ID } from "../sources/registry";
 import type { Registry } from "../sources/types";
 import type { PreparedListing } from "./resolve";
@@ -63,16 +64,7 @@ export const groupSuggestions = (
   });
 };
 
-const resolvesToCompany = sql`EXISTS (
-  SELECT 1 FROM companies c
-  WHERE c.normalized_name = ${suggestions.id}
-     OR ${suggestions.id} = ANY(c.aliases)
-     OR (${suggestions.slug} IS NOT NULL AND c.ats = ${suggestions.ats}
-         AND lower(c.slug) = lower(${suggestions.slug}))
-     -- A company whose board slug is this name (see resolveCompany)
-     OR (c.slug IS NOT NULL AND regexp_replace(lower(c.slug), '[^a-z0-9]', '', 'g')
-         = regexp_replace(${suggestions.id}, '[^a-z0-9]', '', 'g'))
-)`;
+const resolvesToCompany = sql`EXISTS (SELECT 1 FROM companies c WHERE ${suggestionIsCompany})`;
 
 /**
  * Step 9: refresh this aggregator's share of the suggestion rows from its

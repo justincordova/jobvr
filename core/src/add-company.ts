@@ -12,6 +12,8 @@ import type { Registry } from "./sources/types";
 
 /** Tier a company starts with until it's rated (the AI rater, or someone, changes it). */
 export const UNRATED_TIER = "Startup" as const;
+/** Same cap as a company created or renamed through the API. */
+const MAX_COMPANY_NAME = 200;
 
 export interface AddCompanyOptions {
   database: Database;
@@ -58,6 +60,9 @@ export const addCompanyFrom = async (
       board = { ats: linked.adapter.id, slug: linked.slug };
     }
   }
+  if (name.length > MAX_COMPANY_NAME) {
+    throw new InvalidError(`A company name can be at most ${MAX_COMPANY_NAME} characters`);
+  }
   const existing = await findCompanyByName(db, name);
   if (existing) throw new ConflictError(`${existing.name} is already on the list`);
   board ??= await findBoardByName(name, finder);
@@ -69,23 +74,27 @@ export const addCompanyFrom = async (
     careersUrl: url && !board ? url.href : null,
     notes: "Added by hand",
   };
-  const company = board
-    ? await createCompany(db, {
-        ...base,
-        ats: board.ats,
-        slug: board.slug,
-        track: true,
-        status: "ok",
-      })
-    : await createCompany(db, {
-        ...base,
-        ats: OTHER_ATS_ID,
-        slug: null,
-        track: false,
-        status: "manual_only",
-      });
-  // The lists' next poll refetches in full, so their jobs pick up the company
-  await db.update(sourceState).set({ etag: null }).where(isNull(sourceState.companyId));
+  // With its stored list jobs linked, and the lists' next poll refetching in
+  // full (so their jobs pick it up), all at once
+  const company = await db.transaction(async (tx) => {
+    const row = board
+      ? await createCompany(tx, {
+          ...base,
+          ats: board.ats,
+          slug: board.slug,
+          track: true,
+          status: "ok",
+        })
+      : await createCompany(tx, {
+          ...base,
+          ats: OTHER_ATS_ID,
+          slug: null,
+          track: false,
+          status: "manual_only",
+        });
+    await tx.update(sourceState).set({ etag: null }).where(isNull(sourceState.companyId));
+    return row;
+  });
   log.info(
     { ats: company.ats, slug: company.slug },
     board

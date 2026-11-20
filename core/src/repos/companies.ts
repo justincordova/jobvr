@@ -1,7 +1,14 @@
-import { asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { CompanyStatus, Tier, TierSource } from "../constants";
 import type { DbOrTx } from "../db/client";
-import { type CompanyRow, companies, jobs, type SourceStateRow, sourceState } from "../db/schema";
+import {
+  type CompanyRow,
+  companies,
+  jobs,
+  type SourceStateRow,
+  sourceState,
+  suggestions,
+} from "../db/schema";
 import { ConflictError, InvalidError, isUniqueViolation, NotFoundError } from "../errors";
 import { normalizeCompanyName } from "../normalize";
 
@@ -128,17 +135,32 @@ export const findCompanyByName = async (db: DbOrTx, name: string): Promise<Compa
 };
 
 /**
- * Jobs already stored under this company's name but linked to no company (a
- * list job seen before the company was added). The poll links them only when it
- * re-reads their list, and an unchanged list isn't re-read.
+ * Jobs already stored under this company's name (or an alias) but linked to
+ * no company (a list job seen before the company was added). The poll links
+ * them only when it re-reads their list, and an unchanged list isn't re-read.
  */
 const linkUnlinkedJobs = async (db: DbOrTx, company: CompanyRow): Promise<void> => {
+  const names = new Set([company.normalizedName, ...company.aliases]);
+  // Narrowed in SQL by each name's longest word (any name that normalizes to it contains it)
+  const words = [...names].map(
+    (n) =>
+      n
+        .split(" ")
+        .filter((w) => w !== "and")
+        .sort((a, b) => b.length - a.length)[0],
+  );
+  if (words.some((w) => !w)) return;
   const unlinked = await db
     .select({ id: jobs.id, companyName: jobs.companyName })
     .from(jobs)
-    .where(isNull(jobs.companyId));
+    .where(
+      and(
+        isNull(jobs.companyId),
+        or(...words.map((w) => sql`strpos(lower(${jobs.companyName}), ${w}) > 0`)),
+      ),
+    );
   const ids = unlinked
-    .filter((j) => normalizeCompanyName(j.companyName) === company.normalizedName)
+    .filter((j) => names.has(normalizeCompanyName(j.companyName)))
     .map((j) => j.id);
   if (ids.length === 0) return;
   await db
@@ -147,6 +169,27 @@ const linkUnlinkedJobs = async (db: DbOrTx, company: CompanyRow): Promise<void> 
     .where(inArray(jobs.id, ids));
 };
 
+/** Every write that changes `status` sets this alongside it. */
+const needsReviewSince = (
+  status: string,
+  current: { status: string; needsReviewSince: Date | null } | null,
+  now: Date,
+): Date | null =>
+  status !== "needs_review"
+    ? null
+    : current?.status === "needs_review"
+      ? (current.needsReviewSince ?? now)
+      : now;
+
+/** The note auto-add leaves on the companies it adds (anything else was added by a person). */
+export const AUTO_ADDED_NOTE = "Added automatically";
+
+/** Added by auto-add with a tier nobody picked: the only kind the AI may fold into another. */
+export const isAutoAdded = (c: Pick<CompanyRow, "notes" | "tierSource">): boolean =>
+  (c.tierSource === "pending" || c.tierSource === "auto") &&
+  Boolean(c.notes?.startsWith(AUTO_ADDED_NOTE));
+
+/** Creates the company and links its stored list jobs, in one transaction. */
 export const createCompany = async (db: DbOrTx, input: CompanyInput): Promise<CompanyRow> => {
   const values = {
     name: input.name.trim(),
@@ -162,15 +205,18 @@ export const createCompany = async (db: DbOrTx, input: CompanyInput): Promise<Co
     careersUrl: clean(input.careersUrl),
     notes: clean(input.notes),
     status: input.status,
+    needsReviewSince: needsReviewSince(input.status, null, new Date()),
   };
   if (!values.normalizedName) throw new InvalidError("Company name is empty");
   const violation = checkCompanyInvariants(values);
   if (violation) throw new InvalidError(violation);
   try {
-    const [row] = await db.insert(companies).values(values).returning();
-    if (!row) throw new Error("insert returned no row");
-    await linkUnlinkedJobs(db, row);
-    return row;
+    return await db.transaction(async (tx) => {
+      const [row] = await tx.insert(companies).values(values).returning();
+      if (!row) throw new Error("insert returned no row");
+      await linkUnlinkedJobs(tx, row);
+      return row;
+    });
   } catch (err) {
     if (isUniqueViolation(err)) throw conflict();
     throw err;
@@ -211,9 +257,15 @@ export const updateCompany = async (
       const violation = checkCompanyInvariants(next);
       if (violation) throw new InvalidError(violation);
 
+      const now = new Date();
       const [row] = await tx
         .update(companies)
-        .set({ ...next, normalizedName, updatedAt: new Date() })
+        .set({
+          ...next,
+          normalizedName,
+          needsReviewSince: needsReviewSince(next.status, current, now),
+          updatedAt: now,
+        })
         .where(eq(companies.id, id))
         .returning();
       if (!row) throw new NotFoundError("Company not found");
@@ -239,7 +291,9 @@ export const updateCompany = async (
  * Folds a company into another one that's the same company under another name
  * ("Bank of Montreal" into "BMO"): its jobs move over, its names become
  * aliases (so the lists' jobs keep resolving), and it's deleted. A job board
- * moves along when the other has none; two boards can't merge.
+ * moves along when the other has none; two boards can't merge. Only a company
+ * auto-add created with a tier nobody picked can be folded away (see `isAutoAdded`).
+ * Its jobs take the other's name, as the poll names every job linked to a company.
  */
 export const mergeCompanyInto = (db: DbOrTx, fromId: string, intoId: string): Promise<CompanyRow> =>
   db.transaction(async (tx) => {
@@ -251,6 +305,9 @@ export const mergeCompanyInto = (db: DbOrTx, fromId: string, intoId: string): Pr
     const from = rows.find((c) => c.id === fromId);
     const into = rows.find((c) => c.id === intoId);
     if (!from || !into || from.id === into.id) throw new NotFoundError("Company not found");
+    if (!isAutoAdded(from)) {
+      throw new ConflictError(`${from.name} was added or edited by hand; it isn't merged away`);
+    }
     const fromBoard = from.ats !== OTHER_ATS && Boolean(from.slug);
     const intoBoard = into.ats !== OTHER_ATS && Boolean(into.slug);
     if (fromBoard && intoBoard) throw new ConflictError("Both companies have a job board");
@@ -273,6 +330,7 @@ export const mergeCompanyInto = (db: DbOrTx, fromId: string, intoId: string): Pr
           slug: from.slug,
           track: true,
           status: from.status,
+          needsReviewSince: from.needsReviewSince,
           careersUrl: into.careersUrl ?? from.careersUrl,
         }),
         updatedAt: new Date(),
@@ -283,18 +341,51 @@ export const mergeCompanyInto = (db: DbOrTx, fromId: string, intoId: string): Pr
     return row;
   });
 
+/**
+ * A suggestion the company `c` stands for: its name, an alias, its board, or
+ * its board slug as a name (see `resolveCompany`). Used inside a query over
+ * `suggestions` with `companies c` in scope.
+ */
+export const suggestionIsCompany = sql`(
+  c.normalized_name = ${suggestions.id}
+  OR ${suggestions.id} = ANY(c.aliases)
+  OR (${suggestions.slug} IS NOT NULL AND c.ats = ${suggestions.ats}
+      AND lower(c.slug) = lower(${suggestions.slug}))
+  OR (c.slug IS NOT NULL AND regexp_replace(lower(c.slug), '[^a-z0-9]', '', 'g')
+      = regexp_replace(${suggestions.id}, '[^a-z0-9]', '', 'g'))
+)`;
+
+/**
+ * Removing a company is final: every suggestion it stood for is dismissed
+ * (and its names are kept as dismissed suggestions when the lists haven't
+ * suggested them yet), so polls don't reopen them and auto-add doesn't add it back.
+ */
 export const deleteCompany = async (db: DbOrTx, id: string): Promise<void> => {
   await db.transaction(async (tx) => {
-    // Removing a company is final: auto-add would otherwise add it back from the lists
+    const [company] = await tx.select().from(companies).where(eq(companies.id, id)).for("update");
+    if (!company) throw new NotFoundError("Company not found");
+    const names = new Set([company.normalizedName, ...company.aliases]);
+    if (company.slug) {
+      const slugName = normalizeCompanyName(company.slug.replace(/[-_]+/g, " "));
+      if (slugName) names.add(slugName);
+    }
+    await tx
+      .insert(suggestions)
+      .values(
+        [...names].map((name) => ({
+          id: name,
+          displayName: company.name,
+          ats: company.ats,
+          slug: company.slug,
+          state: "dismissed",
+        })),
+      )
+      .onConflictDoNothing();
     await tx.execute(sql`
-      UPDATE suggestions s SET state = 'dismissed'
+      UPDATE suggestions SET state = 'dismissed'
       FROM companies c
-      WHERE c.id = ${id} AND (s.id = c.normalized_name OR s.id = ANY(c.aliases))`);
-    const deleted = await tx
-      .delete(companies)
-      .where(eq(companies.id, id))
-      .returning({ id: companies.id });
-    if (deleted.length === 0) throw new NotFoundError("Company not found");
+      WHERE c.id = ${id} AND suggestions.state <> 'dismissed' AND ${suggestionIsCompany}`);
+    await tx.delete(companies).where(eq(companies.id, id));
   });
 };
 

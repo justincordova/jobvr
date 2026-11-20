@@ -45,6 +45,10 @@ export interface FindBoardOptions {
   http: HttpClient;
   /** Source ids switched off in Settings. */
   disabled?: readonly string[];
+  /** Aborts the probes (shutdown); the search then stops early. */
+  signal?: AbortSignal;
+  /** Only guesses this accepts are tried (see `boardFitsCompany`). */
+  accept?: (slug: string) => boolean;
 }
 
 const atsAdapters = ({ registry, disabled = [] }: FindBoardOptions): SourceAdapter[] =>
@@ -81,16 +85,17 @@ export const findBoardByName = async (
   name: string,
   options: FindBoardOptions,
 ): Promise<BoardHit | null> => {
-  const candidates = slugCandidates(name);
+  const candidates = slugCandidates(name).filter((slug) => options.accept?.(slug) ?? true);
   let best: BoardHit | null = null;
   for (const adapter of atsAdapters(options)) {
     const probe = adapter.probe?.bind(adapter);
     if (!probe) continue;
     // A few at a time per ATS to stay polite
     for (let i = 0; i < candidates.length; i += 3) {
+      if (options.signal?.aborted) return best;
       const batch = candidates.slice(i, i + 3);
       const results = await Promise.allSettled(
-        batch.map((slug) => probe(slug, { http: options.http })),
+        batch.map((slug) => probe(slug, { http: options.http, signal: options.signal })),
       );
       results.forEach((r, j) => {
         if (r.status !== "fulfilled" || !r.value.found || r.value.jobCount === 0) return;

@@ -1,11 +1,12 @@
 import { and, eq, ne } from "drizzle-orm";
 import { DAY_MS } from "./constants";
 import type { Database } from "./db/client";
-import { companies, jobSources, jobs } from "./db/schema";
+import { type CompanyRow, companies, jobSources, jobs } from "./db/schema";
 import { ConflictError } from "./errors";
 import { findBoardByName } from "./find-board";
 import type { HttpClient } from "./http";
 import { type Logger, silentLogger } from "./logger";
+import { compactName } from "./poll/resolve";
 import { updateCompany } from "./repos/companies";
 import { getSettingsState } from "./repos/settings";
 import { getAdapter, OTHER_ATS_ID, parseAtsUrl } from "./sources/registry";
@@ -18,6 +19,22 @@ export const HEAL_RETRY_MS = 6 * 60 * 60_000;
 /** After this long with a broken board, the company is left to the new-grad lists. */
 export const HEAL_GIVE_UP_MS = 3 * DAY_MS;
 
+/**
+ * A board found by guessing slugs from the name belongs to the company only
+ * when its slug carries the whole name ("initech-io" for Initech): a probe
+ * only says the board exists, and a shortened guess ("scale" for Scale AI)
+ * can be another company's board.
+ */
+export const boardFitsCompany = (
+  slug: string,
+  company: Pick<CompanyRow, "normalizedName" | "aliases">,
+): boolean => {
+  const board = compactName(slug);
+  return [company.normalizedName, ...company.aliases]
+    .map(compactName)
+    .some((name) => name.length > 0 && board.includes(name));
+};
+
 export interface HealOptions {
   database: Database;
   registry: Registry;
@@ -26,18 +43,24 @@ export interface HealOptions {
   now?: () => Date;
   /** Company id → when it was last searched (kept by the caller between runs). */
   attempts?: Map<string, number>;
+  /** Stops before the next company once this much time has passed (the rest wait for the next run). */
+  budgetMs?: number;
+  /** Aborts the board probes in flight (shutdown); nothing else starts. */
+  signal?: AbortSignal;
 }
 
 /**
  * Fixes companies whose board stopped answering (`needs_review`): usually the
- * company moved boards, so jobvr searches every ATS for its name. Found: it
- * switches to the new board. Still nothing after HEAL_GIVE_UP_MS: it stops
- * being polled (`manual_only`); its jobs keep coming from the new-grad lists.
+ * company moved boards, so jobvr searches every ATS for its name, trying only
+ * slugs that carry the whole name (see `boardFitsCompany`). Found: it
+ * switches to the new board. Still nothing HEAL_GIVE_UP_MS after it broke,
+ * and on a second search in a row: it stops being polled (`manual_only`); its
+ * jobs keep coming from the new-grad lists.
  */
 export const runHealCompanies = async (
   options: HealOptions,
 ): Promise<{ moved: string[]; gaveUp: string[] }> => {
-  const { database, registry, http } = options;
+  const { database, registry, http, signal } = options;
   const { db } = database;
   const log = (options.logger ?? silentLogger).child({ module: "companies" });
   const now = (options.now ?? (() => new Date()))();
@@ -49,7 +72,7 @@ export const runHealCompanies = async (
       .select()
       .from(companies)
       .where(and(eq(companies.status, "needs_review"), ne(companies.ats, "other")))
-      .orderBy(companies.updatedAt)
+      .orderBy(companies.needsReviewSince)
   )
     .filter((c) => {
       const at = attempts.get(c.id);
@@ -59,13 +82,28 @@ export const runHealCompanies = async (
 
   const moved: string[] = [];
   const gaveUp: string[] = [];
-  for (const c of broken) {
+  const started = performance.now();
+  for (const [i, c] of broken.entries()) {
+    if (signal?.aborted) break;
+    if (options.budgetMs !== undefined && performance.now() - started >= options.budgetMs) {
+      log.debug(
+        { budgetMs: options.budgetMs, waiting: broken.length - i },
+        `board search time budget used up; ${broken.length - i} broken board${broken.length - i === 1 ? " waits" : "s wait"} for the next run`,
+      );
+      break;
+    }
+    // Searched before in this process: a single search (right after a restart) never gives up
+    const searchedBefore = attempts.has(c.id);
     attempts.set(c.id, now.getTime());
     const hit = await findBoardByName(c.name, {
       registry,
       http,
       disabled: settings.disabledSources,
+      signal,
+      accept: (slug) => boardFitsCompany(slug, c),
     });
+    // Probes cut short by a shutdown prove nothing
+    if (signal?.aborted) break;
     const isNew = hit && !(hit.ats === c.ats && hit.slug.toLowerCase() === c.slug?.toLowerCase());
     if (hit && isNew) {
       try {
@@ -81,9 +119,14 @@ export const runHealCompanies = async (
       } catch (err) {
         // That board already belongs to another company
         if (!(err instanceof ConflictError)) throw err;
+        log.debug(
+          { company: c.name, ats: hit.ats, slug: hit.slug },
+          `not moving ${c.name} to ${hit.ats} ${hit.slug}: ${err.message}`,
+        );
       }
     }
-    if (now.getTime() - c.updatedAt.getTime() >= HEAL_GIVE_UP_MS) {
+    const brokenSince = c.needsReviewSince ?? now;
+    if (searchedBefore && now.getTime() - brokenSince.getTime() >= HEAL_GIVE_UP_MS) {
       await updateCompany(db, c.id, { status: "manual_only", track: false });
       attempts.delete(c.id);
       gaveUp.push(c.name);
@@ -141,14 +184,20 @@ export const runFindListBoards = async (options: HealOptions): Promise<{ moved: 
 
   const moved: string[] = [];
   for (const [id, { name, counts }] of due) {
+    if (options.signal?.aborted) break;
     attempts.set(id, now);
     const best = [...counts.values()].sort((a, b) => b.links - a.links)[0];
     const adapter = best && getAdapter(registry, best.ats);
     if (!best || !adapter?.probe) continue;
     let probe: { found: boolean; jobCount: number };
     try {
-      probe = await adapter.probe(best.slug, { http });
+      probe = await adapter.probe(best.slug, { http, signal: options.signal });
     } catch {
+      // Shutting down: checked again on the next start
+      if (options.signal?.aborted) {
+        attempts.delete(id);
+        break;
+      }
       // No answer: tried again tomorrow
       continue;
     }

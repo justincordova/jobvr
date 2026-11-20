@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "./db/client";
 import { companies, jobs } from "./db/schema";
-import { createCompany, findCompanyByName } from "./repos/companies";
+import { ConflictError } from "./errors";
+import { createCompany, findCompanyByName, mergeCompanyInto } from "./repos/companies";
 import { createTestDatabase } from "./testing";
 import {
   AUTO_TIER_DAILY_CAP,
@@ -39,7 +40,11 @@ describe("createOpenAiTierRater", () => {
     expect(sent.url).toBe("https://api.openai.com/v1/chat/completions");
     expect((sent.init.headers as Record<string, string>).Authorization).toBe("Bearer sk-test");
     const body = JSON.parse(String(sent.init.body));
-    expect(body).toMatchObject({ model: "gpt-5-mini", reasoning_effort: "minimal" });
+    expect(body).toMatchObject({
+      model: "gpt-5-mini",
+      reasoning_effort: "minimal",
+      max_completion_tokens: 300,
+    });
     expect(body.response_format.json_schema.schema.properties.tier.enum).toEqual([
       "S",
       "A",
@@ -75,11 +80,34 @@ describe("createOpenAiTierRater", () => {
     expect(String(err)).toContain("OpenAI answered 401: Incorrect API key provided");
     expect(String(err)).not.toContain("sk-secret");
 
-    const bad = createOpenAiTierRater({
+    const answering = (content: string, finish_reason = "stop") =>
+      createOpenAiTierRater({
+        apiKey: "k",
+        fetch: reply(200, { choices: [{ message: { content }, finish_reason }] }),
+      }).rate({ name: "A", careersUrl: null, titles: [] });
+    await expect(answering('{"tier":"B","reason":"x"}')).rejects.toThrow(
+      "OpenAI's rating doesn't fit (tier:",
+    );
+    await expect(answering(`{"tier":"A","reason":"${"x".repeat(201)}"}`)).rejects.toThrow(
+      "(reason:",
+    );
+    await expect(answering('{"tier":"A","reason":"x","extra":1}')).rejects.toThrow();
+    await expect(answering('{"tier":"A","rea')).rejects.toThrow("isn't valid JSON");
+    await expect(answering('{"tier":"A","rea', "length")).rejects.toThrow("cut off at 300 tokens");
+  });
+
+  it("stops the call when the caller aborts", async () => {
+    const rater = createOpenAiTierRater({
       apiKey: "k",
-      fetch: reply(200, { choices: [{ message: { content: '{"tier":"B","reason":"x"}' } }] }),
+      fetch: ((_url: string, init: RequestInit) =>
+        new Promise((_, reject) => {
+          init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        })) as unknown as typeof fetch,
     });
-    await expect(bad.rate({ name: "A", careersUrl: null, titles: [] })).rejects.toThrow();
+    const stop = new AbortController();
+    const rating = rater.rate({ name: "A", careersUrl: null, titles: [] }, { signal: stop.signal });
+    stop.abort();
+    await expect(rating).rejects.toThrow();
   });
 });
 
@@ -103,15 +131,20 @@ describe("runAutoTier", () => {
       return { tier: "A", reason: `Rated ${input.name}` };
     },
   });
-  const add = (name: string, tierSource: "seed" | "manual" | "pending" = "pending") =>
+  const add = (
+    name: string,
+    tierSource: "seed" | "manual" | "pending" = "pending",
+    notes: string | null = "Added automatically from SimplifyJobs (no readable job board)",
+  ) =>
     createCompany(database.db, {
       name,
       tier: "Startup",
       tierSource,
       track: true,
       ats: "lever",
-      slug: name.toLowerCase(),
+      slug: name.toLowerCase().replace(/\s+/g, "-"),
       status: "ok",
+      notes,
     });
   const tiers = async () =>
     Object.fromEntries(
@@ -190,61 +223,100 @@ describe("runAutoTier", () => {
       merged: [],
     });
   });
-  it("merges a company the AI says is another one under a new name", async () => {
-    const bmo = await createCompany(database.db, {
-      name: "BMO",
-      tier: "Corporate",
-      tierSource: "seed",
+  const listOnly = (
+    name: string,
+    tierSource: "seed" | "manual" | "pending",
+    notes: string | null,
+  ) =>
+    createCompany(database.db, {
+      name,
+      tier: tierSource === "pending" ? "Startup" : "Corporate",
+      tierSource,
       track: false,
       ats: "other",
       status: "manual_only",
+      notes,
     });
-    const montreal = await createCompany(database.db, {
-      name: "Bank of Montreal",
-      tier: "Startup",
-      tierSource: "pending",
-      track: true,
-      ats: "lever",
-      slug: "bmo-careers",
-      status: "ok",
-    });
+  const sameAs = (name: string): TierRater => ({
+    model: "test-model",
+    rate: async () => ({ tier: "Startup", reason: "Health startup", sameAs: name }),
+  });
+  const runWith = (r: TierRater) =>
+    runAutoTier({ database, rater: r, state: createAutoTierState(), now: () => NOW });
+
+  it("merges an auto-added company into the one whose name it starts", async () => {
+    const health = await listOnly("Bask Health", "seed", null);
+    const bask = await add("Bask");
     await database.db.insert(jobs).values({
       id: "sj:1",
-      companyId: montreal.id,
-      companyName: "Bank of Montreal",
+      companyId: bask.id,
+      companyName: "Bask",
       title: "Software Engineer",
       url: "https://example.com/1",
       primarySource: "simplify",
       firstSeenAt: NOW,
       effectiveAt: NOW,
     });
-    const sameAsBmo: TierRater = {
-      model: "test-model",
-      rate: async () => ({ tier: "Corporate", reason: "Large bank", sameAs: "bmo" }),
-    };
-    expect(
-      await runAutoTier({
-        database,
-        rater: sameAsBmo,
-        state: createAutoTierState(),
-        now: () => NOW,
-      }),
-    ).toEqual({ rated: [], failed: [], merged: ["Bank of Montreal"] });
+    expect(await runWith(sameAs("bask health"))).toEqual({
+      rated: [],
+      failed: [],
+      merged: ["Bask"],
+    });
 
     const rows = await database.db.select().from(companies);
-    // Its board moves along, and its name keeps resolving to BMO
+    // Its board moves along, and its name keeps resolving to Bask Health
     expect(rows).toEqual([
       expect.objectContaining({
-        id: bmo.id,
+        id: health.id,
         tier: "Corporate",
         ats: "lever",
-        slug: "bmo-careers",
+        slug: "bask",
         track: true,
-        aliases: ["bank of montreal"],
+        aliases: ["bask"],
       }),
     ]);
-    expect(await findCompanyByName(database.db, "Bank of Montreal")).toMatchObject({ id: bmo.id });
+    expect(await findCompanyByName(database.db, "Bask")).toMatchObject({ id: health.id });
     const [job] = await database.db.select().from(jobs);
-    expect(job).toMatchObject({ companyId: bmo.id, companyName: "BMO" });
+    expect(job).toMatchObject({ companyId: health.id, companyName: "Bask Health" });
+  });
+
+  it("keeps a company whose name doesn't match the AI's pick, rating it instead", async () => {
+    await listOnly("BMO", "seed", null);
+    await add("Bank of Montreal");
+    // A list's company name can't steer a merge into an unrelated company
+    expect(await runWith(sameAs("BMO"))).toEqual({
+      rated: ["Bank of Montreal"],
+      failed: [],
+      merged: [],
+    });
+    expect((await database.db.select().from(companies)).map((c) => c.name).sort()).toEqual([
+      "BMO",
+      "Bank of Montreal",
+    ]);
+  });
+
+  it("never merges away a seed, a picked tier or a company added by hand", async () => {
+    await listOnly("Bask Health", "seed", null);
+    await add("Bask", "pending", "Added by hand");
+    expect(await runWith(sameAs("Bask Health"))).toMatchObject({ rated: ["Bask"], merged: [] });
+    await database.db.delete(companies);
+
+    seen.length = 0;
+    await listOnly("Bask Health", "seed", null);
+    await add("Bask", "pending", "Added by hand");
+    await runWith(rater());
+    // Not even asked: a hand-added company is never folded into another
+    expect(seen[0]?.knownCompanies).toEqual([]);
+    await database.db.delete(companies);
+
+    // Whatever asks: only an auto-added company with a tier nobody picked can be merged away
+    const into = await listOnly("Bask Health", "pending", "Added automatically from x");
+    for (const tierSource of ["seed", "manual"] as const) {
+      const from = await add(`Bask ${tierSource}`, tierSource);
+      await expect(mergeCompanyInto(database.db, from.id, into.id)).rejects.toBeInstanceOf(
+        ConflictError,
+      );
+    }
+    expect(await database.db.select().from(companies)).toHaveLength(3);
   });
 });

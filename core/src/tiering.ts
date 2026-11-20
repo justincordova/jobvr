@@ -2,10 +2,10 @@ import { and, count, desc, eq, gte, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { DAY_MS, TIERS, type Tier } from "./constants";
 import type { Database } from "./db/client";
-import { companies, jobs } from "./db/schema";
+import { type CompanyRow, companies, jobs } from "./db/schema";
 import { ConflictError, NotFoundError } from "./errors";
 import { errorFields, type Logger, silentLogger } from "./logger";
-import { mergeCompanyInto } from "./repos/companies";
+import { isAutoAdded, mergeCompanyInto } from "./repos/companies";
 
 export const DEFAULT_TIER_MODEL = "gpt-5-mini";
 /** Hard ceiling on AI calls a day, so a bug or a flood of new companies can't run up a bill. */
@@ -35,7 +35,7 @@ export interface TierRaterInput {
 
 export interface TierRater {
   model: string;
-  rate(input: TierRaterInput): Promise<TierRating>;
+  rate(input: TierRaterInput, options?: { signal?: AbortSignal }): Promise<TierRating>;
 }
 
 const INSTRUCTIONS = `You place companies on a tier list for someone looking for US new-grad software engineering jobs. Tiers:
@@ -46,7 +46,7 @@ const INSTRUCTIONS = `You place companies on a tier list for someone looking for
 - Corporate: traditional enterprises where software isn't the core business: banks, insurers, retailers, manufacturers, defense contractors, consultancies and staffing firms (e.g. Chubb, American Express, BlackRock).
 If you don't recognize the company, judge from its name, careers page and job titles; when still unsure, answer Startup.
 reason: one plain sentence of at most 15 words, e.g. "Well-funded AI coding startup" or "Large insurer; software supports the business".
-sameAs: when the company is one already in knownCompanies under another name (e.g. "Bank of Montreal" is "BMO", "Bask" is "Bask Health"), that exact name from the list; otherwise null. Only when you're sure: a parent, a subsidiary or a different company with a similar name is not the same.`;
+sameAs: when the company is one already in knownCompanies under another name, that exact name from the list; otherwise null. Only when you're sure: a parent, a subsidiary or a different company with a similar name is not the same.`;
 
 const RESPONSE_FORMAT = {
   type: "json_schema",
@@ -66,19 +66,23 @@ const RESPONSE_FORMAT = {
   },
 } as const;
 
+/** Room for minimal reasoning plus the small JSON answer; caps what one rating can cost. */
+const MAX_COMPLETION_TOKENS = 300;
+
 const ChatResponse = z.object({
   choices: z
     .array(
       z.object({
         message: z.object({ content: z.string().nullable(), refusal: z.string().nullish() }),
+        finish_reason: z.string().nullish(),
       }),
     )
     .min(1),
 });
-const Rating = z.object({
+const Rating = z.strictObject({
   tier: z.enum(TIERS),
-  reason: z.string().trim().min(1).max(300),
-  sameAs: z.string().trim().min(1).nullish(),
+  reason: z.string().trim().min(1).max(200),
+  sameAs: z.string().trim().min(1).max(200).nullish(),
 });
 const ApiError = z.object({ error: z.object({ message: z.string() }) });
 
@@ -97,7 +101,8 @@ export const createOpenAiTierRater = (options: {
   const doFetch = options.fetch ?? fetch;
   return {
     model,
-    async rate(input) {
+    async rate(input, rateOptions) {
+      const timeout = AbortSignal.timeout(options.timeoutMs ?? 30_000);
       const res = await doFetch(OPENAI_URL, {
         method: "POST",
         headers: {
@@ -107,6 +112,7 @@ export const createOpenAiTierRater = (options: {
         body: JSON.stringify({
           model,
           ...(takesReasoningEffort(model) && { reasoning_effort: "minimal" }),
+          max_completion_tokens: MAX_COMPLETION_TOKENS,
           response_format: RESPONSE_FORMAT,
           messages: [
             { role: "system", content: INSTRUCTIONS },
@@ -121,7 +127,7 @@ export const createOpenAiTierRater = (options: {
             },
           ],
         }),
-        signal: AbortSignal.timeout(options.timeoutMs ?? 30_000),
+        signal: rateOptions?.signal ? AbortSignal.any([timeout, rateOptions.signal]) : timeout,
       });
       const body: unknown = await res.json().catch(() => null);
       if (!res.ok) {
@@ -130,10 +136,27 @@ export const createOpenAiTierRater = (options: {
           `OpenAI answered ${res.status}${detail.success ? `: ${detail.data.error.message.slice(0, 200)}` : ""}`,
         );
       }
-      const message = ChatResponse.parse(body).choices[0]?.message;
+      const choice = ChatResponse.parse(body).choices[0];
+      const message = choice?.message;
+      if (choice?.finish_reason === "length") {
+        throw new Error(`OpenAI's rating was cut off at ${MAX_COMPLETION_TOKENS} tokens`);
+      }
       if (!message?.content)
         throw new Error(`OpenAI gave no rating (${message?.refusal ?? "empty"})`);
-      return Rating.parse(JSON.parse(message.content));
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(message.content);
+      } catch {
+        throw new Error("OpenAI's rating isn't valid JSON");
+      }
+      const rating = Rating.safeParse(parsed);
+      if (!rating.success) {
+        const issue = rating.error.issues[0];
+        throw new Error(
+          `OpenAI's rating doesn't fit (${issue ? `${issue.path.join(".") || "answer"}: ${issue.message}` : "invalid"})`,
+        );
+      }
+      return rating.data;
     },
   };
 };
@@ -156,14 +179,42 @@ export interface AutoTierOptions {
   now?: () => Date;
   /** Only these companies (a company just added by hand). */
   ids?: readonly string[];
+  /** Stops before the next rating once this much time has passed (the rest wait for the next run). */
+  budgetMs?: number;
+  /** Aborts the AI call in flight (shutdown); nothing else starts. */
+  signal?: AbortSignal;
 }
+
+/** "bask" and "bask health": one name's words start the other's. */
+const wordPrefix = (a: string, b: string) => {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return long === short || long.startsWith(`${short} `);
+};
+
+type MergeCandidate = Pick<CompanyRow, "name" | "normalizedName" | "aliases" | "ats" | "slug">;
+
+/**
+ * Why the AI's "same company" answer can't be trusted for these two, or null.
+ * Its answer only picks among companies that already look alike (same board,
+ * or one name the start of the other's), so a name on a list can't steer a
+ * merge into an unrelated company.
+ */
+export const mergeRejection = (from: MergeCandidate, into: MergeCandidate): string | null => {
+  if (from.ats === into.ats && from.slug && from.slug.toLowerCase() === into.slug?.toLowerCase()) {
+    return null;
+  }
+  const names = (c: MergeCandidate) => [c.normalizedName, ...c.aliases];
+  const alike = names(from).some((a) => names(into).some((b) => wordPrefix(a, b)));
+  return alike ? null : "their names don't match (neither is the start of the other)";
+};
 
 /**
  * Rates companies whose tier is `pending` (added automatically or by hand)
  * with the AI rater, when one is configured. Seed tiers and tiers someone
- * picked are never touched. At most AUTO_TIER_DAILY_CAP calls a day. When the AI says
- * it's a company already on the list under another name, it's merged into that
- * one instead (see `mergeCompanyInto`).
+ * picked are never touched. At most AUTO_TIER_DAILY_CAP calls a day. When the
+ * AI says a company auto-add created is one already on the list under another
+ * name, and the names agree (see `mergeRejection`), it's merged into that one
+ * instead (see `mergeCompanyInto`).
  */
 export const runAutoTier = async (
   options: AutoTierOptions,
@@ -209,11 +260,32 @@ export const runAutoTier = async (
     return { rated: [], failed: [], merged: [] };
   }
 
-  const known = await db.select({ id: companies.id, name: companies.name }).from(companies);
+  const known = await db
+    .select({
+      id: companies.id,
+      name: companies.name,
+      normalizedName: companies.normalizedName,
+      aliases: companies.aliases,
+      ats: companies.ats,
+      slug: companies.slug,
+    })
+    .from(companies);
   const rated: string[] = [];
   const failed: string[] = [];
   const merged: string[] = [];
-  for (const c of pending.slice(0, Math.min(left, AUTO_TIER_PER_RUN))) {
+  const started = performance.now();
+  const batch = pending.slice(0, Math.min(left, AUTO_TIER_PER_RUN));
+  for (const [i, c] of batch.entries()) {
+    if (options.signal?.aborted) break;
+    if (options.budgetMs !== undefined && performance.now() - started >= options.budgetMs) {
+      log.debug(
+        { budgetMs: options.budgetMs, waiting: batch.length - i },
+        `rating time budget used up; ${batch.length - i} compan${batch.length - i === 1 ? "y waits" : "ies wait"} for the next run`,
+      );
+      break;
+    }
+    // Only a company auto-add created can be folded into another
+    const mergeable = isAutoAdded(c);
     const titles = await db
       .selectDistinct({ title: jobs.title, effectiveAt: jobs.effectiveAt })
       .from(jobs)
@@ -222,16 +294,30 @@ export const runAutoTier = async (
       .limit(TITLES_SENT * 2);
     state.calls.push(now.getTime());
     try {
-      const rating = await rater.rate({
-        name: c.name,
-        careersUrl: c.careersUrl,
-        titles: [...new Set(titles.map((t) => t.title))].slice(0, TITLES_SENT),
-        knownCompanies: known.filter((k) => k.id !== c.id).map((k) => k.name),
-      });
+      const rating = await rater.rate(
+        {
+          name: c.name,
+          careersUrl: c.careersUrl,
+          titles: [...new Set(titles.map((t) => t.title))].slice(0, TITLES_SENT),
+          knownCompanies: mergeable ? known.filter((k) => k.id !== c.id).map((k) => k.name) : [],
+        },
+        { signal: options.signal },
+      );
       state.failures.delete(c.id);
-      const same = rating.sameAs?.toLowerCase();
+      const same = mergeable ? rating.sameAs?.toLowerCase() : undefined;
       const target = same && known.find((k) => k.id !== c.id && k.name.toLowerCase() === same);
-      if (target) {
+      const why = !same
+        ? null
+        : !target
+          ? `"${rating.sameAs}" isn't on the list`
+          : mergeRejection(c, target);
+      if (same && why) {
+        log.info(
+          { company: c.name, sameAs: rating.sameAs, model: rater.model },
+          `kept ${c.name} as its own company: the AI said it's ${rating.sameAs}, but ${why}`,
+        );
+      }
+      if (target && !why) {
         try {
           await mergeCompanyInto(db, c.id, target.id);
           merged.push(c.name);
@@ -241,8 +327,12 @@ export const runAutoTier = async (
           );
           continue;
         } catch (err) {
-          // Both have a job board (or one is gone): keep it as its own company
+          // Both have a job board, it was edited by hand meanwhile, or one is gone
           if (!(err instanceof ConflictError || err instanceof NotFoundError)) throw err;
+          log.info(
+            { company: c.name, into: target.name, model: rater.model },
+            `kept ${c.name} as its own company: the AI said it's ${target.name}, but ${err.message}`,
+          );
         }
       }
       // A tier picked meanwhile wins
@@ -262,6 +352,8 @@ export const runAutoTier = async (
         `rated ${c.name} ${rating.tier}: ${rating.reason}`,
       );
     } catch (err) {
+      // Shutting down: not the company's fault, so it isn't held back an hour
+      if (options.signal?.aborted) break;
       state.failures.set(c.id, now.getTime());
       failed.push(c.name);
       log.warn(

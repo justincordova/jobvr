@@ -7,7 +7,7 @@ import { ConflictError } from "./errors";
 import type { HttpClient } from "./http";
 import { type Logger, silentLogger } from "./logger";
 import { indexCompanies, resolveCompany } from "./poll/resolve";
-import { listCompanies } from "./repos/companies";
+import { AUTO_ADDED_NOTE, listCompanies } from "./repos/companies";
 import { getSettingsState } from "./repos/settings";
 import { addSuggestion, listOpenSuggestions } from "./repos/suggestions";
 import { getAdapter } from "./sources/registry";
@@ -28,6 +28,8 @@ export interface AutoAddOptions {
   now?: () => Date;
   /** Suggestion id → when its board last failed the check (kept by the caller between runs). */
   failures?: Map<string, number>;
+  /** Aborts the board check in flight (shutdown); nothing else starts. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -71,9 +73,20 @@ export const runAutoAddCompanies = async (
   const added: string[] = [];
   const failed: string[] = [];
   for (const s of candidates) {
-    // Already on the list under another name ("Kira" is Kira Learning, board "kira")
-    if (resolveCompany(known, s.displayName)) {
+    if (options.signal?.aborted) break;
+    // Already on the list under another name ("Kira" is Kira Learning, board "kira"),
+    // or its board already belongs to a company with another name
+    const owner = resolveCompany(
+      known,
+      s.displayName,
+      s.slug ? { source: s.ats, slug: s.slug } : undefined,
+    );
+    if (owner) {
       await db.update(suggestions).set({ state: "added" }).where(eq(suggestions.id, s.id));
+      log.debug(
+        { suggestion: s.displayName, company: owner.name },
+        `not adding ${s.displayName}: it's ${owner.name}, already on the list`,
+      );
       continue;
     }
     const lists =
@@ -84,8 +97,10 @@ export const runAutoAddCompanies = async (
     let probe: { found: boolean; jobCount: number } | null = null;
     if (board) {
       try {
-        probe = (await board.probe?.(s.slug ?? "", { http })) ?? null;
+        probe = (await board.probe?.(s.slug ?? "", { http, signal: options.signal })) ?? null;
       } catch {
+        // Shutting down: not the board's fault
+        if (options.signal?.aborted) break;
         // No answer: maybe a blip, so the board gets another chance tomorrow
         failures.set(s.id, now);
         failed.push(s.displayName);
@@ -102,8 +117,8 @@ export const runAutoAddCompanies = async (
         s.id,
         AUTO_ADD_TIER,
         polled
-          ? `Added automatically from ${lists} (${board?.label} board, ${probe?.jobCount} jobs)`
-          : `Added automatically from ${lists} (no readable job board)`,
+          ? `${AUTO_ADDED_NOTE} from ${lists} (${board?.label} board, ${probe?.jobCount} jobs)`
+          : `${AUTO_ADDED_NOTE} from ${lists} (no readable job board)`,
         "pending",
         !polled,
       );
@@ -117,6 +132,10 @@ export const runAutoAddCompanies = async (
     } catch (err) {
       // Added meanwhile (or the name or board already belongs to a company)
       if (!(err instanceof ConflictError)) throw err;
+      log.debug(
+        { suggestion: s.displayName, ats: s.ats, slug: s.slug },
+        `not adding ${s.displayName}: ${err.message}`,
+      );
     }
   }
 

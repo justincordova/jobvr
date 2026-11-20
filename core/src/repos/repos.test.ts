@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../db/client";
-import { jobs, sourceState, suggestions } from "../db/schema";
-import { ConflictError, InvalidError } from "../errors";
+import { companies, jobs, sourceState, suggestions } from "../db/schema";
+import { ConflictError, InvalidError, NotFoundError } from "../errors";
 import { createTestDatabase } from "../testing/db";
 import {
   companyStateKey,
@@ -104,6 +104,50 @@ describe("companies repo", () => {
     expect(s?.state).toBe("dismissed");
   });
 
+  it("dismisses every suggestion a deleted company stood for, and keeps its names dismissed", async () => {
+    const { db } = database;
+    const c = await createCompany(db, {
+      name: "Kira Learning",
+      tier: "Startup",
+      ats: "ashby",
+      slug: "kira-ai",
+      track: true,
+      status: "ok",
+    });
+    await db
+      .update(companies)
+      .set({ aliases: ["kira labs"] })
+      .where(eq(companies.id, c.id));
+    const suggestion = (id: string, ats = "other", slug: string | null = null) => ({
+      id,
+      displayName: id,
+      ats,
+      slug,
+      listingCount: 1,
+      state: "open",
+    });
+    await db
+      .insert(suggestions)
+      .values([
+        suggestion("kira labs"),
+        suggestion("kira learning inc", "ashby", "KIRA-AI"),
+        suggestion("unrelated", "ashby", "unrelated"),
+      ]);
+    await deleteCompany(db, c.id);
+    const states = Object.fromEntries(
+      (await db.select().from(suggestions)).map((s) => [s.id, s.state]),
+    );
+    expect(states).toMatchObject({
+      // By alias, by board, and its names and board slug before any list suggests them
+      "kira labs": "dismissed",
+      "kira learning inc": "dismissed",
+      "kira learning": "dismissed",
+      "kira ai": "dismissed",
+      unrelated: "open",
+    });
+    await expect(deleteCompany(db, c.id)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
   it("links list jobs already stored under the new company's name", async () => {
     const { db } = database;
     const at = new Date("2026-11-20T11:32:42Z");
@@ -122,6 +166,8 @@ describe("companies repo", () => {
       .values([
         job("sj:hw1", "Honeywell Aerospace"),
         job("sj:hw2", "honeywell aerospace"),
+        job("sj:hw3", "The Honeywell Aerospace, Inc."),
+        job("sj:hw4", "Honeywell Aerospace Systems"),
         job("sj:o", "Other Co"),
       ]);
     const c = await createCompany(db, {
@@ -135,6 +181,8 @@ describe("companies repo", () => {
     expect(Object.fromEntries(rows.map((r) => [r.id, r.companyId]))).toMatchObject({
       "sj:hw1": c.id,
       "sj:hw2": c.id,
+      "sj:hw3": c.id,
+      "sj:hw4": null,
       "sj:o": null,
     });
   });

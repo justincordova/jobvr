@@ -86,7 +86,7 @@ describe("runAutoAddCompanies", () => {
       track: true,
       status: "ok",
     });
-    expect(company?.notes).toMatch(/from SimplifyJobs .*12 jobs/);
+    expect(company?.notes).toMatch(/^Added automatically from SimplifyJobs .*12 jobs/);
     expect((await database.db.select().from(suggestions))[0]?.state).toBe("added");
     // The list refetches in full next poll, so its jobs find the new company
     expect((await database.db.select().from(sourceState))[0]?.etag).toBeNull();
@@ -120,6 +120,23 @@ describe("runAutoAddCompanies", () => {
     );
     expect(states).toMatchObject({ kira: "added", globex: "dismissed" });
     expect(rows.map((c) => c.name).sort()).toEqual(["Acme", "Hooli", "Kira Learning"]);
+  });
+
+  it("marks a suggestion whose board a differently named company owns, without probing it", async () => {
+    await createCompany(database.db, {
+      name: "Initech Corporation of America",
+      tier: "Mid",
+      track: true,
+      ats: "greenhouse",
+      slug: "initech",
+      status: "ok",
+    });
+    boards.set("initech", 3);
+    await suggest("initrode", "greenhouse", "INITECH");
+    expect(await run()).toEqual({ added: [], failed: [] });
+    expect(probed).toEqual([]);
+    expect((await database.db.select().from(suggestions))[0]?.state).toBe("added");
+    expect(await database.db.select().from(companies)).toHaveLength(1);
   });
 
   it("waits on switched-off sources and when adding is off", async () => {

@@ -69,6 +69,8 @@ export const companies = pgTable(
     careersUrl: text("careers_url"),
     notes: text("notes"),
     status: text("status").notNull().default("ok"),
+    /** When it last became `needs_review`; null in every other status. */
+    needsReviewSince: ts("needs_review_since"),
     createdAt: ts("created_at").notNull().defaultNow(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
@@ -112,7 +114,7 @@ export const jobs = pgTable(
     salaryMinUsd: integer("salary_min_usd"),
     salaryMaxUsd: integer("salary_max_usd"),
     state: text("state").notNull().default("new"),
-    /** When it was marked applied; null in every other state. */
+    /** When it was first marked applied; kept when it leaves applied, so an undo keeps the date. */
     appliedAt: ts("applied_at"),
     baseline: boolean("baseline").notNull().default(false),
     notifiedAt: ts("notified_at"),
