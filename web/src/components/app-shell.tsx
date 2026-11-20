@@ -10,11 +10,20 @@ import { useOnline } from '@/lib/use-online'
 
 function Wordmark() {
   return (
-    <Link to="/" className="group flex items-center gap-2.5 rounded-md" aria-label="jobvr home">
-      <span className="relative flex size-2.5">
-        <span className="absolute inline-flex size-full animate-ping-once rounded-full bg-signal" />
-        <span className="relative inline-flex size-2.5 rounded-full bg-signal transition-transform duration-300 group-hover:scale-125" />
-      </span>
+    <Link
+      to="/"
+      className="group flex items-center gap-2.5 rounded-md"
+      aria-label="jobvr home"
+      title="jobvr"
+    >
+      {/* The radar mark, shared with the tab and the home-screen icon */}
+      <img
+        src="/favicon.svg"
+        alt=""
+        width={26}
+        height={26}
+        className="size-[1.6rem] rounded-[0.34rem] transition-transform duration-300 group-hover:scale-110"
+      />
       <span className="font-mono text-[0.95rem] font-semibold tracking-tight">
         job<span className="text-signal">vr</span>
       </span>
