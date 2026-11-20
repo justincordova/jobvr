@@ -47,10 +47,11 @@ if [ -z "$(find /backups -maxdepth 1 -name 'jobvr-*.dump' -mmin -1500 2>/dev/nul
   backup || true
 fi
 
-now=$(date +%s)
 next=$(date -d '03:00' +%s)
-if [ "$next" -le "$now" ]; then next=$(date -d 'tomorrow 03:00' +%s); fi
-sleep $((next - now))
+if [ "$next" -le "$(date +%s)" ]; then next=$(date -d 'tomorrow 03:00' +%s); fi
+# Short naps against the wall clock: a single long sleep stops counting while the
+# PC sleeps or hibernates, so 03:00 would slip by the time it was asleep
+while [ "$(date +%s)" -lt "$next" ]; do sleep 300; done
 # Fresh copies of the script (deploy/ is mounted as a folder), so a `git pull`
 # reaches the backup service without recreating it. A failed night is
 # logged, recorded and retried the next night, not fatal.
