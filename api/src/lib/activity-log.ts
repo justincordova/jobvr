@@ -23,27 +23,56 @@ export interface ActivityLog {
 export const ACTIVITY_CAPACITY = 1000;
 const MAX_TEXT = 2000;
 const REDACTED = "[redacted]";
-// Shorter values (the dev password "jobvr") would blank ordinary words
-const MIN_SECRET_LENGTH = 8;
+// Shorter values would blank parts of ordinary words
+const MIN_SECRET_LENGTH = 4;
+// Shorter secrets are only redacted as a whole word, so "test" doesn't blank part of "latest"
+const MIN_SUBSTRING_SECRET_LENGTH = 12;
+
+/** A secret value, or a pattern and its replacement (for secrets inside a known shape). */
+export type Secret = string | [RegExp, string];
 
 const PATTERNS: [RegExp, string][] = [
   // scheme://user:password@host
   [/\b([a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:)[^\s@/]+@/gi, `$1${REDACTED}@`],
   [/\btskey-[A-Za-z0-9-]+/g, REDACTED],
   [/\b(ntfy\.sh\/)[^\s"'/?#]+/gi, `$1${REDACTED}`],
+  // OpenAI keys (sk-..., sk-proj-...)
+  [/\bsk-[A-Za-z0-9_-]{16,}/g, REDACTED],
+  // An Authorization header's value, whatever its scheme
+  [
+    /\b(authorization["']?\s*[:=]\s*["']?(?:(?:bearer|basic|token|digest)\s+)?)[^\s"',;]+/gi,
+    `$1${REDACTED}`,
+  ],
+  [/\b(bearer\s+)[A-Za-z0-9._~+/=-]{8,}/gi, `$1${REDACTED}`],
 ];
 
-/** The secret parts of the app's configuration: full NTFY_URL, its topic, the database password. */
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const wholeWord = (s: string) =>
+  new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(s)}(?![A-Za-z0-9])`, "g");
+
+/**
+ * The secret parts of the app's configuration: the OpenAI key, the full
+ * NTFY_URL and its topic path (whatever its length), the database password.
+ */
 export const secretsFromEnv = (env: {
   NTFY_URL?: string;
   DATABASE_URL?: string;
   OPENAI_API_KEY?: string;
-}): string[] => {
-  const out: string[] = [];
-  if (env.OPENAI_API_KEY) out.push(env.OPENAI_API_KEY);
+}): Secret[] => {
+  const out: Secret[] = [];
+  const key = env.OPENAI_API_KEY?.trim();
+  if (key) out.push(key);
   if (env.NTFY_URL) {
     out.push(env.NTFY_URL);
-    if (URL.canParse(env.NTFY_URL)) out.push(new URL(env.NTFY_URL).pathname.replace(/^\/+/, ""));
+    if (URL.canParse(env.NTFY_URL)) {
+      const url = new URL(env.NTFY_URL);
+      const topic = url.pathname.replace(/^\/+|\/+$/g, "");
+      if (topic) {
+        // The topic is the whole secret: anything after the server, and the topic alone
+        out.push([new RegExp(`(${escapeRegExp(url.host)}/)[^\\s"'?#]+`, "gi"), `$1${REDACTED}`]);
+        out.push(topic.length >= MIN_SECRET_LENGTH ? topic : [wholeWord(topic), REDACTED]);
+      }
+    }
   }
   if (env.DATABASE_URL && URL.canParse(env.DATABASE_URL)) {
     const { password } = new URL(env.DATABASE_URL);
@@ -52,15 +81,32 @@ export const secretsFromEnv = (env: {
   return out;
 };
 
-/** Replaces known secrets and secret-shaped strings with "[redacted]". */
-export const createRedactor = (secrets: readonly string[]) => {
-  const exact = [...new Set(secrets.filter((s) => s.length >= MIN_SECRET_LENGTH))].sort(
-    (a, b) => b.length - a.length,
-  );
+/**
+ * Replaces known secrets and secret-shaped strings with "[redacted]". Known
+ * secrets of 4+ characters are always redacted (short ones as whole words).
+ */
+export const createRedactor = (secrets: readonly Secret[]) => {
+  const values = [
+    ...new Set(
+      secrets.filter((s): s is string => typeof s === "string" && s.length >= MIN_SECRET_LENGTH),
+    ),
+  ].sort((a, b) => b.length - a.length);
+  const replacements: [RegExp | string, string][] = [
+    ...values.map((s): [RegExp | string, string] => [
+      s.length >= MIN_SUBSTRING_SECRET_LENGTH ? s : wholeWord(s),
+      REDACTED,
+    ]),
+    ...secrets.filter((s): s is [RegExp, string] => typeof s !== "string"),
+    ...PATTERNS,
+  ];
   return (text: string): string => {
     let out = text;
-    for (const s of exact) out = out.split(s).join(REDACTED);
-    for (const [re, replacement] of PATTERNS) out = out.replace(re, replacement);
+    for (const [match, replacement] of replacements) {
+      out =
+        typeof match === "string"
+          ? out.split(match).join(replacement)
+          : out.replace(match, replacement);
+    }
     return out;
   };
 };
@@ -82,7 +128,7 @@ const errorText = (line: Record<string, unknown>): string | null => {
  * scrubbed of secrets; nothing else from the line (no stacks, no request data).
  */
 export const createActivityLog = (
-  options: { capacity?: number; secrets?: readonly string[]; now?: () => Date } = {},
+  options: { capacity?: number; secrets?: readonly Secret[]; now?: () => Date } = {},
 ): ActivityLog => {
   const capacity = options.capacity ?? ACTIVITY_CAPACITY;
   const redact = createRedactor(options.secrets ?? []);

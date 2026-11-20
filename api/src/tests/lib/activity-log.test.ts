@@ -83,11 +83,43 @@ describe("redaction", () => {
     );
   });
 
-  it("leaves short secrets alone (they would blank ordinary words)", () => {
+  it("redacts short secrets as whole words only, and skips ones under 4 characters", () => {
     const dev = createRedactor(
-      secretsFromEnv({ DATABASE_URL: "postgres://jobvr:jobvr@localhost/jobvr" }),
+      secretsFromEnv({ DATABASE_URL: "postgres://app:test@localhost/jobvr" }),
     );
-    expect(dev("jobvr listening")).toBe("jobvr listening");
+    expect(dev("password test rejected")).toBe("password [redacted] rejected");
+    expect(dev("the latest poll")).toBe("the latest poll");
+    expect(createRedactor(["abc"])("abc abc")).toBe("abc abc");
+  });
+
+  it("removes the OpenAI key, Authorization values and bearer tokens", () => {
+    // Assembled at runtime so secret scanners don't flag the fake keys
+    const key = ["sk", "proj", "AbCdEfGhIjKlMnOpQrSt"].join("-");
+    const configured = createRedactor(secretsFromEnv({ OPENAI_API_KEY: "k3y!" }));
+    expect(configured("key k3y! refused")).toBe("key [redacted] refused");
+    const anyKey = createRedactor([]);
+    expect(anyKey(`OpenAI said: Incorrect API key provided: ${key}.`)).toBe(
+      "OpenAI said: Incorrect API key provided: [redacted].",
+    );
+    expect(anyKey("sent Authorization: Bearer abc.def.ghi to the server")).toBe(
+      "sent Authorization: Bearer [redacted] to the server",
+    );
+    expect(anyKey('headers {"authorization":"Basic dXNlcjpwYXNz"}')).toBe(
+      'headers {"authorization":"Basic [redacted]"}',
+    );
+    expect(anyKey("bearer eyJhbGciOiJIUzI1NiJ9 expired")).toBe("bearer [redacted] expired");
+    expect(anyKey("the bearer of bad news")).toBe("the bearer of bad news");
+  });
+
+  it("redacts the ntfy topic whatever its length", () => {
+    const redact = createRedactor(secretsFromEnv({ NTFY_URL: "https://push.example.com/abc" }));
+    expect(redact("POST https://push.example.com/abc/json failed")).toBe(
+      "POST [redacted]/json failed",
+    );
+    expect(redact("POST http://push.example.com/abc?x=1")).toBe(
+      "POST http://push.example.com/[redacted]?x=1",
+    );
+    expect(redact("topic abc unreachable")).toBe("topic [redacted] unreachable");
   });
 
   it("scrubs entries as they are stored", () => {
