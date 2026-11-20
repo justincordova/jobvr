@@ -42,9 +42,10 @@ const INSTRUCTIONS = `You place companies on a tier list for someone looking for
 - S: elite pay and prestige for new grads: the biggest tech companies, top AI labs, top trading firms and the hottest high-paying tech companies (e.g. Google, Meta, Microsoft, Amazon, OpenAI, Anthropic, Jane Street, Citadel, Hudson River Trading, Stripe, Databricks, Ramp).
 - A: strong, well-known tech companies with excellent engineering (e.g. Datadog, Plaid, Brex, MongoDB, Twilio, Atlassian, Pinterest, Shopify, CrowdStrike, Duolingo).
 - Mid: solid established product, enterprise and fintech software companies (e.g. Dropbox, Etsy, Zillow, Elastic, SoFi, PayPal, Autodesk, Epic Games, Affirm).
-- Startup: smaller or younger venture-backed tech companies.
-- Corporate: traditional enterprises where software isn't the core business: banks, insurers, retailers, manufacturers, defense contractors, consultancies and staffing firms (e.g. Chubb, American Express, BlackRock).
-If you don't recognize the company, judge from its name, careers page and job titles; when still unsure, answer Startup.
+- Startup: smaller or younger venture-backed product companies. A well-known, well-funded one goes by its standing instead (e.g. Vercel is A; Render, Tailscale and PlanetScale are Mid).
+- Corporate: traditional enterprises where software isn't the core business: banks, insurers, asset managers, retailers, manufacturers, government and defense contractors, consultancies, IT services firms, staffing and recruiting agencies and job boards, whatever their size (e.g. Chubb, American Express, BlackRock, Booz Allen Hamilton).
+A company acquired by another goes by its parent's tier.
+If you don't recognize the company, judge from its name, careers page and job titles: one that sells services, consulting, staffing or government contracting (often "Solutions", "Consulting" or "Group" names, roles for clients, or OPT-only hiring) is Corporate; otherwise answer Startup.
 reason: one plain sentence of at most 15 words, e.g. "Well-funded AI coding startup" or "Large insurer; software supports the business".
 sameAs: when the company is one already in knownCompanies under another name, that exact name from the list; otherwise null. Only when you're sure: a parent, a subsidiary or a different company with a similar name is not the same.`;
 
