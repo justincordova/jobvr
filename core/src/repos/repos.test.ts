@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../db/client";
-import { sourceState, suggestions } from "../db/schema";
+import { jobs, sourceState, suggestions } from "../db/schema";
 import { ConflictError, InvalidError } from "../errors";
 import { createTestDatabase } from "../testing/db";
 import {
@@ -102,5 +102,40 @@ describe("companies repo", () => {
     await deleteCompany(db, c.id);
     const [s] = await db.select().from(suggestions).where(eq(suggestions.id, "zephyrtech"));
     expect(s?.state).toBe("dismissed");
+  });
+
+  it("links list jobs already stored under the new company's name", async () => {
+    const { db } = database;
+    const at = new Date("2026-11-20T11:32:42Z");
+    const job = (id: string, companyName: string) => ({
+      id,
+      companyId: null,
+      companyName,
+      title: "Software Engineer New Grad",
+      url: `https://example.test/${id}`,
+      primarySource: "simplify",
+      firstSeenAt: at,
+      effectiveAt: at,
+    });
+    await db
+      .insert(jobs)
+      .values([
+        job("sj:hw1", "Honeywell Aerospace"),
+        job("sj:hw2", "honeywell aerospace"),
+        job("sj:o", "Other Co"),
+      ]);
+    const c = await createCompany(db, {
+      name: "Honeywell Aerospace",
+      tier: "Corporate",
+      ats: "other",
+      track: false,
+      status: "manual_only",
+    });
+    const rows = await db.select({ id: jobs.id, companyId: jobs.companyId }).from(jobs);
+    expect(Object.fromEntries(rows.map((r) => [r.id, r.companyId]))).toMatchObject({
+      "sj:hw1": c.id,
+      "sj:hw2": c.id,
+      "sj:o": null,
+    });
   });
 });

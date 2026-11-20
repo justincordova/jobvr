@@ -1,4 +1,4 @@
-import { asc, eq, inArray, or, sql } from "drizzle-orm";
+import { asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { CompanyStatus, Tier, TierSource } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { type CompanyRow, companies, jobs, type SourceStateRow, sourceState } from "../db/schema";
@@ -127,6 +127,26 @@ export const findCompanyByName = async (db: DbOrTx, name: string): Promise<Compa
   return rows.find((c) => c.normalizedName === normalized) ?? rows[0] ?? null;
 };
 
+/**
+ * Jobs already stored under this company's name but linked to no company (a
+ * list job seen before the company was added). The poll links them only when it
+ * re-reads their list, and an unchanged list isn't re-read.
+ */
+const linkUnlinkedJobs = async (db: DbOrTx, company: CompanyRow): Promise<void> => {
+  const unlinked = await db
+    .select({ id: jobs.id, companyName: jobs.companyName })
+    .from(jobs)
+    .where(isNull(jobs.companyId));
+  const ids = unlinked
+    .filter((j) => normalizeCompanyName(j.companyName) === company.normalizedName)
+    .map((j) => j.id);
+  if (ids.length === 0) return;
+  await db
+    .update(jobs)
+    .set({ companyId: company.id, companyName: company.name })
+    .where(inArray(jobs.id, ids));
+};
+
 export const createCompany = async (db: DbOrTx, input: CompanyInput): Promise<CompanyRow> => {
   const values = {
     name: input.name.trim(),
@@ -149,6 +169,7 @@ export const createCompany = async (db: DbOrTx, input: CompanyInput): Promise<Co
   try {
     const [row] = await db.insert(companies).values(values).returning();
     if (!row) throw new Error("insert returned no row");
+    await linkUnlinkedJobs(db, row);
     return row;
   } catch (err) {
     if (isUniqueViolation(err)) throw conflict();
