@@ -175,7 +175,13 @@ export function TierPicker({
           key={t}
           type="button"
           aria-pressed={on.has(t)}
-          onClick={() => onChange(on.has(t) ? value.filter((x) => x !== t) : [...value, t])}
+          onClick={() => {
+            const next = new Set(on)
+            if (on.has(t)) next.delete(t)
+            else next.add(t)
+            // In tier order, so switching one off and on again isn't an unsaved change
+            onChange(TIER_FILTERS.filter((x) => next.has(x)))
+          }}
           className={cn(
             'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm ring-1 transition-[color,background-color,box-shadow,scale] duration-200 active:scale-95 pointer-coarse:h-11 pointer-coarse:px-4',
             on.has(t)

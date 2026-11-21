@@ -54,7 +54,9 @@ export default defineConfig({
             // response only when the request fails. Writes are never cached.
             urlPattern: ({ url, request }) =>
               request.method === 'GET' &&
-              /^\/api\/(jobs|settings|companies)(\/|$)/.test(url.pathname),
+              /^\/api\/(jobs|settings|companies)(\/|$)/.test(url.pathname) &&
+              // Job details have their own cache, so opening many can't push the feed out
+              !url.pathname.endsWith('/details'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'jobvr-api',
@@ -76,6 +78,17 @@ export default defineConfig({
                   },
                 },
               ],
+            },
+          },
+          {
+            urlPattern: ({ url, request }) =>
+              request.method === 'GET' && /^\/api\/jobs\/[^/]+\/details$/.test(url.pathname),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'jobvr-details',
+              networkTimeoutSeconds: 6,
+              expiration: { maxEntries: 100, maxAgeSeconds: 7 * 24 * 60 * 60 },
+              cacheableResponse: { statuses: [200] },
             },
           },
         ],

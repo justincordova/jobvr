@@ -35,12 +35,13 @@ type CompanyPatch = { tier: Tier } | { autoTier: true }
 /** How jobvr keeps up with a company, in plain words. */
 type Watch = 'direct' | 'lists' | 'trouble' | 'paused'
 
-const watchOf = (c: Company, trackedTiers: ReadonlySet<string>): Watch =>
+/** `trackedTiers` null: settings still loading, so nothing shows as paused yet. */
+const watchOf = (c: Company, trackedTiers: ReadonlySet<string> | null): Watch =>
   c.status === 'needs_review' || (c.health?.consecutiveFailures ?? 0) > 0
     ? 'trouble'
     : c.status === 'manual_only' || c.ats === 'other' || !c.slug || !c.track
       ? 'lists'
-      : trackedTiers.has(c.tier)
+      : !trackedTiers || trackedTiers.has(c.tier)
         ? 'direct'
         : 'paused'
 
@@ -65,7 +66,7 @@ const WATCH: Record<Watch, { label: string; dot: string; hint: (c: Company) => s
   paused: {
     label: 'Paused',
     dot: 'bg-line-strong',
-    hint: (c) => `${c.tier} isn’t in Tiers to track (Settings), so it isn’t checked.`,
+    hint: (c) => `${c.tier} tier isn’t in Tiers to track (Settings), so it isn’t checked.`,
   },
 }
 
@@ -312,13 +313,21 @@ export function CompaniesPage() {
   }, [])
 
   const tiersToTrack = settings.data?.settings.tiersToTrack
-  const tracked = useMemo(() => new Set<string>(tiersToTrack ?? []), [tiersToTrack])
+  const tracked = useMemo(
+    () => (tiersToTrack ? new Set<string>(tiersToTrack) : null),
+    [tiersToTrack],
+  )
   const model = settings.data?.tierModel
 
   const all = companies.data ?? []
   const q = filter.trim().toLowerCase()
-  const rows = all.filter(
-    (c) => !q || [c.name, c.city, c.tier].some((v) => v?.toLowerCase().includes(q)),
+  // "a tier" or "tier a" finds a tier; a lone letter is part of a name
+  const tierQuery = /^(?:tier\s+([sabcd])|([sabcd])\s+tier)$/.exec(q)
+  const tierWanted = (tierQuery?.[1] ?? tierQuery?.[2])?.toUpperCase()
+  const rows = all.filter((c) =>
+    tierWanted
+      ? c.tier === tierWanted && c.tierSource !== 'pending'
+      : !q || [c.name, c.city].some((v) => v?.toLowerCase().includes(q)),
   )
 
   return (
@@ -446,11 +455,23 @@ export function CompaniesPage() {
                               : TIER_BADGE[c.tier],
                           )}
                         >
-                          {c.tier}
-                          {c.tierSource === 'auto' && (
-                            <Sparkles aria-label="rated by AI" className="size-3 opacity-60" />
+                          {/* Unrated: its placeholder letter isn't a grade */}
+                          {c.tierSource === 'pending' ? (
+                            <>
+                              <span aria-hidden>?</span>
+                              <span className="sr-only">Not rated yet</span>
+                            </>
+                          ) : (
+                            <>
+                              {c.tier}
+                              {c.tierSource === 'auto' && (
+                                <>
+                                  <Sparkles aria-hidden className="size-3 opacity-60" />
+                                  <span className="sr-only">, rated by AI</span>
+                                </>
+                              )}
+                            </>
                           )}
-                          {c.tierSource === 'pending' && <span aria-label="not rated yet">?</span>}
                         </span>
                       </td>
                       <td className="hidden px-2 py-2.5 font-mono text-xs tabular-nums sm:table-cell">

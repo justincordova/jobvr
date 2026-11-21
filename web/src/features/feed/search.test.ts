@@ -25,6 +25,10 @@ describe('feed search params', () => {
     expect(parseFeedSearch({ age: '1w' }).age).toBe('1w')
   })
 
+  it('reads the old tier names in links and remembered filters', () => {
+    expect(parseFeedSearch({ tier: 'Mid,Startup,B' }).tier).toEqual(['B', 'C'])
+  })
+
   it('builds a compact API query', () => {
     expect(toJobQuery({ age: '1h', tier: ['B', 'C'] })).toEqual({
       age: '1h',

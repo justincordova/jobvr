@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useBlocker } from '@tanstack/react-router'
 import { ChevronDown } from 'lucide-react'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useId, useState } from 'react'
 import { ErrorState, PageHeader, Skeleton } from '@/components/page'
 import { useToast } from '@/components/toast'
 import { Button } from '@/components/ui/button'
@@ -96,7 +96,8 @@ function SaveBar({
             )
           )}
         </p>
-        <Button variant="ghost" size="sm" onClick={onDiscard}>
+        {/* Mid-save the draft and what's being saved must stay in step */}
+        <Button variant="ghost" size="sm" onClick={onDiscard} disabled={pending}>
           Discard
         </Button>
         <Button
@@ -306,6 +307,8 @@ function SettingsForm({ payload, header }: { payload: SettingsPayload; header: R
             <Field
               label="Tiers to track"
               hint="Their boards are checked every poll, and their roles are pushed."
+              error={problems.tiersToTrack}
+              errorId="tiersToTrack-error"
               stack
             >
               <TierPicker value={draft.tiersToTrack} onChange={(v) => set('tiersToTrack', v)} />
@@ -462,9 +465,10 @@ function SettingsForm({ payload, header }: { payload: SettingsPayload; header: R
                     onCheckedChange={(v) =>
                       set(
                         'disabledSources',
-                        v
-                          ? draft.disabledSources.filter((x) => x !== s.id)
-                          : [...draft.disabledSources, s.id],
+                        // In source order, so off and on again isn't an unsaved change
+                        payload.sources
+                          .map((x) => x.id)
+                          .filter((id) => (id === s.id ? !v : off.has(id))),
                       )
                     }
                   />
@@ -648,11 +652,22 @@ function KeywordField({
   tone?: 'stop'
   error?: string
 }) {
+  const errorId = useId()
   return (
     <div className="px-5 py-3.5">
-      <ChipsInput label={label} value={value} onChange={onChange} tone={tone} />
+      <ChipsInput
+        label={label}
+        value={value}
+        onChange={onChange}
+        tone={tone}
+        describedBy={error ? errorId : undefined}
+      />
       <p className="mt-1.5 text-xs text-dim">{hint}</p>
-      {error && <p className="mt-0.5 animate-fade-in text-xs text-stop">{error}</p>}
+      {error && (
+        <p id={errorId} className="mt-0.5 animate-fade-in text-xs text-stop">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

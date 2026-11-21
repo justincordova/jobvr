@@ -54,9 +54,14 @@ function SearchField({
     setText(value ?? '')
   }
   const timer = useRef<number | undefined>(undefined)
+  // The latest one: a view or filter picked mid-pause must not be undone by the search landing
+  const latest = useRef(onChange)
+  useEffect(() => {
+    latest.current = onChange
+  })
   const commit = (next: string, delay: number) => {
     window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => onChange(next.trim() || undefined), delay)
+    timer.current = window.setTimeout(() => latest.current(next.trim() || undefined), delay)
   }
   // Leaving the page mid-pause must not navigate back to the search
   useEffect(() => () => window.clearTimeout(timer.current), [])

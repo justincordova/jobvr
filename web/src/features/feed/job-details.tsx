@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Bookmark, BookmarkCheck, Check, ExternalLink, EyeOff, Undo2 } from 'lucide-react'
+import { Bookmark, BookmarkCheck, Check, ExternalLink, Eye, EyeOff, Undo2 } from 'lucide-react'
 import { useState } from 'react'
 import { TierBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -164,16 +164,23 @@ export function JobDetailsDialog({
               <Button onClick={() => act('applied')}>
                 <Check /> Applied
               </Button>
+              {/* The same choices as the row */}
               {job.state === 'saved' ? (
                 <Button onClick={() => act('new')}>
                   <BookmarkCheck className="text-signal" /> Unsave
                 </Button>
               ) : (
-                <Button onClick={() => act('saved')}>
-                  <Bookmark /> Save
-                </Button>
+                job.state !== 'hidden' && (
+                  <Button onClick={() => act('saved')}>
+                    <Bookmark /> Save
+                  </Button>
+                )
               )}
-              {job.state !== 'hidden' && (
+              {job.state === 'hidden' ? (
+                <Button variant="ghost" onClick={() => act('new')}>
+                  <Eye /> Unhide
+                </Button>
+              ) : (
                 <Button variant="ghost" onClick={() => act('hidden')}>
                   <EyeOff /> Hide
                 </Button>

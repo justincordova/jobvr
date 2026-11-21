@@ -40,6 +40,8 @@ export function settingsProblems(s: Settings): Partial<Record<Key, string>> {
   if (unnamed) out.locations = `${unnamed.label} needs at least one name to match`
   else if (!s.locations.some((l) => l.enabled)) out.locations = 'Turn on at least one place'
   else if (s.locations.length > MAX_PLACES) out.locations = `Keep it to ${MAX_PLACES} places`
+  // None would empty the feed and stop every board's checks
+  if (s.tiersToTrack.length === 0) out.tiersToTrack = 'Pick at least one tier'
   if (s.roleKeywords.length === 0) out.roleKeywords = 'Add at least one role keyword'
   if (s.levelKeywords.length === 0) out.levelKeywords = 'Add at least one level keyword'
   return out
@@ -47,6 +49,7 @@ export function settingsProblems(s: Settings): Partial<Record<Key, string>> {
 
 /** Names for the save bar, which says what to fix wherever it is on the page. */
 export const PROBLEM_LABELS: Partial<Record<Key, string>> = {
+  tiersToTrack: 'Tiers to track',
   experienceCutoffYears: 'Years of experience',
   minSalaryUsd: 'Minimum salary',
   pushEveryMinutes: 'Push every',

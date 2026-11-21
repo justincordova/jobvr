@@ -9,12 +9,15 @@ export function ChipsInput({
   onChange,
   placeholder = 'Type and press Enter',
   tone = 'neutral',
+  describedBy,
 }: {
   label: string
   value: string[]
   onChange: (next: string[]) => void
   placeholder?: string
   tone?: 'neutral' | 'stop'
+  /** Id of a hint or error for the field to point at. */
+  describedBy?: string
 }) {
   const [text, setText] = useState('')
   // Backspace on an empty field marks the last chip first; a second one removes it
@@ -77,6 +80,7 @@ export function ChipsInput({
         ))}
         <input
           id={id}
+          aria-describedby={describedBy}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}

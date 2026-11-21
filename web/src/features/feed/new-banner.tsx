@@ -26,7 +26,9 @@ function BannerJob({
         <span className="min-w-0 flex-1 truncate">
           <span className="font-medium text-paper">{job.title}</span>
           <span className="text-dim"> · {job.companyName}</span>
-          {job.tier !== 'Unlisted' && <span className={TIER_TEXT[job.tier]}> · {job.tier}</span>}
+          {job.tier !== 'Unlisted' && (
+            <span className={TIER_TEXT[job.tier]}> · {job.tier} tier</span>
+          )}
         </span>
         {hidden && (
           <span

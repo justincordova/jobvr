@@ -98,8 +98,12 @@ const strings = (v: unknown): string[] | undefined => {
 const oneOf = <T extends string>(values: readonly T[], v: unknown): T | undefined =>
   values.includes(v as T) ? (v as T) : undefined
 
+/** Tier names before the letter tiers (Nov 2026), in old links and remembered filters. */
+const LEGACY_TIERS: Record<string, TierFilter> = { Mid: 'B', Startup: 'C', Corporate: 'D' }
+
 export function parseFeedSearch(raw: Record<string, unknown>): FeedSearch {
-  const tiers = strings(raw.tier)?.filter((t): t is TierFilter =>
+  const named = strings(raw.tier)?.map((t) => LEGACY_TIERS[t] ?? t)
+  const tiers = [...new Set(named)].filter((t): t is TierFilter =>
     TIER_FILTERS.includes(t as TierFilter),
   )
   const view = oneOf(VIEWS, raw.view)
@@ -107,7 +111,7 @@ export function parseFeedSearch(raw: Record<string, unknown>): FeedSearch {
   return {
     view,
     age: oneOf(AGES, raw.age),
-    tier: tiers?.length ? tiers : undefined,
+    tier: tiers.length ? tiers : undefined,
     // Only Applied sorts by applied date; elsewhere the Order switch has no such option
     sort: sort === 'applied' && view !== 'applied' ? undefined : sort,
     q: typeof raw.q === 'string' && raw.q.trim() ? raw.q.trim().slice(0, 200) : undefined,
