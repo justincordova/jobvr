@@ -1,9 +1,16 @@
 # jobvr
 
-A personal job radar for new-grad software roles. It polls Greenhouse, Lever,
-Ashby, SmartRecruiters and Workable boards for the companies you track plus three public new-grad lists
-(SimplifyJobs, SpeedyApply, Jobright), filters and de-duplicates the results, shows them in a web feed, and sends
-one bundled phone push per interval through ntfy.
+A personal job radar for new-grad software roles. It polls the job boards of
+the companies on its list (Greenhouse, Lever, Ashby, SmartRecruiters and
+Workable) plus three public new-grad lists (SimplifyJobs, SpeedyApply,
+Jobright), filters and de-duplicates the results, shows them in a web feed,
+and sends one bundled phone push per interval through ntfy. SmartRecruiters
+boards are read for US postings only (up to 2,000 per board), and Workable
+sends no ETag, so its boards are read in full every poll.
+
+The company list looks after itself: companies the lists name are added
+automatically, tiered by an optional AI rater (OpenAI, about $0.0003 a company,
+at most 200 calls a day), and moved to a new board when theirs breaks.
 
 It runs 24/7 in Docker on a home PC and is reachable only over Tailscale.
 
@@ -14,7 +21,8 @@ It runs 24/7 in Docker on a home PC and is reachable only over Tailscale.
 
 ```
 core/     @jobvr/core    settings, Drizzle schema + migrations, repositories,
-                         matching, freshness, dedupe, runPoll / runNotify / runCleanup
+                         matching, freshness, dedupe, runPoll / runNotify / runCleanup,
+                         company upkeep (auto-add, AI tiers, heal)
 poller/   @jobvr/poller  source adapters (src/sources), seed data, scripts:
                          poll, notify, seed, discover
 api/      @jobvr/api     Hono API + typed client, serves the built SPA, runs the scheduler
@@ -89,6 +97,7 @@ cp .env.example .env
 #   NTFY_URL=https://ntfy.sh/<your-random-topic>
 #   PUBLIC_URL=https://jobvr.<your-tailnet>.ts.net
 #   BACKUP_DIR=C:/Users/<you>/OneDrive/jobvr-backups   (optional)
+#   OPENAI_API_KEY=sk-...                       (optional: AI tiers for new companies)
 docker compose up -d --build
 ```
 
@@ -139,9 +148,11 @@ docker compose up -d
 - `curl -s https://jobvr.<your-tailnet>.ts.net/health` gives the same answer
   with `lastPollAt`.
 - In the app, Settings shows the last poll, push and backup; Companies shows
-  boards that need review.
-- Settings → Logs shows the server's recent log lines live (info and above,
-  the last 1000 since it started, secrets removed), from any tailnet device.
+  each company's status dot ("Having trouble" for a broken board, which jobvr
+  tries to heal on its own).
+- The poll status in the header ("polled 3 min ago") opens Logs: the server's
+  recent log lines live (info and above, the last 1000 since it started,
+  secrets removed), from any tailnet device.
 
 ### Roll back an update
 
@@ -192,7 +203,8 @@ to your other devices.
 ### Logs
 
 The app logs one line per event, tagged with the part that wrote it
-(`server`, `http`, `scheduler`, `poll`, `notify`, `cleanup`). On the PC
+(`server`, `http`, `scheduler`, `poll`, `notify`, `companies`, `cleanup`,
+`backup`, `poll-check`). On the PC
 they're JSON; in development (`pnpm dev`) and the scripts they're plain text:
 
 ```
@@ -213,14 +225,18 @@ they're JSON; in development (`pnpm dev`) and the scripts they're plain text:
 - Filter on the PC, for example the failures of the last day:
   `docker compose logs --since 24h app | jq -c 'select(.level == "warn" or .level == "error")'`,
   or one board: `... | jq -c 'select(.module == "poll" and (.msg | contains("Remedy")))'`.
-- Secrets never appear: the ntfy topic URL isn't logged, and the database is
-  shown as `host:port/name` only.
+- Secrets never appear: the ntfy topic URL and OpenAI key aren't logged, and
+  the database is shown as `host:port/name` only. The in-app Logs page also
+  scrubs anything secret-shaped (`sk-` keys, Bearer tokens, credentials in
+  URLs, the ntfy topic).
 
 ### Backups
 
 The `backup` service writes `jobvr-YYYY-MM-DD-HHMM.dump` at 03:00 Eastern and
-keeps the newest 14. If the PC was off at 03:00, it takes one as soon as it
-starts. Each result is recorded in the database: Settings shows the last
+keeps the newest 14. It waits in 5-minute naps against the wall clock (a long
+sleep would stop counting while the PC sleeps or hibernates), so the dump runs
+up to ~5 minutes after 03:00, or soon after the PC wakes if it slept through
+it. If the PC was off at 03:00, it takes one as soon as it starts. Each result is recorded in the database: Settings shows the last
 backup, and a failed backup (or none for 26 hours) sends one push a day until
 it's fixed. Updating `deploy/backup.sh` with `git pull` takes effect from the
 next night without recreating the container.
@@ -246,13 +262,19 @@ docker compose start app
 
 ## Add a company
 
-From the Companies page: Add, then pick the tier, ATS, and the board slug
-exactly as the ATS spells it (Lever is case-sensitive). Not sure of the slug?
-Run `pnpm discover "Company Name"`. Companies on other ATSs (Workday, iCIMS)
-can be stored as "Other (manual only)"; they're never polled.
+Usually nothing to do: companies that show up on the new-grad lists are added
+on their own ("Add companies automatically" in Settings, on by default),
+polled when they have a supported board with jobs, and otherwise kept for
+their list jobs so they get a tier. With `OPENAI_API_KEY` set, the AI rater
+picks each new company's tier; without it they start as Startup.
 
-Companies that show up on the new-grad lists but aren't in your list appear under
-Suggested, where Add creates them in one click.
+To add one yourself, open Companies → Add and paste a careers or job-board
+link (`https://jobs.lever.co/acme`) or type the name. jobvr finds the board on
+any supported ATS (or keeps the company for its list jobs if there's none) and
+rates its tier. The row menu changes the tier (a tier you pick is never
+overwritten), hands it back to the AI, or removes the company (removed
+companies aren't added back). `pnpm discover "Company Name"` still prints
+which slug guesses answer on each ATS.
 
 The first successful poll of a new company (or after its ATS or slug changes)
 is a silent baseline: its current jobs show in the feed but never push.
@@ -261,7 +283,8 @@ is a silent baseline: its current jobs show in the feed but never push.
 
 1. Create `poller/src/sources/<name>.ts` exporting a `SourceAdapter` (see
    `core/src/sources/types.ts`). Map each listing to a `SourceJob`, validate items
-   with `validateItems`, and implement `parseUrl` and `probe` if it's an ATS.
+   with `validateItems`, and implement `parseUrl`, `boardSlug` and `probe` if
+   it's an ATS (plus `fetchDetail` when its list has no description).
 2. Register it in `poller/src/sources/index.ts`.
 3. Add a fixture under `poller/src/sources/fixtures/` and tests next to the adapter.
 

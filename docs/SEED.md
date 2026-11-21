@@ -3,7 +3,18 @@
 "Verified" = a live or recent posting was found on that board. Confirm each via
 the API before seeding; if it fails, mark `needs_review` (don't drop it).
 (old) = from a 1–3 year old posting; the ATS may have changed.
-Every tier starts tracked (S and A included).
+Every tier starts tracked (S and A included): every seeded company with a
+board is polled (the last 8 S/A boards the seed had left off were turned on in
+Nov 2026, and migration 0011 did the same in existing databases). Seeded tiers
+are `tier_source = seed`: the AI rater never re-rates them.
+
+This file is the starter list. Since Nov 2026 the list grows on its own:
+companies the new-grad lists name are added automatically, rated by the AI
+rater (when `OPENAI_API_KEY` is set), and healed when their board breaks (see
+"Company upkeep" in `docs/SPEC.md`). Those companies live only in the
+database, not in `poller/data/companies.json`. The seed has no SmartRecruiters
+or Workable boards yet; companies on them arrive through auto-add, add by link
+or name, or the list-boards step.
 
 ## Greenhouse: verified
 
@@ -60,7 +71,7 @@ Astronomer (NYC, Mid)
 
 ## Research
 
-Run `discover`; if found on Greenhouse/Lever/Ashby, seed with `track = true`
+Run `discover`; if found on a supported ATS, seed with `track = true`
 (status ok); otherwise seed as `ats = other`, `manual_only`, `track = false`.
 `city`/`state` = the region below (NYC → New York, NY; NJ → state NJ; PA → state PA).
 
@@ -76,7 +87,7 @@ Prudential, PNC, Audible, Comcast, Westinghouse, BAE Systems, Ahold Delhaize
 USA, Susquehanna/SIG, Bloomberg, MetLife, ASRC Federal, Leidos, Lockheed
 Martin, JPMorgan Chase, Verizon, ADP, NJ Transit, Boeing, Vanguard
 
-## Reference only (track = false)
+## Reference only
 
 - Tier S: Stripe, Cursor, Jane Street, HRT, Two Sigma, Citadel
 - Tier A: Plaid, Ramp, Brex, Datadog, MongoDB
@@ -88,7 +99,8 @@ tracked.
 ## Seeding rules
 
 - Seed is insert-only (never overwrites an existing company, matched by
-  normalized name).
+  normalized name or alias).
+- Every seeded company gets `tier_source = seed`.
 - Verified/"Find slug" tables: `city` = the Location column verbatim (e.g.
   "Pittsburgh/NYC", "NYC/Remote"); `state` = the states it implies, `/`-joined
   in the same order (NYC → NY, Philadelphia/Pittsburgh → PA; "Remote" adds
@@ -98,7 +110,9 @@ tracked.
   kept with the listed ATS, no slug, `track = false`, `needs_review`.
 - Verified/"(old)" entries: `probe` the slug; responds → status ok; fails →
   `needs_review` (kept, never dropped). The "(old)" marker is dropped from the slug.
-- `track = true` unless the company is `manual_only` / has no slug (then false).
+- `track = true` unless the company is `manual_only` / has no slug, or the
+  entry says `"track": false` (then false; only Two Sigma and Citadel, both
+  `other`).
 - One update rule: a company still stored as `ats = other` + `manual_only`
   whose seed entry now names a supported board is moved to that board
   (tracked, status ok) when its `probe` answers. This is how seed fixes reach
@@ -208,8 +222,9 @@ After both (and matching "Palantir Technologies" to Palantir), the feed went
 from 174 to 262 rows (89 new: 66 Unlisted, 10 Corporate, 5 S, 5 A, 3 Mid; 51
 with a Jobright row, 41 with a SpeedyApply row). Most Unlisted ones are mid-size and large
 companies not on the list yet (Palantir, American Express, Pinterest, IBM,
-BMO, D. E. Shaw, Priceline, Vanguard, Highmark Health); they show under
-Suggested, and tiering them is what makes "Mid" jobs show as Mid. Abnormal
+BMO, D. E. Shaw, Priceline, Vanguard, Highmark Health); they showed under
+Suggested then (auto-add now adds them, and the AI rater tiers them), and
+tiering them is what makes "Mid" jobs show as Mid. Abnormal
 Security is now listed as Abnormal AI (its new name, which the lists use; the
 Greenhouse slug is still `abnormalsecurity`).
 
@@ -223,7 +238,8 @@ already in the feed.
 
 ## Suggested backlog (Nov 2026)
 
-The 42 open suggestions were triaged:
+Before auto-add replaced the Suggested page, the 42 open suggestions were
+triaged by hand:
 
 - Added and tracked (board found): Shield AI (A, Ashby `shield`; the
   suggestion carried an Ashby board id instead), Kalshi (A), Ande, Discernis,
