@@ -152,6 +152,8 @@ const poll = (force = true, logger?: Logger) =>
     force,
     now: () => clock,
     logger,
+    // Boards in the order they were added, so breaker tests know who goes first
+    order: (list) => [...list],
   });
 
 const allJobs = () => database.db.select().from(jobs).orderBy(jobs.id);
@@ -623,6 +625,41 @@ describe("runPoll: health and transactions", () => {
       (await database.db.select().from(sourceState).where(eq(sourceState.source, "greenhouse")))
         .length,
     ).toBe(5);
+  });
+
+  it("skips a board still loading when the poll budget runs out, without a failure", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    // A slow board: answers only once the poll gives up on it
+    env.setOnFetch(
+      (ctx) =>
+        new Promise<void>((_, reject) =>
+          ctx.signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+            once: true,
+          }),
+        ),
+    );
+    const summary = await runPoll({
+      database,
+      registry: env.registry,
+      http: {
+        getJson: async () => ({ status: "not_modified" }),
+        getText: async () => ({ status: "not_modified" }),
+      },
+      force: true,
+      now: () => clock,
+      budgetMs: 50,
+      order: (list) => [...list],
+    });
+    expect(summary.ran && summary.targets.find((t) => t.key.startsWith("company:"))?.status).toBe(
+      "skipped",
+    );
+    // Slow isn't broken: no failure counted, so it can't drift toward needs review
+    const [state] = await database.db
+      .select()
+      .from(sourceState)
+      .where(eq(sourceState.source, "greenhouse"));
+    expect(state?.consecutiveFailures ?? 0).toBe(0);
   });
 
   it("clears an outage once its source has no boards to poll", async () => {

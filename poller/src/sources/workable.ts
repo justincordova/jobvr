@@ -28,8 +28,9 @@ const Place = z.object({
 const RawJob = z.object({
   shortcode: z.string().regex(SHORTCODE),
   title: z.string(),
-  // Day only ("2026-11-10")
+  // Day only ("2026-11-10"); a role published again keeps its created date
   published_on: z.string(),
+  created_at: z.string().nullish(),
   telecommuting: z.boolean().nullish(),
   city: z.string().nullish(),
   state: z.string().nullish(),
@@ -57,9 +58,47 @@ const INTERVALS: Record<string, Salary["interval"]> = {
 };
 
 const boardUrl = (slug: string) =>
-  `https://apply.workable.com/api/v1/widget/accounts/${encodeURIComponent(slug)}`;
+  `https://apply.workable.com/api/v1/widget/accounts/${encodeURIComponent(slug.toLowerCase())}`;
 const detailUrl = (slug: string, code: string) =>
-  `https://apply.workable.com/api/v2/accounts/${encodeURIComponent(slug)}/jobs/${encodeURIComponent(code)}`;
+  `https://apply.workable.com/api/v2/accounts/${encodeURIComponent(slug.toLowerCase())}/jobs/${encodeURIComponent(code)}`;
+
+/**
+ * Workable lists a role once per city (same shortcode, one place each): one
+ * item per role, with every place, so the job shows them all and isn't
+ * rewritten by each copy in turn.
+ */
+const mergeByShortcode = (items: unknown[]): unknown[] => {
+  const byCode = new Map<string, Record<string, unknown>>();
+  const out: unknown[] = [];
+  for (const item of items) {
+    const code =
+      item && typeof item === "object" ? (item as { shortcode?: unknown }).shortcode : undefined;
+    if (typeof code !== "string") {
+      out.push(item);
+      continue;
+    }
+    const key = code.toUpperCase();
+    const first = byCode.get(key);
+    if (!first) {
+      const copy = { ...(item as Record<string, unknown>) };
+      byCode.set(key, copy);
+      out.push(copy);
+      continue;
+    }
+    const more = (item as { locations?: unknown }).locations;
+    if (Array.isArray(first.locations) && Array.isArray(more)) {
+      first.locations = [...first.locations, ...more];
+    }
+  }
+  return out;
+};
+
+/** The earlier of two day dates (a republished role isn't new). */
+const firstDay = (published: string, created: string | null | undefined): Date => {
+  const p = parseDate(published);
+  const c = created ? new Date(created) : null;
+  return c && !Number.isNaN(c.getTime()) && c < p ? c : p;
+};
 
 const placeText = (p: { city?: string | null; region?: string | null; country?: string | null }) =>
   [p.city, p.region, p.country]
@@ -123,32 +162,39 @@ export const workable: SourceAdapter = {
     if (res.status === "not_modified") return res;
     const { jobs: items } = Response.parse(res.data);
     const companyName = ctx.companyName ?? slug;
-    const { jobs, invalidCount, invalidIds } = validateItems("workable", items, RawJob, (j) => {
-      const places = (j.locations ?? []).filter((p) => !p.hidden);
-      // Every place hidden: the top-level city/state/country is one of them, so it stays hidden too
-      const locations = (
-        j.locations?.length ? places : [{ city: j.city, region: j.state, country: j.country }]
-      )
-        .map(placeText)
-        .filter(Boolean);
-      const us =
-        places.length > 0
-          ? places.some((p) => isUs(p.countryCode, p.country))
-          : isUs(null, j.country);
-      if (j.telecommuting && us && !locations.includes(REMOTE_US)) locations.push(REMOTE_US);
-      const code = j.shortcode.toUpperCase();
-      return {
-        source: "workable",
-        sourceJobId: code,
-        companyName,
-        companySlug: slug,
-        title: j.title.trim(),
-        locations,
-        url: `https://apply.workable.com/${encodeURIComponent(slug)}/j/${code}/`,
-        postedAt: parseDate(j.published_on),
-        postedAtPrecision: "day",
-      };
-    });
+    const { jobs, invalidCount, invalidIds } = validateItems(
+      "workable",
+      mergeByShortcode(items),
+      RawJob,
+      (j) => {
+        const places = (j.locations ?? []).filter((p) => !p.hidden);
+        // Every place hidden: the top-level city/state/country is one of them, so it stays hidden too
+        const locations = (
+          j.locations?.length ? places : [{ city: j.city, region: j.state, country: j.country }]
+        )
+          .map(placeText)
+          .filter(Boolean);
+        const us =
+          places.length > 0
+            ? places.some((p) => isUs(p.countryCode, p.country))
+            : isUs(null, j.country);
+        if (j.telecommuting && us && !locations.includes(REMOTE_US)) locations.push(REMOTE_US);
+        const code = j.shortcode.toUpperCase();
+        return {
+          source: "workable",
+          sourceJobId: code,
+          companyName,
+          companySlug: slug,
+          title: j.title.trim(),
+          locations,
+          url: `https://apply.workable.com/${encodeURIComponent(slug)}/j/${code}/`,
+          postedAt: firstDay(j.published_on, j.created_at),
+          postedAtPrecision: "day",
+        };
+      },
+      undefined,
+      "shortcode",
+    );
     return { status: "ok", etag: null, jobs, invalidCount, invalidIds };
   },
 

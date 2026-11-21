@@ -13,9 +13,9 @@ export interface ValidatedJobs {
   invalidIds: string[];
 }
 
-/** The raw item's `id`, when it has a usable one. */
-const rawId = (item: unknown): string | null => {
-  const id = item && typeof item === "object" ? (item as { id?: unknown }).id : undefined;
+/** The raw item's id (`id`, or the source's own key), when it has a usable one. */
+const rawId = (item: unknown, key: string): string | null => {
+  const id = item && typeof item === "object" ? (item as Record<string, unknown>)[key] : undefined;
   return typeof id === "string" || typeof id === "number" ? String(id).toLowerCase() : null;
 };
 
@@ -24,6 +24,8 @@ const rawId = (item: unknown): string | null => {
  * SourceJob. Invalid items are skipped and counted; if more than half of a
  * non-empty response is invalid the response is rejected (likely schema drift).
  * `map` may return null to drop an item deliberately (not counted as invalid).
+ * `idKey` names the raw field holding the posting id (Workable's `shortcode`),
+ * so an invalid item's job isn't closed and the rest of the board's closures run.
  */
 export const validateItems = <R extends z.ZodType>(
   source: string,
@@ -31,13 +33,14 @@ export const validateItems = <R extends z.ZodType>(
   raw: R,
   map: (item: z.output<R>) => SourceJob | null,
   onInvalid?: (index: number, error: unknown) => void,
+  idKey = "id",
 ): ValidatedJobs => {
   const jobs: SourceJob[] = [];
   let invalidCount = 0;
   const invalidIds: string[] = [];
   const invalid = (item: unknown, index: number, error: unknown) => {
     invalidCount++;
-    const id = rawId(item);
+    const id = rawId(item, idKey);
     if (id !== null) invalidIds.push(id);
     onInvalid?.(index, error);
   };

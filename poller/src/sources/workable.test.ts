@@ -124,6 +124,42 @@ describe("workable adapter", () => {
     expect(timeouts).toEqual([undefined, undefined, undefined]);
   });
 
+  it("merges a role listed once per city, dates it by creation, and names invalid items", async () => {
+    const place = (city: string) => ({
+      country: "United States",
+      countryCode: "US",
+      city,
+      region: "MD",
+    });
+    const role = (city: string) => ({
+      title: "CNO Engineer",
+      shortcode: "0D108127D4",
+      published_on: "2026-11-01",
+      created_at: "2026-09-22",
+      city,
+      locations: [place(city)],
+    });
+    const { http } = fakeHttp({
+      [LIST]: ok({
+        jobs: [
+          role("Columbia"),
+          role("Annapolis Junction"),
+          { title: "Broken", shortcode: "AB12CD34EF", published_on: "nope" },
+        ],
+      }),
+    });
+    const res = await workable.fetch({ slug: "InterImage", http });
+    if (res.status !== "ok") throw new Error("expected ok");
+    expect(res.jobs).toHaveLength(1);
+    expect(res.jobs[0]?.locations).toEqual([
+      "Columbia, MD, United States",
+      "Annapolis Junction, MD, United States",
+    ]);
+    expect(res.jobs[0]?.postedAt).toEqual(new Date("2026-09-22T00:00:00Z"));
+    // Its job isn't closed, and the rest of the board's closures still run
+    expect(res.invalidIds).toEqual(["ab12cd34ef"]);
+  });
+
   it("fetches one job's description and pay", async () => {
     const { http } = fakeHttp({
       [DETAIL]: ok({

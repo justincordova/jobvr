@@ -34,6 +34,8 @@ export interface RunPollOptions {
   budgetMs?: number;
   /** Aborting (shutdown) stops fetching; nothing fetched is written and the next poll redoes it. */
   signal?: AbortSignal;
+  /** The order each source's boards are fetched in: shuffled each poll by default (tests fix it). */
+  order?: <T>(list: readonly T[]) => T[];
 }
 
 export type TargetOutcome = { key: string; label: string } & (
@@ -54,10 +56,28 @@ export type TargetOutcome = { key: string; label: string } & (
 const nonZero = (counts: Record<string, number | boolean>) =>
   Object.fromEntries(Object.entries(counts).filter(([, v]) => v !== 0 && v !== false));
 
-/** Expected to pass on its own: network errors, timeouts, 5xx, 429 (not 404s). */
-const transient = (f: Fetched): f is Extract<Fetched, { error: string }> =>
-  "error" in f &&
-  (typeof f.fields.status !== "number" || f.fields.status >= 500 || f.fields.status === 429);
+/**
+ * Expected to pass on its own: network errors, timeouts, 5xx, 429. Not 404s,
+ * and not a board answering with something unreadable (HTML, a changed schema).
+ */
+const transient = (f: Fetched): f is Extract<Fetched, { error: string }> => {
+  if (!("error" in f)) return false;
+  // Not requested after the breaker tripped: counts with the failures that tripped it
+  if (f.notFetched) return true;
+  const status = f.fields.status;
+  if (typeof status === "number") return status >= 500 || status === 429;
+  return /^(Network error|Timed out)/.test(f.error);
+};
+
+/** Fisher-Yates: a different order each poll, so the same boards don't always go first. */
+const shuffled = <T>(list: readonly T[]): T[] => {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j] as T, out[i] as T];
+  }
+  return out;
+};
 
 /**
  * ATS sources that look down this poll: no board answered and at least
@@ -264,6 +284,7 @@ const fetchAll = async (
   budgetMs: number,
   enrich: Enrich,
   stop?: AbortSignal,
+  order: <T>(list: readonly T[]) => T[] = shuffled,
 ): Promise<Map<string, Fetched>> => {
   const out = new Map<string, Fetched>();
   const budget = new AbortController();
@@ -279,7 +300,9 @@ const fetchAll = async (
     bySource.set(t.adapter.id, list);
   }
   const workers: Promise<void>[] = [];
-  for (const queue of bySource.values()) {
+  for (const all of bySource.values()) {
+    // A few broken boards at the front would trip the circuit breaker every poll
+    const queue = order(all);
     const concurrency = Math.max(1, queue[0]?.adapter.concurrency ?? 1);
     // Circuit breaker: the source's first boards all failing transiently means it's down
     let failedInARow = 0;
@@ -322,10 +345,14 @@ const fetchAll = async (
               out.set(t.key, { result: kept, ms: performance.now() - started, details: fetched });
               anyOk = true;
             } catch (err) {
-              const aborted = budget.signal.aborted;
+              // Cut off by the budget or shutdown, like the boards not started: no health change
+              if (budget.signal.aborted) {
+                out.set(t.key, { skipped: true });
+                continue;
+              }
               const failed: Fetched = {
-                error: aborted ? "Poll fetch budget exceeded" : errorMessage(err),
-                fields: aborted ? {} : errorFields(err),
+                error: errorMessage(err),
+                fields: errorFields(err),
                 ms: performance.now() - started,
               };
               out.set(t.key, failed);
@@ -466,6 +493,7 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
         options.budgetMs ?? POLL_BUDGET_MS,
         enrich,
         options.signal,
+        options.order,
       );
       if (options.signal?.aborted) {
         // Half a poll would mark unfetched boards failed; the next start polls again
