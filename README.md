@@ -24,7 +24,7 @@ core/     @jobvr/core    settings, Drizzle schema + migrations, repositories,
                          matching, freshness, dedupe, runPoll / runNotify / runCleanup,
                          company upkeep (auto-add, AI tiers, heal)
 poller/   @jobvr/poller  source adapters (src/sources), seed data, scripts:
-                         poll, notify, seed, discover
+                         poll, notify, seed, discover, match-report
 api/      @jobvr/api     Hono API + typed client, serves the built SPA, runs the scheduler
 web/      @jobvr/web     React SPA (TanStack Router/Query, Tailwind, PWA)
 deploy/                  Tailscale serve config, backup script
@@ -60,7 +60,7 @@ scripts instead:
 | `pnpm notify -- --dry-run`     | List the jobs a push would include, without sending                                                                                                       |
 | `pnpm notify`                  | Send the push now (skips the due check and quiet hours)                                                                                                   |
 | `pnpm seed`                    | Insert-only seed from `poller/data/companies.json` (also moves manual-only companies to a board the seed now names); slugs are confirmed via each ATS API |
-| `pnpm match-report`            | Fetch every board now and show which listings pass the matching rules and why the rest are rejected (writes nothing)                                      |
+| `pnpm match-report`            | Fetch the company boards and SimplifyJobs now and show which listings pass the matching rules and why the rest are rejected (writes nothing)              |
 | `pnpm discover "Company Name"` | Try slug guesses against every supported ATS; prints hits, writes nothing                                                                                 |
 
 Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm fix`
@@ -179,8 +179,8 @@ update (below). Go back to the latest with
 
 ### Limit Postgres to the Mac
 
-Port 5432 is forwarded to the tailnet so the Mac can seed, and Postgres trusts
-the `jobvr` superuser, so by default every device on your tailnet can reach it.
+Port 5432 is forwarded to the tailnet so the Mac can seed. It's guarded only by
+the `POSTGRES_PASSWORD`, so by default every device on your tailnet can try it.
 A Tailscale access policy can allow 443 to all your devices and 5432 only to
 the Mac. Tag the node (create the auth key with `tag:jobvr`, which also turns
 off key expiry). Then merge rules like these into the policy file in the admin
@@ -266,7 +266,8 @@ Usually nothing to do: companies that show up on the new-grad lists are added
 on their own ("Add companies automatically" in Settings, on by default),
 polled when they have a supported board with jobs, and otherwise kept for
 their list jobs so they get a tier. With `OPENAI_API_KEY` set, the AI rater
-picks each new company's tier; without it they start as Startup.
+picks each new company's tier (S to D, by how good it is for a new grad);
+without it they start as C, unrated.
 
 To add one yourself, open Companies → Add and paste a careers or job-board
 link (`https://jobs.lever.co/acme`) or type the name. jobvr finds the board on

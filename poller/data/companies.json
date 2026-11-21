@@ -1656,8 +1656,8 @@
   {
     "name": "ServiceNow",
     "tier": "A",
-    "ats": "other",
-    "slug": null,
+    "ats": "smartrecruiters",
+    "slug": "ServiceNow",
     "notes": "Added from the tier list (Nov 2026)"
   },
   {

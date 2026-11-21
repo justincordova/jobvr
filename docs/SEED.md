@@ -12,9 +12,19 @@ This file is the starter list. Since Nov 2026 the list grows on its own:
 companies the new-grad lists name are added automatically, rated by the AI
 rater (when `OPENAI_API_KEY` is set), and healed when their board breaks (see
 "Company upkeep" in `docs/SPEC.md`). Those companies live only in the
-database, not in `poller/data/companies.json`. The seed has no SmartRecruiters
-or Workable boards yet; companies on them arrive through auto-add, add by link
-or name, or the list-boards step.
+database, not in `poller/data/companies.json`. The seed's only SmartRecruiters
+board is ServiceNow and it has no Workable ones; other companies on them arrive
+through auto-add, add by link or name, or the list-boards step.
+
+**Tier names (Nov 21, 2026):** tiers are now letters S, A, B, C, D, ranked by how
+good a company is for a new-grad SWE: first-year pay first, then engineering and
+prestige, then size and stability (see `INSTRUCTIONS` in `core/src/tiering.ts`).
+The log below keeps the names used at the time; migration `0014_letter_tiers`
+renamed them Mid → B, Startup → C, Corporate → D, and every company was then
+re-rated by hand on the new scale (e.g. Render, Dropbox, Bloomberg → A; IBM,
+SoFi → B; banks, insurers and defense primes → C; staffing firms, IT
+outsourcers and small contractors → D). `poller/data/companies.json` uses the
+letters. ServiceNow moved to SmartRecruiters (`ServiceNow`).
 
 ## Greenhouse: verified
 

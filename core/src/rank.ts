@@ -9,7 +9,7 @@ import { DAY_MS, type TierFilter } from "./constants";
  * | Freshness  | under 1 day 30, 3 days 24, 7 days 18, 14 days 12, 30 days 6, older 0    |
  * | Level      | title says entry level 20; SimplifyJobs-listed (new-grad list) 12       |
  * | Experience | asks for 2 years -6 (3+ is hidden by the experience rule)               |
- * | Tier       | S 20, A 15, Mid 8, Startup 8, Corporate 5, Unlisted 0                   |
+ * | Tier       | S 20, A 15, B 10, C 6, D 3, Unlisted 0                                  |
  * | Place      | in a named place (NYC/NJ/PA, not only Remote-US) 4                      |
  *
  * Ties go to the newer job. Freshness and level weigh most, so a fresh

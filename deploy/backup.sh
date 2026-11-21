@@ -41,6 +41,9 @@ if [ "${1:-}" = "--once" ]; then
   exit
 fi
 
+# A dump cut off by a restart leaves its .tmp behind; KEEP pruning never matches those
+rm -f /backups/jobvr-*.dump.tmp
+
 # PC off or asleep at 03:00: make up for it now rather than waiting another day
 if [ -z "$(find /backups -maxdepth 1 -name 'jobvr-*.dump' -mmin -1500 2>/dev/null | head -1)" ]; then
   echo "no backup in the last 25 h; taking one now"
