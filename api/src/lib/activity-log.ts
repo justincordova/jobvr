@@ -76,7 +76,13 @@ export const secretsFromEnv = (env: {
   }
   if (env.DATABASE_URL && URL.canParse(env.DATABASE_URL)) {
     const { password } = new URL(env.DATABASE_URL);
-    if (password) out.push(password, decodeURIComponent(password));
+    if (password) {
+      out.push(password);
+      // "ab%zz" passes URL parsing but isn't valid percent-encoding
+      try {
+        out.push(decodeURIComponent(password));
+      } catch {}
+    }
   }
   return out;
 };

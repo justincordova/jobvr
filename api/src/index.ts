@@ -60,7 +60,7 @@ log.info(
   { model: tierRater?.model },
   tierRater
     ? `new companies are rated by ${tierRater.model}`
-    : "OPENAI_API_KEY unset: new companies start as Startup, unrated",
+    : "OPENAI_API_KEY unset: new companies start as C tier, unrated",
 );
 
 const app = createApp(

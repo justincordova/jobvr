@@ -45,7 +45,7 @@ export const CreateCompanyBody = z
     city: text(200),
     state: text(100),
     tier: z.enum(TIERS),
-    /** Defaults to true when the company can be polled and its tier isn't S/A. */
+    /** Defaults to true when the company can be polled (a supported ATS and a slug). */
     track: z.boolean().optional(),
     /** A registered ATS adapter id, or "other". */
     ats: z.string().min(1).openapi({ example: "greenhouse" }),

@@ -88,10 +88,16 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
     c.set("deps", deps);
     await next();
   });
-  // 405 + Allow header when the path exists but the method does not
+  // 405 + Allow header when the path exists but the method does not. Not counting the
+  // web app's catch-all GETs: they'd make every unknown API path "GET only"
+  const apiRoutes = {
+    get routes() {
+      return app.routes.filter((r) => r.path !== "*");
+    },
+  } as unknown as typeof app;
   app.use(
     methodNotAllowed({
-      app,
+      app: apiRoutes,
       onMethodNotAllowed: (c, methods) => {
         c.header("Allow", methods.join(", "));
         return fail(c, HTTP_STATUS.METHOD_NOT_ALLOWED, `${c.req.method} is not supported here`);

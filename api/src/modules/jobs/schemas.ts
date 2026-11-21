@@ -55,7 +55,7 @@ export const JobListQuery = z.object({
   age: z.enum(JOB_AGES).optional(),
   location: csv(z.string()).openapi({ example: "NYC,Remote-US" }),
   company: csv(z.string()).openapi({ example: "unlisted" }),
-  tier: csv(z.enum(TIER_FILTERS)).openapi({ example: "Startup,Mid" }),
+  tier: csv(z.enum(TIER_FILTERS)).openapi({ example: "A,B" }),
   source: csv(z.string()).openapi({ example: "greenhouse,simplify" }),
   /** `entry`: only jobs flagged entry level. */
   level: z.enum(["entry"]).optional(),

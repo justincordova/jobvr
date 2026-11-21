@@ -10,7 +10,8 @@ import { z } from "zod";
 export const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
-  HOST: z.string().min(1).default("0.0.0.0"),
+  // Local only by default (there's no login); Docker sets 0.0.0.0 for the Tailscale sidecar
+  HOST: z.string().min(1).default("127.0.0.1"),
   APP_NAME: z.string().min(1).default("jobvr"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   ALLOWED_ORIGINS: z
@@ -58,7 +59,7 @@ export const EnvSchema = z.object({
         })
         .optional(),
     ),
-  /** Optional: rates new companies' tiers with OpenAI (secret). Unset: they start as Startup. */
+  /** Optional: rates new companies' tiers with OpenAI (secret). Unset: they start as C tier. */
   OPENAI_API_KEY: z
     .string()
     .optional()
