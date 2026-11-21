@@ -270,6 +270,21 @@ export const updateCompany = async (
         .returning();
       if (!row) throw new NotFoundError("Company not found");
 
+      // The old board's jobs are in no poll's closure scan anymore: close them now
+      // (a job some list still has stays open)
+      const boardGone = next.ats !== current.ats || (current.track && !next.track);
+      if (boardGone && current.ats !== OTHER_ATS) {
+        await tx.execute(sql`
+          UPDATE job_sources s SET removed_at = now()
+          FROM jobs j
+          WHERE s.job_id = j.id AND j.company_id = ${id}
+            AND s.source = ${current.ats} AND s.removed_at IS NULL`);
+        await tx.execute(sql`
+          UPDATE jobs j SET closed_at = now()
+          WHERE j.company_id = ${id} AND j.closed_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM job_sources s WHERE s.job_id = j.id AND s.removed_at IS NULL)`);
+      }
+
       const key = companyStateKey(id);
       if (next.ats !== current.ats || next.slug !== current.slug) {
         await tx.delete(sourceState).where(eq(sourceState.key, key));
@@ -328,7 +343,8 @@ export const mergeCompanyInto = (db: DbOrTx, fromId: string, intoId: string): Pr
         ...(fromBoard && {
           ats: from.ats,
           slug: from.slug,
-          track: true,
+          // A board given up on (manual_only) moves over untracked, like it was
+          track: from.status !== "manual_only",
           status: from.status,
           needsReviewSince: from.needsReviewSince,
           careersUrl: into.careersUrl ?? from.careersUrl,

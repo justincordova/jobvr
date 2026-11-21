@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { SUGGESTION_STATES, TIERS, UNRATED_TIER } from "@jobvr/core";
+import { SUGGESTION_STATES, TIERS } from "@jobvr/core";
 import { envelope } from "@/lib/routes";
 
 export const SuggestionSchema = z
@@ -18,7 +18,8 @@ export const SuggestionSchema = z
 export const SuggestionListResponse = envelope(z.array(SuggestionSchema));
 
 export const AddSuggestionBody = z
-  .object({ tier: z.enum(TIERS).default(UNRATED_TIER) })
+  // Without one, the company starts unrated (C) and the AI rates it when configured
+  .object({ tier: z.enum(TIERS).optional() })
   .openapi("AddSuggestionBody");
 
 export const SuggestionParams = z.object({

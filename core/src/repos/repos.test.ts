@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../db/client";
-import { companies, jobs, sourceState, suggestions } from "../db/schema";
+import { companies, jobSources, jobs, sourceState, suggestions } from "../db/schema";
 import { ConflictError, InvalidError, NotFoundError } from "../errors";
 import { createTestDatabase } from "../testing/db";
 import {
@@ -146,6 +146,48 @@ describe("companies repo", () => {
       unrelated: "open",
     });
     await expect(deleteCompany(db, c.id)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("closes the old board's jobs when a company moves to another ATS", async () => {
+    const { db } = database;
+    const at = new Date("2026-11-20T12:00:00Z");
+    const c = await createCompany(db, { ...base, name: "Movers", slug: "movers" });
+    const job = (id: string) => ({
+      id,
+      companyId: c.id,
+      companyName: "Movers",
+      title: "Software Engineer",
+      url: `https://jobs.lever.co/movers/${id}`,
+      primarySource: "lever",
+      firstSeenAt: at,
+      effectiveAt: at,
+    });
+    const row = (jobId: string, source: string) => ({
+      source,
+      sourceJobId: `${source}-${jobId}`,
+      jobId,
+      url: `https://x.test/${jobId}`,
+      title: "Software Engineer",
+      postedAt: at,
+      postedAtPrecision: "instant",
+    });
+    await db.insert(jobs).values([job("lv:board-only"), job("lv:also-listed")]);
+    await db
+      .insert(jobSources)
+      .values([
+        row("lv:board-only", "lever"),
+        row("lv:also-listed", "lever"),
+        row("lv:also-listed", "simplify"),
+      ]);
+    await updateCompany(db, c.id, { ats: "greenhouse", slug: "movers" });
+    const closed = await db
+      .select({ id: jobs.id, closedAt: jobs.closedAt })
+      .from(jobs)
+      .where(eq(jobs.companyId, c.id));
+    expect(Object.fromEntries(closed.map((j) => [j.id, j.closedAt !== null]))).toEqual({
+      "lv:board-only": true,
+      "lv:also-listed": false,
+    });
   });
 
   it("links list jobs already stored under the new company's name", async () => {

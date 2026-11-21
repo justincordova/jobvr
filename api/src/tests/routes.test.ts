@@ -493,14 +493,15 @@ describe("suggestions routes", () => {
     });
     expect(add.status).toBe(201);
     expect(await add.json()).toMatchObject({
-      data: { name: "Globex", tier: "B", track: true, status: "ok" },
+      data: { name: "Globex", tier: "B", tierSource: "manual", track: true, status: "ok" },
     });
+    // No tier picked: unrated, for the AI to rate
     const noSlug = await client.api.suggestions[":id"].add.$post({
       param: { id: "initech" },
       json: {},
     });
     expect(await noSlug.json()).toMatchObject({
-      data: { track: false, status: "needs_review", tier: "C" },
+      data: { track: false, status: "needs_review", tier: "C", tierSource: "pending" },
     });
     expect(
       (await client.api.suggestions[":id"].add.$post({ param: { id: "globex" }, json: {} })).status,

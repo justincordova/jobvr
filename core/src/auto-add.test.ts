@@ -69,7 +69,7 @@ const run = (failures = new Map<string, number>(), now = NOW) =>
   runAutoAddCompanies({ database, registry, http, now: () => now, failures });
 
 describe("runAutoAddCompanies", () => {
-  it("adds list companies whose board answers with jobs, tracked as Startup", async () => {
+  it("adds list companies whose board answers with jobs, tracked as unrated C", async () => {
     boards.set("initech", 12);
     await suggest("initech", "greenhouse", "initech");
     await database.db

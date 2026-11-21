@@ -13,8 +13,15 @@ export const listHandler: RouteHandler<typeof routes.list, AppBindings> = async 
 
 export const addHandler: RouteHandler<typeof routes.add, AppBindings> = async (c) => {
   const { database, registry } = c.var.deps;
-  const tier = c.req.valid("json")?.tier ?? UNRATED_TIER;
-  const company = await addSuggestion(database.db, registry, c.req.valid("param").id, tier);
+  const tier = c.req.valid("json")?.tier;
+  const company = await addSuggestion(
+    database.db,
+    registry,
+    c.req.valid("param").id,
+    tier ?? UNRATED_TIER,
+    null,
+    tier ? "manual" : "pending",
+  );
   return created(c, toCompanyDto(company), "Company added");
 };
 
