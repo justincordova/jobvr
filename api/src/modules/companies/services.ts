@@ -4,7 +4,9 @@ import {
   type CompanyRow,
   type CompanyStatus,
   type CompanyWithHealth,
+  type Database,
   InvalidError,
+  listCompaniesWithHealth,
   OTHER_ATS_ID,
   type Registry,
   type Tier,
@@ -12,6 +14,13 @@ import {
 } from "@jobvr/core";
 import { iso, isoOrNull } from "@/lib/routes";
 import type { CompanySchema, CreateCompanyBody } from "./schemas";
+
+/** A company as the API returns it, with its board health and role stats. */
+export const withHealth = async (db: Database["db"], id: string) => {
+  const [found] = await listCompaniesWithHealth(db, id);
+  if (!found) throw new Error("company vanished after write");
+  return toCompanyDto(found, found.health, found.stats);
+};
 
 export const toCompanyDto = (
   c: CompanyRow,

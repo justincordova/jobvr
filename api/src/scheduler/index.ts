@@ -61,6 +61,7 @@ export const startScheduler = (options: SchedulerOptions) => {
   let current: Promise<void> = Promise.resolve();
   const stopping = new AbortController();
   const startedAt = new Date();
+  const backupSeen: { since: Date | null } = { since: null };
 
   const step = async (name: string, fn: () => Promise<unknown>) => {
     try {
@@ -139,7 +140,9 @@ export const startScheduler = (options: SchedulerOptions) => {
       if (stopping.signal.aborted) return;
       await step("cleanup", () => runCleanup({ database, logger }));
       if (stopping.signal.aborted) return;
-      await step("backup check", () => runBackupCheck({ database, notifier, logger }));
+      await step("backup check", () =>
+        runBackupCheck({ database, notifier, logger, seen: backupSeen }),
+      );
       if (stopping.signal.aborted) return;
       await step("poll check", () =>
         runPollStallCheck({ database, notifier, bootedAt: startedAt, logger }),

@@ -13,13 +13,7 @@ import type { AppBindings, AppDeps } from "@/lib/create-app";
 import { logger } from "@/lib/logger";
 import { created, ok } from "@/utils/response";
 import type * as routes from "./routes";
-import { assertKnownAts, toCompanyDto, withCreateDefaults } from "./services";
-
-const withHealth = async (db: AppDeps["database"]["db"], id: string) => {
-  const [found] = await listCompaniesWithHealth(db, id);
-  if (!found) throw new Error("company vanished after write");
-  return toCompanyDto(found, found.health, found.stats);
-};
+import { assertKnownAts, toCompanyDto, withCreateDefaults, withHealth } from "./services";
 
 /**
  * Rates one company now (when a rater is configured), so its tier shows at once,
@@ -62,7 +56,8 @@ export const createHandler: RouteHandler<typeof routes.create, AppBindings> = as
   const body = c.req.valid("json");
   assertKnownAts(registry, body.ats);
   const row = await createCompany(database.db, withCreateDefaults(body));
-  return created(c, toCompanyDto(row), "Company created");
+  // Creating links its unlinked list jobs, so the stats aren't zero
+  return created(c, await withHealth(database.db, row.id), "Company created");
 };
 
 export const addHandler: RouteHandler<typeof routes.add, AppBindings> = async (c) => {

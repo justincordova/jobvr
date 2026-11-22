@@ -19,6 +19,8 @@ const SHUTDOWN_TIMEOUT_MS = 8_000;
 // In development, tsx restarts the server before the old one has released the port
 const DEV_PORT_RETRY_MS = 250;
 const DEV_PORT_RETRIES = 20;
+const MIGRATE_RETRY_MS = 2_000;
+const MIGRATE_RETRIES = 30;
 
 const log = logger.child({ module: "server" });
 
@@ -46,7 +48,21 @@ if (
 
 const database = createDatabase(env.DATABASE_URL);
 const migrateStarted = performance.now();
-await runMigrations(database.db, env.MIGRATIONS_DIR);
+// After a reboot Docker starts every container at once, without waiting for
+// Postgres to be healthy: give it up to a minute instead of crashing
+for (let attempt = 1; ; attempt++) {
+  try {
+    await runMigrations(database.db, env.MIGRATIONS_DIR);
+    break;
+  } catch (err) {
+    const starting = /starting up|ECONNREFUSED|ENOTFOUND|EAI_AGAIN/.test(
+      `${(err as Error).message} ${(err as Error).cause ?? ""}`,
+    );
+    if (!starting || attempt >= MIGRATE_RETRIES) throw err;
+    log.warn({ attempt }, "database not ready yet; retrying");
+    await new Promise((r) => setTimeout(r, MIGRATE_RETRY_MS));
+  }
+}
 log.info(
   {},
   `database ready (${describeDb(env.DATABASE_URL)}, migrations applied in ${formatDuration(performance.now() - migrateStarted)})`,

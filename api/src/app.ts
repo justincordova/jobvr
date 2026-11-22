@@ -127,6 +127,12 @@ export const createApp = (deps: AppDeps, options: AppOptions = {}) => {
       return fail(c, err.status, err.message);
     }
 
+    // Postgres can't store a NUL byte in text (22021) or jsonb (22P05): bad input, not our fault
+    const pgCode = (err as { cause?: { code?: string } }).cause?.code;
+    if (pgCode === "22021" || pgCode === "22P05") {
+      return fail(c, HTTP_STATUS.BAD_REQUEST, "Text contains invalid characters");
+    }
+
     log.error({ err }, `${c.req.method} ${c.req.path}: unhandled error`);
     const message = env.NODE_ENV === "production" ? "Something went wrong on our end" : err.message;
     return fail(c, HTTP_STATUS.INTERNAL_SERVER_ERROR, message);
