@@ -60,3 +60,20 @@ same measure, so there is no separate "Startup" or "Corporate" tier.
   source rows are marked removed and jobs with no live source left are closed,
   since no poll scans the old board anymore.
 - A merge that moves over a board given up on (`manual_only`) keeps it untracked.
+
+## Second QA round (Nov 22, 2026)
+
+- Matching: "leader", "expert", "experienced", "advisory software/engineer",
+  "consulting/senior member of technical staff", "mid" as a level, E4+ and
+  VII/VIII always reject, whatever the editable exclude list says. "Associate"
+  alone no longer waives the experience cutoff.
+- Closures: a listing that now fails the title or place rule (retitled Senior)
+  stops counting as live, so its job closes; age alone doesn't. A board's rows
+  decide a job's closure only while a poll checks that board
+  (`ProcessContext.boards`); otherwise its lists do.
+- Renaming a company keeps the old name as an alias.
+- Backup alerts wait until a problem has lasted 10 minutes (`BACKUP_GRACE_MS`).
+- Startup retries migrations for up to a minute while Postgres is starting.
+- SpeedyApply keeps route-style URL hashes (Oracle's job ids) and drops rows
+  whose link id repeats; Greenhouse jobs with no `first_published` use
+  `updated_at`.
