@@ -73,7 +73,8 @@ export const withoutTracking = (raw: string): string => {
   for (const key of [...url.searchParams.keys()]) {
     if (/^utm_/i.test(key) || key === "ref" || key === "source") url.searchParams.delete(key);
   }
-  url.hash = "";
+  // A page anchor (#apply) goes; a route (Oracle's #en/sites/jobsearch/job/350824) is the job
+  if (!url.hash.includes("/")) url.hash = "";
   return url.toString();
 };
 

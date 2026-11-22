@@ -13,7 +13,7 @@ companies the new-grad lists name are added automatically, rated by the AI
 rater (when `OPENAI_API_KEY` is set), and healed when their board breaks (see
 "Company upkeep" in `docs/SPEC.md`). Those companies live only in the
 database, not in `poller/data/companies.json`. The seed's only SmartRecruiters
-board is ServiceNow and it has no Workable ones; other companies on them arrive
+board is ServiceNow and its only Workable one Hugging Face (`huggingface`); other companies on them arrive
 through auto-add, add by link or name, or the list-boards step.
 
 **Tier names (Nov 21, 2026):** tiers are now letters S, A, B, C, D, ranked by how

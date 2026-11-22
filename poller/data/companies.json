@@ -206,9 +206,9 @@
     "name": "Norm Ai",
     "city": "NYC",
     "state": "NY",
-    "tier": "C",
+    "tier": "B",
     "ats": "ashby",
-    "slug": "norm-ai"
+    "slug": "norm"
   },
   {
     "name": "Parabola",
@@ -1726,8 +1726,8 @@
   {
     "name": "Hugging Face",
     "tier": "A",
-    "ats": "other",
-    "slug": null,
+    "ats": "workable",
+    "slug": "huggingface",
     "notes": "Added from the tier list (Nov 2026)"
   },
   {

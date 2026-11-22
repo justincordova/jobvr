@@ -67,6 +67,20 @@ describe("greenhouse adapter", () => {
     expect(calls[0]?.etag).toBeUndefined();
   });
 
+  it("dates a job with no publish date by its last update", async () => {
+    const job = {
+      id: 1229082,
+      title: "Software Engineer - Low Level (C++)",
+      absolute_url: "https://boards.greenhouse.io/wehrtyou/jobs/1229082",
+      first_published: null,
+      updated_at: "2026-11-06T11:28:49-05:00",
+    };
+    const { http } = fakeHttp({ [GH]: ok({ jobs: [job] }) });
+    const res = await greenhouse.fetch({ slug: "airtable", http });
+    if (res.status !== "ok") throw new Error("expected ok");
+    expect(res.jobs[0]?.postedAt).toEqual(new Date("2026-11-06T16:28:49Z"));
+  });
+
   it("passes the etag and returns not_modified on 304", async () => {
     const { http, calls } = fakeHttp({ [GH]: { status: "not_modified" } });
     const res = await greenhouse.fetch({ slug: "airtable", etag: '"v1"', http });

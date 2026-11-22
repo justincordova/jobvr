@@ -3,6 +3,7 @@ import { canonicalId, parseAtsUrl } from "@jobvr/core";
 import { fakeHttp } from "@jobvr/core/testing";
 import { describe, expect, it } from "vitest";
 import { adapters } from "./index";
+import { withoutTracking } from "./markdown";
 import { REMOTE_US } from "./shared";
 import { parseLocation, parseSalary, SPEEDYAPPLY_URL, speedyapply } from "./speedyapply";
 
@@ -61,6 +62,15 @@ describe("speedyapply adapter", () => {
     const twitch = res.jobs[0];
     const parsed = twitch && parseAtsUrl(adapters, twitch.url);
     expect(parsed && canonicalId(parsed.adapter, parsed.sourceJobId)).toBe("gh:8943553002");
+  });
+
+  it("keeps a link's route hash (Oracle's job id), dropping only page anchors", () => {
+    expect(withoutTracking("https://careers.oracle.com/jobs/#en/sites/jobsearch/job/350824")).toBe(
+      "https://careers.oracle.com/jobs/#en/sites/jobsearch/job/350824",
+    );
+    expect(withoutTracking("https://acme.com/jobs/1?utm_source=x#apply")).toBe(
+      "https://acme.com/jobs/1",
+    );
   });
 
   it("normalizes its locations", () => {

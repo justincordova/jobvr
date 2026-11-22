@@ -73,10 +73,14 @@ export const speedyapply: SourceAdapter = {
         meta: { active: true, visible: true, category: "Software Engineering" },
       };
     });
+    // Ids come from the link: rows that share one (a generic careers page) would
+    // overwrite each other's job, so only the first is kept
+    const seen = new Set<string>();
+    const unique = jobs.filter((j) => !seen.has(j.sourceJobId) && seen.add(j.sourceJobId));
     return {
       status: "ok",
       etag: res.etag,
-      jobs,
+      jobs: unique,
       invalidCount: invalidCount + malformed,
       invalidIds,
     };

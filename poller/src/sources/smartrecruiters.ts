@@ -13,6 +13,7 @@ const HOSTS = new Set(["jobs.smartrecruiters.com", "careers.smartrecruiters.com"
 const PAGE = 100;
 /** Big employers post thousands; 20 pages (2,000 US roles) is far beyond any board seen so far. */
 const MAX_PAGES = 20;
+const PROBE_RECENT_MS = 365 * 24 * 60 * 60_000;
 /** Posting ids lead the job link's last segment: /Acme/744000145291599-software-engineer. */
 const POSTING_ID = /^(\d{6,})(?:-|$)/;
 
@@ -178,13 +179,20 @@ export const smartrecruiters: SourceAdapter = {
     return boardSlugOn(raw, HOSTS);
   },
 
-  // An unknown company answers like an empty one, so only a board with US roles counts
+  // An unknown company answers like an empty one, so only a board with US roles counts,
+  // and only recent ones: Uber's and Wayfair's hold a single test post from years ago
   probe: async (slug, ctx) => {
-    const { jobCount } = await probeBoard(
-      pageUrl(slug, 0),
-      ctx,
-      (data) => Page.parse(data).totalFound,
-    );
+    const cutoff = Date.now() - PROBE_RECENT_MS;
+    const { jobCount } = await probeBoard(pageUrl(slug, 0), ctx, (data) => {
+      const page = Page.parse(data);
+      const recent = page.content.some((item) => {
+        const posted = RawJob.shape.releasedDate.safeParse(
+          (item as { releasedDate?: unknown })?.releasedDate,
+        );
+        return posted.success && Date.parse(posted.data) >= cutoff;
+      });
+      return recent ? page.totalFound : 0;
+    });
     return { found: jobCount > 0, jobCount };
   },
 };

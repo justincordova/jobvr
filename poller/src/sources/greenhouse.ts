@@ -22,7 +22,9 @@ const RawJob = z.object({
   title: z.string(),
   absolute_url: z.string(),
   location: z.object({ name: z.string().nullish() }).nullish(),
-  first_published: z.string(),
+  // Null on a few live jobs (HRT, Nov 2026); then `updated_at` is all there is
+  first_published: z.string().nullish(),
+  updated_at: z.string().nullish(),
 });
 
 const Response = z.object({ jobs: z.array(z.unknown()) });
@@ -112,18 +114,22 @@ export const greenhouse: SourceAdapter = {
     if (res.status === "not_modified") return res;
     const { jobs: items } = Response.parse(res.data);
     const companyName = ctx.companyName ?? ctx.slug;
-    const { jobs, invalidCount, invalidIds } = validateItems("greenhouse", items, RawJob, (j) => ({
-      source: "greenhouse",
-      sourceJobId: String(j.id),
-      companyName,
-      companySlug: ctx.slug,
-      title: j.title.trim(),
-      locations: j.location?.name ? [j.location.name] : [],
-      url: j.absolute_url,
-      // Never `updated_at`: it changes on every edit
-      postedAt: parseDate(j.first_published),
-      postedAtPrecision: "instant",
-    }));
+    const { jobs, invalidCount, invalidIds } = validateItems("greenhouse", items, RawJob, (j) => {
+      // `updated_at` only without a publish date: it changes on every edit
+      const posted = j.first_published ?? j.updated_at;
+      if (!posted) throw new Error("no publish date");
+      return {
+        source: "greenhouse",
+        sourceJobId: String(j.id),
+        companyName,
+        companySlug: ctx.slug,
+        title: j.title.trim(),
+        locations: j.location?.name ? [j.location.name] : [],
+        url: j.absolute_url,
+        postedAt: parseDate(posted),
+        postedAtPrecision: "instant",
+      };
+    });
     return { status: "ok", etag: res.etag, jobs, invalidCount, invalidIds };
   },
 
