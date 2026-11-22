@@ -20,7 +20,39 @@ type KeywordSettings = Pick<
 // Numbered levels: "Engineer I" / "1" signal entry level; "II", "3", "IV" signal experience
 const ENTRY_LEVEL_TOKENS = new Set(["i", "1"]);
 // Bare 6-9 stay out ("24/7", "Series 7"); codes like "L6" read as "5" (see `levelTokens`)
-const EXPERIENCED_LEVEL_TOKENS = new Set(["ii", "iii", "iv", "v", "vi", "2", "3", "4", "5"]);
+const EXPERIENCED_LEVEL_TOKENS = new Set([
+  "ii",
+  "iii",
+  "iv",
+  "v",
+  "vi",
+  "vii",
+  "viii",
+  "2",
+  "3",
+  "4",
+  "5",
+]);
+/**
+ * Always experienced, whatever the exclude keywords say (they're editable and
+ * stored, so a new default wouldn't reach existing installs). Phrases match the
+ * whole title, before "Member of Technical Staff" is masked.
+ */
+const ALWAYS_EXPERIENCED = [
+  "leader",
+  "expert",
+  "experienced",
+  "advisory software",
+  "advisory engineer",
+  "consulting member of technical staff",
+  "senior member of technical staff",
+];
+/** "Mid" as a level ("Engineer (Mid)", "Mid-Senior"), not "Mid-Market" or "Mid-Atlantic". */
+const MID_NOT_LEVEL = new Set(["market", "size", "sized", "atlantic", "west", "western"]);
+const isMidLevel = (tokens: readonly string[]) =>
+  tokens.some((t, i) => t === "mid" && !MID_NOT_LEVEL.has(tokens[i + 1] ?? ""));
+/** Level keywords too weak to waive the experience cutoff: banks' "Associate" is often 3-5 years in. */
+const WEAK_LEVEL_KEYWORDS = new Set(["associate"]);
 /** Only these outrank a numbered experienced level ("Engineer 2, New Grad"); "Associate" doesn't. */
 const NEW_GRAD_WORDS = ["new grad", "new graduate", "grads", "entry level", "early career"];
 
@@ -76,6 +108,8 @@ const ENTRY_L_CODE = "l4";
 const levelTokens = (title: string) =>
   tokenize(title.replace(/\b[a-z]*\d+\w*(?:\.\d+)+\b/gi, " ")).map((t) => {
     if (t === NEUTRAL_L_CODE || t === ENTRY_L_CODE) return t;
+    // Meta-style E codes: new grads start at E3, so only E4 and up say experienced
+    if (/^e[4-9]$/.test(t)) return "4";
     const level = LEVEL_CODE.exec(t)?.[1];
     return level ? (Number(level) > 5 ? "5" : level) : t;
   });
@@ -149,6 +183,7 @@ export const passesKeywordRule = (
   if (matchesAnyKeyword(excludable, settings.excludeKeywords) || CONTRACT_TAG.test(title)) {
     return false;
   }
+  if (matchesAnyKeyword(tokens, ALWAYS_EXPERIENCED) || isMidLevel(tokens)) return false;
   const entry = isEntryLevelTitle(title, settings);
   if (isExperiencedLevel(title)) return false;
   const role = matchesAnyKeyword(tokens, settings.roleKeywords);
@@ -344,8 +379,9 @@ export interface VisibilityInput {
 
 /**
  * A source row's description doesn't ask for too much experience: off when
- * the cutoff is 0, unknown (null) passes, and a title that says it's entry
- * level ("Software Engineer, New Grad") always passes.
+ * the cutoff is 0, unknown (null) passes, and a title that clearly says it's
+ * entry level ("Software Engineer, New Grad"; "Associate" alone isn't enough)
+ * always passes.
  */
 export const passesExperienceRule = (
   row: { title: string; requiredYears?: number | null },
@@ -354,7 +390,9 @@ export const passesExperienceRule = (
   settings.experienceCutoffYears === 0 ||
   row.requiredYears == null ||
   row.requiredYears < settings.experienceCutoffYears ||
-  isEntryLevelTitle(row.title, settings);
+  isEntryLevelTitle(row.title, {
+    levelKeywords: settings.levelKeywords.filter((k) => !WEAK_LEVEL_KEYWORDS.has(k.toLowerCase())),
+  });
 
 /** Visibility rules V, applied at read time with current settings. */
 export const isVisible = (

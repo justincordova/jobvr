@@ -6,6 +6,7 @@ import {
   isRemoteUs,
   isVisible,
   matchedLocationLabels,
+  passesExperienceRule,
   passesKeywordRule,
   passesPollFilter,
   passesSalaryRule,
@@ -111,6 +112,38 @@ describe("keyword rule", () => {
     ]) {
       expect(ats(t), t).toBe(false);
     }
+  });
+
+  it("always rejects senior titles the editable excludes miss (Nov 2026 QA)", () => {
+    for (const t of [
+      "Consulting Member of Technical Staff",
+      "Software Engineering Team Leader",
+      "Tech Leader, Payments",
+      "Software Engineer (Mid)",
+      "Mid-Senior Backend Developer",
+      "Advisory Software Engineer",
+      "Expert Software Engineer",
+      "Experienced Software Engineer",
+      "Software Engineer, E5",
+      "Software Engineer VII",
+    ]) {
+      expect(ats(t), t).toBe(false);
+    }
+    for (const t of [
+      "Software Engineer, Mid-Market Payments",
+      "Software Engineer, E3 (New Grad)",
+      "Software Engineer - Mid-Atlantic",
+    ]) {
+      expect(ats(t), t).toBe(true);
+    }
+  });
+
+  it("only a clear entry-level title waives the experience cutoff", () => {
+    const years = (title: string) => passesExperienceRule({ title, requiredYears: 5 }, S);
+    expect(years("Software Engineer, New Grad")).toBe(true);
+    expect(years("Junior Software Engineer")).toBe(true);
+    // Banks' "Associate" is often several years in
+    expect(years("Associate, Software Engineer")).toBe(false);
   });
 
   it("a keyword's last word also matches its plural", () => {
