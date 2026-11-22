@@ -79,7 +79,7 @@ const tierHint = (c: Company, model: string | null | undefined) =>
         ? 'From the starter list'
         : model
           ? 'Not rated yet: it will be within a few minutes'
-          : 'Not rated: set OPENAI_API_KEY to rate new companies automatically'
+          : 'Not rated: automatic rating needs an OpenAI key'
 
 function useCompanyMutations() {
   const qc = useQueryClient()
@@ -118,7 +118,9 @@ function useCompanyMutations() {
     onSettled: invalidate,
   })
   const remove = useMutation({
-    mutationFn: (id: string) => unwrap(api.api.companies[':id'].$delete({ param: { id } })),
+    // keepalive: the Undo window can end with the page closing, which cancels a plain fetch
+    mutationFn: (id: string) =>
+      unwrap(api.api.companies[':id'].$delete({ param: { id } }, { init: { keepalive: true } })),
     onError: (err) => toast.error(err.message),
     onSettled: (_d, _e, id) => {
       pendingDeletes.delete(id)
@@ -263,11 +265,20 @@ function RowMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent className="min-w-48">
         <DropdownMenuLabel>Tier</DropdownMenuLabel>
-        {TIERS.map((t) => (
-          <DropdownMenuItem key={t} onSelect={() => t !== c.tier && onTier(t)}>
-            <Check className={cn(t === c.tier ? 'opacity-100' : 'opacity-0')} /> {t}
-          </DropdownMenuItem>
-        ))}
+        {TIERS.map((t) => {
+          // Waiting for the AI, its letter is a placeholder: picking it locks it in
+          const current = c.tierSource !== 'pending' && t === c.tier
+          return (
+            <DropdownMenuItem
+              key={t}
+              role="menuitemradio"
+              aria-checked={current}
+              onSelect={() => !current && onTier(t)}
+            >
+              <Check className={cn(current ? 'opacity-100' : 'opacity-0')} /> {t}
+            </DropdownMenuItem>
+          )
+        })}
         {c.tierSource === 'manual' && (
           <DropdownMenuItem onSelect={onAuto}>
             <Sparkles /> Let jobvr rate it

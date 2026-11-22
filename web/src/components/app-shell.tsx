@@ -51,8 +51,10 @@ function PollStatus({ active }: { active: boolean }) {
   }
   if (!data) return <span className="w-24" />
   const last = data.lastPollAt ? new Date(data.lastPollAt).getTime() : 0
-  // Healthy if a poll landed within roughly two intervals of the last refresh
-  const healthy = dataUpdatedAt - last < data.settings.pollEveryMinutes * 2 * 60_000 + 60_000
+  // Healthy if a poll landed within roughly two intervals of the last refresh;
+  // a new install before its first poll isn't late
+  const healthy =
+    !data.lastPollAt || dataUpdatedAt - last < data.settings.pollEveryMinutes * 2 * 60_000 + 60_000
   const down = data.sourceOutages.map((o) => o.label)
   return (
     <Link
@@ -152,7 +154,7 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center pt-[env(safe-area-inset-top)] justify-between gap-4 border-b border-line/70 bg-ink/80 px-4 backdrop-blur-lg sm:px-6 lg:px-10">
+      <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center pt-[env(safe-area-inset-top)] justify-between gap-4 border-b border-line/70 bg-ink/80 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] backdrop-blur-lg sm:pr-[max(1.5rem,env(safe-area-inset-right))] sm:pl-[max(1.5rem,env(safe-area-inset-left))] lg:px-10">
         <Wordmark />
         <div className="flex items-center gap-1">
           <PollStatus active={pathname.startsWith('/logs')} />
@@ -173,7 +175,7 @@ export function AppShell() {
 
       <main
         key={pathname}
-        className="flex-1 animate-page px-4 pt-6 pb-[calc(2.5rem+env(safe-area-inset-bottom))] in-data-savebar:pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-10"
+        className="flex-1 animate-page pt-6 pr-[max(1rem,env(safe-area-inset-right))] pb-[calc(2.5rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] in-data-savebar:pb-[calc(7rem+env(safe-area-inset-bottom))] sm:pr-[max(1.5rem,env(safe-area-inset-right))] sm:pl-[max(1.5rem,env(safe-area-inset-left))] lg:px-10"
       >
         <Outlet />
       </main>

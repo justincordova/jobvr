@@ -9,7 +9,16 @@ import '@/index.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 30_000, refetchOnWindowFocus: true, retry: 1 },
+    // Offline, still ask: reads get the service worker's saved copy (or fail),
+    // writes fail fast so the rollback and "Can't reach jobvr" toast run, instead
+    // of pausing quietly until the browser says it's back online
+    queries: {
+      staleTime: 30_000,
+      refetchOnWindowFocus: true,
+      retry: 1,
+      networkMode: 'offlineFirst',
+    },
+    mutations: { networkMode: 'always' },
   },
 })
 

@@ -281,7 +281,7 @@ function WeekColumn({
  * in one line. It stays mounted to slide in and out, but only loads while `active`.
  */
 export const AppliedOverview = memo(function AppliedOverview({ active }: { active: boolean }) {
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: queryKeys.jobs(QUERY),
     queryFn: () => unwrap(api.api.jobs.$get({ query: QUERY })),
     enabled: active,
@@ -304,7 +304,8 @@ export const AppliedOverview = memo(function AppliedOverview({ active }: { activ
   )
   // Holds the card's place while it loads, so the reveal opens once, to the right height
   if (!data) {
-    return active ? (
+    // Failed: the list below already says it couldn't load
+    return active && !isError ? (
       <Skeleton className={cn('rounded-xl bg-panel/60', graphOpen ? 'h-80' : 'h-24')} />
     ) : null
   }

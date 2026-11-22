@@ -5,6 +5,16 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+/** Marks a saved copy used in place of the network, so the app can say it's showing saved data. */
+const markOffline = {
+  cachedResponseWillBeUsed: async ({ cachedResponse }: { cachedResponse?: Response | null }) => {
+    if (!cachedResponse) return cachedResponse
+    const headers = new Headers(cachedResponse.headers)
+    headers.set('X-Jobvr-Offline', '1')
+    return new Response(await cachedResponse.blob(), { status: cachedResponse.status, headers })
+  },
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -64,20 +74,7 @@ export default defineConfig({
               networkTimeoutSeconds: 6,
               expiration: { maxEntries: 60, maxAgeSeconds: 7 * 24 * 60 * 60 },
               cacheableResponse: { statuses: [200] },
-              plugins: [
-                {
-                  // Marks a fallback copy so the app can say it's showing saved data
-                  cachedResponseWillBeUsed: async ({ cachedResponse }) => {
-                    if (!cachedResponse) return cachedResponse
-                    const headers = new Headers(cachedResponse.headers)
-                    headers.set('X-Jobvr-Offline', '1')
-                    return new Response(await cachedResponse.blob(), {
-                      status: cachedResponse.status,
-                      headers,
-                    })
-                  },
-                },
-              ],
+              plugins: [markOffline],
             },
           },
           {
@@ -89,6 +86,7 @@ export default defineConfig({
               networkTimeoutSeconds: 6,
               expiration: { maxEntries: 100, maxAgeSeconds: 7 * 24 * 60 * 60 },
               cacheableResponse: { statuses: [200] },
+              plugins: [markOffline],
             },
           },
         ],
