@@ -480,6 +480,16 @@ describe("runPoll: closures and user state", () => {
     expect((await rowsOf("gh:1"))[0]?.removedAt).toBeNull();
   });
 
+  it("closes a job whose posting is retitled senior, instead of keeping the old title", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer")]);
+    await poll();
+    env.boards.set("acme", [ghJob("acme", "1", "Senior Software Engineer")]);
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    expect((await allJobs())[0]?.closedAt).toEqual(clock);
+  });
+
   it("closes a Simplify-only job once its row turns inactive", async () => {
     env.setSimplify([sjJob("s1", "Globex", "Software Engineer", "https://globex.com/jobs/1")]);
     await poll();
@@ -832,6 +842,20 @@ describe("runPoll: health and transactions", () => {
     clock = new Date(T0.getTime() + HOUR);
     await poll();
     expect((await allJobs()).map((j) => [j.id, j.closedAt])).toEqual([["gh:1", clock]]);
+  });
+
+  it("lets the lists keep a job open once no poll checks its board", async () => {
+    const acme = await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    env.setSimplify([
+      sjJob("s1", "Acme", "Software Engineer, New Grad", "https://boards.test/acme/jobs/1"),
+    ]);
+    await poll();
+    // Given up on (heal): its board rows are marked removed, its jobs come from the lists
+    await updateCompany(database.db, acme.id, { status: "manual_only", track: false });
+    clock = new Date(T0.getTime() + HOUR);
+    await poll();
+    expect((await allJobs()).map((j) => j.closedAt)).toEqual([null]);
   });
 
   it("keeps only the invalid listing's own job open when it has an id", async () => {

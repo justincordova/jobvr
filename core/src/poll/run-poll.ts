@@ -524,6 +524,9 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
           `${getAdapter(registry, source)?.label ?? source} looks down: no board answered, ${count} failed (${error}); their health is left alone and the next poll retries`,
         );
       }
+      const boards = new Set(
+        targets.flatMap((t) => (t.kind === "company" ? [`${t.company.id}|${t.adapter.id}`] : [])),
+      );
       const outcomes: TargetOutcome[] = [];
       for (const target of ordered) {
         const label = targetLabel(target);
@@ -575,6 +578,7 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
                 result: f.result,
                 filtersHash: hash,
                 now,
+                boards,
               }),
             );
             window = ws.commit();

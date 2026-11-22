@@ -8,6 +8,7 @@ import {
   companyStateKey,
   createCompany,
   deleteCompany,
+  findCompanyByName,
   listCompaniesWithHealth,
   updateCompany,
 } from "./companies";
@@ -146,6 +147,16 @@ describe("companies repo", () => {
       unrelated: "open",
     });
     await expect(deleteCompany(db, c.id)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("keeps a renamed company's old name as an alias, so the lists still find it", async () => {
+    const { db } = database;
+    const c = await createCompany(db, { ...base, name: "Bask", slug: "bask" });
+    const renamed = await updateCompany(db, c.id, { name: "Bask Health" });
+    expect(renamed.aliases).toEqual(["bask"]);
+    expect((await findCompanyByName(db, "Bask"))?.id).toBe(c.id);
+    // Back again: the current name isn't its own alias
+    expect((await updateCompany(db, c.id, { name: "Bask" })).aliases).toEqual(["bask health"]);
   });
 
   it("closes the old board's jobs when a company moves to another ATS", async () => {

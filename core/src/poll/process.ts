@@ -12,7 +12,13 @@ import {
 } from "../db/schema";
 import { requiredYears } from "../experience";
 import { adjustedPostedAt, initialEffectiveAt, mergedEffectiveAt } from "../freshness";
-import { annualUsd, matchedLocationLabels, passesPollFilter } from "../matching";
+import {
+  annualUsd,
+  matchedLocationLabels,
+  passesKeywordRule,
+  passesLocationRule,
+  passesPollFilter,
+} from "../matching";
 import { normalizeCompanyName, titleJaccard } from "../normalize";
 import type { Settings } from "../settings";
 import { getAdapter, isAts, parseAtsUrl } from "../sources/registry";
@@ -49,6 +55,8 @@ export interface ProcessContext {
   result: FetchResult;
   filtersHash: string;
   now: Date;
+  /** `companyId|source` of every board this poll checks: only those speak for their jobs. */
+  boards: ReadonlySet<string>;
 }
 
 const emptyStats = (): TargetStats => ({
@@ -303,7 +311,12 @@ const carryMark = async (tx: Tx, ws: WorkingSet, fromId: string, toId: string, n
     .update(jobs)
     .set({
       state,
-      appliedAt: state === "applied" ? (appliedAt ? new Date(appliedAt) : now) : null,
+      // Saved or hidden: the target keeps any applied date it had (kept through an undo)
+      ...(state === "applied" && {
+        appliedAt: appliedAt
+          ? new Date(appliedAt)
+          : sql`coalesce(${jobs.appliedAt}, ${now.toISOString()}::timestamptz)`,
+      }),
       updatedAt: now,
     })
     .where(and(eq(jobs.id, toId), inArray(jobs.state, lower)))
@@ -473,8 +486,11 @@ const applyClosures = async (
       if (reviveSet.has(r.sourceJobId)) r.removedAt = null;
     }
     // The company's own board is the truth: lists lag (SpeedyApply still listed an
-    // Abnormal Security role Greenhouse had dropped). Lists decide only without one
-    const board = m.sources.filter((r) => isAts(ctx.registry, r.source));
+    // Abnormal Security role Greenhouse had dropped). Lists decide only without one,
+    // or when no poll checks that board anymore (given up on, moved, switched off)
+    const board = m.sources.filter(
+      (r) => isAts(ctx.registry, r.source) && ctx.boards.has(`${m.job.companyId}|${r.source}`),
+    );
     const anyLive = (board.length > 0 ? board : m.sources).some((r) => !r.removedAt);
     if (!anyLive && !m.job.closedAt) {
       m.job.closedAt = now;
@@ -543,12 +559,24 @@ export const processTarget = async (ctx: ProcessContext): Promise<TargetStats> =
     }
     stats.baseline = baselineActive;
 
+    // Retitled "Senior …" or moved to a place not tracked: no longer this role, so its
+    // row closes rather than keep the old title live. Age alone isn't a reason
+    const offTarget = new Set(
+      prepared
+        .filter(
+          (p) =>
+            !passesLocationRule(p.listing.locations, settings) ||
+            !passesKeywordRule(p.listing.title, p.adapter.kind, settings, p.listing.meta?.category),
+        )
+        .map((p) => p.listing.sourceJobId),
+    );
     const liveKeys = new Set(
       result.jobs
         .filter(
           (l) => target.kind === "company" || (l.meta?.active === true && l.meta?.visible === true),
         )
-        .map((l) => l.sourceJobId),
+        .map((l) => l.sourceJobId)
+        .filter((id) => !offTarget.has(id)),
     );
     // A listing that failed validation keeps its row as it was (it's still listed). One
     // without an id could be any of ours: on a company board nothing closes that poll.

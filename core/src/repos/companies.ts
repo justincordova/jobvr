@@ -257,12 +257,22 @@ export const updateCompany = async (
       const violation = checkCompanyInvariants(next);
       if (violation) throw new InvalidError(violation);
 
+      // Renamed: the lists still use the old name, so it stays an alias (else auto-add
+      // would bring the old name back as a second company)
+      const aliases =
+        normalizedName === current.normalizedName
+          ? current.aliases
+          : [...new Set([...current.aliases, current.normalizedName])].filter(
+              (a) => a !== normalizedName,
+            );
+
       const now = new Date();
       const [row] = await tx
         .update(companies)
         .set({
           ...next,
           normalizedName,
+          aliases,
           needsReviewSince: needsReviewSince(next.status, current, now),
           updatedAt: now,
         })

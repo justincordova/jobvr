@@ -9,6 +9,8 @@ import { inQuietHours } from "./schedule";
 export const BACKUP_STALE_MS = 26 * 60 * 60_000;
 /** At most one backup alert push per day while the problem lasts. */
 const ALERT_EVERY_MS = DAY_MS;
+/** How long a problem must last before it's pushed (see `seen`). */
+export const BACKUP_GRACE_MS = 10 * 60_000;
 
 /**
  * What's wrong with the backups, or null. Nothing is reported until a backup
@@ -33,13 +35,29 @@ export const runBackupCheck = async (options: {
   notifier: Notifier | null;
   now?: () => Date;
   logger?: Logger;
+  /**
+   * Kept across calls (the scheduler's): when a problem was first seen. A problem
+   * is pushed only once it has lasted BACKUP_GRACE_MS, so waking after a night
+   * asleep doesn't alert before the backup service has caught up.
+   */
+  seen?: { since: Date | null };
 }): Promise<{ problem: string | null; alerted: boolean }> => {
   const now = (options.now ?? (() => new Date()))();
   const log = (options.logger ?? silentLogger).child({ module: "backup" });
   const { db } = options.database;
   const state = await getSettingsState(db);
   const problem = backupProblem(state.backup, now);
-  if (!problem) return { problem, alerted: false };
+  const { seen } = options;
+  if (!problem) {
+    if (seen) seen.since = null;
+    return { problem, alerted: false };
+  }
+  if (seen) {
+    seen.since ??= now;
+    if (now.getTime() - seen.since.getTime() < BACKUP_GRACE_MS) {
+      return { problem, alerted: false };
+    }
+  }
   const { alertAt } = state.backup;
   if (alertAt && now.getTime() - alertAt.getTime() < ALERT_EVERY_MS) {
     log.debug({ problem }, `backup problem already reported: ${problem}`);

@@ -66,4 +66,25 @@ describe("runBackupCheck", () => {
     expect((await runBackupCheck({ database, notifier, now: () => later })).alerted).toBe(false);
     expect(sent).toHaveLength(1);
   });
+
+  it("waits for a problem to last 10 minutes, so a just-woken PC can catch up", async () => {
+    const sent: PushMessage[] = [];
+    const notifier: Notifier = { send: async (m) => void sent.push(m) };
+    await database.db
+      .update(settings)
+      .set({ lastBackupAt: ago(30), backupError: null, backupErrorAt: null, backupAlertAt: null })
+      .where(eq(settings.id, 1));
+    const seen: { since: Date | null } = { since: null };
+    const at = (min: number) => () => new Date(NOW.getTime() + min * 60_000);
+    expect((await runBackupCheck({ database, notifier, seen, now: at(0) })).alerted).toBe(false);
+    expect((await runBackupCheck({ database, notifier, seen, now: at(5) })).alerted).toBe(false);
+    // The backup lands: the problem's gone and the wait starts over next time
+    await database.db
+      .update(settings)
+      .set({ lastBackupAt: at(6)() })
+      .where(eq(settings.id, 1));
+    expect((await runBackupCheck({ database, notifier, seen, now: at(10) })).problem).toBeNull();
+    expect(seen.since).toBeNull();
+    expect(sent).toHaveLength(0);
+  });
 });
