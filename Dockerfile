@@ -29,6 +29,8 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 # --- Runtime ---
 FROM node:26-slim AS runtime
 ENV NODE_ENV=production
+# In a container 127.0.0.1 is unreachable from outside it (the app's default is local-only for dev)
+ENV HOST=0.0.0.0
 WORKDIR /app/api
 
 # Same relative layout as the repo, so WEB_DIST_DIR / MIGRATIONS_DIR defaults work.
