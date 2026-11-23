@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { getTableColumns, gte, inArray, sql } from "drizzle-orm";
+import { getTableColumns, gte, inArray, or, sql } from "drizzle-orm";
 import {
   FILTER_VERSION,
   POLL_BUDGET_MS,
@@ -373,7 +373,12 @@ const fetchAll = async (
 const loadWindow = async (database: Database, now: Date, settings: Settings): Promise<JobMap> => {
   const { db } = database;
   const since = new Date(now.getTime() - maxStoreWindowMs(settings));
-  const jobRows = await db.select().from(jobs).where(gte(jobs.effectiveAt, since));
+  // Saved and applied jobs at any age too: a long-open posting you marked still
+  // closes when it comes down, instead of looking open forever
+  const jobRows = await db
+    .select()
+    .from(jobs)
+    .where(or(gte(jobs.effectiveAt, since), inArray(jobs.state, ["saved", "applied"])));
   const map: JobMap = new Map(jobRows.map((j) => [j.id, { job: j, sources: [] }]));
   const ids = [...map.keys()];
   for (let i = 0; i < ids.length; i += 5000) {

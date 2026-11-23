@@ -480,6 +480,17 @@ describe("runPoll: closures and user state", () => {
     expect((await rowsOf("gh:1"))[0]?.removedAt).toBeNull();
   });
 
+  it("still closes a saved job once it's older than the store window", async () => {
+    await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    await poll();
+    await database.db.update(jobs).set({ state: "saved" }).where(eq(jobs.id, "gh:1"));
+    env.boards.set("acme", []);
+    clock = new Date(T0.getTime() + 400 * 24 * HOUR);
+    await poll();
+    expect((await allJobs())[0]?.closedAt).toEqual(clock);
+  });
+
   it("closes a job whose posting is retitled senior, instead of keeping the old title", async () => {
     await addAcme();
     env.boards.set("acme", [ghJob("acme", "1", "Software Engineer")]);
@@ -954,6 +965,50 @@ describe("runPoll: several lists", () => {
     const sources = await database.db.select().from(jobSources).orderBy(jobSources.source);
     expect(sources.map((r) => r.source)).toEqual(["jobright", "simplify", "simplify"]);
   });
+  it("merges a list's copy that links the board posting into a role Jobright found first", async () => {
+    const jr = list("jobright", "jr", () => [
+      sjJob("j1", "Acme", "Software Engineer, New Grad", "https://jobright.test/1", {
+        source: "jobright",
+      }),
+    ]);
+    await pollWith([jr]);
+    env.setSimplify([
+      sjJob("s1", "Acme", "Software Engineer, New Grad", "https://boards.test/acme/jobs/1"),
+    ]);
+    clock = new Date(T0.getTime() + HOUR);
+    await pollWith([jr]);
+    expect((await allJobs()).map((j) => j.id)).toEqual(["jr:j1"]);
+  });
+
+  it("merges the new board's posting into the old board's job after a company moves", async () => {
+    let lever: SourceJob[] = [];
+    const lv: SourceAdapter = {
+      id: "lever",
+      label: "Lever",
+      kind: "ats",
+      idPrefix: "lv",
+      concurrency: 1,
+      async fetch() {
+        return { status: "ok", etag: null, invalidCount: 0, jobs: lever };
+      },
+    };
+    const acme = await addAcme();
+    env.boards.set("acme", [ghJob("acme", "1", "Software Engineer, New Grad")]);
+    await pollWith([lv]);
+    await updateCompany(database.db, acme.id, { ats: "lever", slug: "acme" });
+    lever = [
+      ghJob("acme", "abc", "Software Engineer - New Grad", {
+        source: "lever",
+        url: "https://jobs.lever.test/acme/abc",
+      }),
+    ];
+    clock = new Date(T0.getTime() + HOUR);
+    await pollWith([lv]);
+    const stored = await allJobs();
+    expect(stored.map((j) => [j.id, j.closedAt])).toEqual([["gh:1", null]]);
+    expect((await rowsOf("gh:1")).map((r) => r.source).sort()).toEqual(["greenhouse", "lever"]);
+  });
+
   it("gives a Jobright-found job another list's direct link", async () => {
     const jrJobs: SourceJob[] = [
       sjJob("j1", "Globex", "Software Development Engineer", "https://jobright.test/1", {

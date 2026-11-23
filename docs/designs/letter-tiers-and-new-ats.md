@@ -77,3 +77,9 @@ same measure, so there is no separate "Startup" or "Corporate" tier.
 - SpeedyApply keeps route-style URL hashes (Oracle's job ids) and drops rows
   whose link id repeats; Greenhouse jobs with no `first_published` use
   `updated_at`.
+- The poll's window also holds saved and applied jobs of any age, so they close
+  when their posting comes down.
+- Fuzzy merging: a list's copy that links a board posting can join a list-only
+  job (Jobright found it first); a board posting can join a job whose old board's
+  rows are all gone (the company moved boards). Postings are compared only
+  against the incoming board's own, so reposts on one board stay apart.

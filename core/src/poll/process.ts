@@ -74,6 +74,9 @@ const emptyStats = (): TargetStats => ({
 const hasAtsRow = (m: MemJob, registry: Registry) =>
   m.sources.some((s) => isAts(registry, s.source));
 
+const hasLiveAtsRow = (m: MemJob, registry: Registry) =>
+  m.sources.some((s) => isAts(registry, s.source) && !s.removedAt);
+
 const jobCompany = (job: JobRow) => ({
   companyId: job.companyId,
   companyNorm: normalizeCompanyName(job.companyName),
@@ -129,7 +132,10 @@ const findFuzzy = (p: PreparedListing, ctx: ProcessContext): MemJob | null => {
     .map((a) => `${a.idPrefix}:`);
   const incomingIsAggregatorOnly =
     !incomingIsAts && aggregatorPrefixes.some((x) => p.canonicalId.startsWith(x));
-  if (!incomingIsAts && !incomingIsAggregatorOnly) return null;
+  // A list's copy that links a board posting (canonical id gh:…): it may be a role
+  // another list (Jobright, no direct links) found first
+  const incomingListWithAts = !incomingIsAts && !incomingIsAggregatorOnly && p.atsRef !== null;
+  if (!incomingIsAts && !incomingIsAggregatorOnly && !incomingListWithAts) return null;
   if (p.labels.length === 0) return null;
 
   const incomingPostings = new Set<string>();
@@ -138,8 +144,15 @@ const findFuzzy = (p: PreparedListing, ctx: ProcessContext): MemJob | null => {
   let best: { m: MemJob; score: number } | null = null;
   for (const m of ws.values()) {
     const jobHasAts = hasAtsRow(m, registry);
+    const listOnly = aggregatorPrefixes.some((x) => m.job.id.startsWith(x));
     if (incomingIsAts) {
-      if (jobHasAts || !aggregatorPrefixes.some((x) => m.job.id.startsWith(x))) continue;
+      // A job whose board is still live is that board's own; one whose board rows
+      // are all gone may be the same role after the company moved boards. One on
+      // this very board is a repost (the postings check below keeps those apart)
+      if (hasLiveAtsRow(m, registry)) continue;
+      if (!listOnly && m.sources.some((s) => s.source === p.adapter.id)) continue;
+    } else if (incomingListWithAts) {
+      if (jobHasAts || !listOnly || m.sources.some((s) => s.source === p.listing.source)) continue;
     } else if (!jobHasAts && m.sources.some((s) => s.source === p.listing.source)) {
       // Another list's copy of a role at a company with no readable board (Amazon,
       // Workday) merges; a list's own near-duplicates (one per city) stay apart
@@ -150,8 +163,14 @@ const findFuzzy = (p: PreparedListing, ctx: ProcessContext): MemJob | null => {
     if (score < FUZZY_TITLE_THRESHOLD) continue;
     const jobLabels = matchedLocationLabels(m.job.locations, settings);
     if (!p.labels.some((l) => jobLabels.includes(l))) continue;
-    // Never merge listings whose URLs identify different ATS postings
-    const jobPostings = atsPostingsOf(m, registry);
+    // Never merge listings whose URLs identify different ATS postings. A board
+    // posting is checked against its own board's: after a move, the old board's
+    // (all gone, see above) say nothing about the new one
+    const jobPostings = new Set(
+      [...atsPostingsOf(m, registry)].filter(
+        (x) => !incomingIsAts || x.startsWith(`${p.adapter.id}:`),
+      ),
+    );
     if (incomingPostings.size > 0 && jobPostings.size > 0) {
       const overlap = [...incomingPostings].some((x) => jobPostings.has(x));
       if (!overlap) continue;
