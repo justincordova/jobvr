@@ -19,6 +19,8 @@ describe("requiredYears", () => {
       ["- 2+ years working with robotics software", 2],
       ["You've spent 6+ years in Solutions Architecture, Deployment Strategy", 6],
       ["- 3+ years on the investment or underwriting team at a direct lender", 3],
+      ["- 7+ years as a software engineer, with several of those years focused on security", 7],
+      ["3+ years with Kubernetes in production", 3],
       ["Minimum 1 year of experience in mobile development", 1],
       ["1+ years of relevant, post-college work experience.", 1],
       ["Must also have five (5) years of experience in each of the following", 5],

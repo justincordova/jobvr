@@ -21,10 +21,11 @@ const NUM = String.raw`(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten
  *   Each word matches exactly one way (the lookahead requires a letter) so a run of
  *   long words can't backtrack exponentially.
  * - "2+ years working with", "4+ years of professional", "6+ years in Solutions
- *   Architecture", "3+ years on the investment team" (only with a "+").
+ *   Architecture", "3+ years on the investment team", "7+ years as a software
+ *   engineer", "3+ years with Kubernetes" (only with a "+").
  */
 const MENTION = new RegExp(
-  String.raw`\b${NUM}\s*(?:(\+|plus)\s*)?(?:(?:-|to)\s*\d{1,2}\s*\+?\s*)?(?:or more\s+)?years?'?\s+(?:of\s+)?(?:(?:(?=[\w/&'#+.-]*[a-z])(?:[\w/&'#+-]|\.(?=\w))+,?\s+){0,6}?(?:experience|exp)\b|(?<=\+\s*years?\s+(?:of\s+)?)(?:working|building|writing|developing|shipping|professional|industry|in|on)\b)`,
+  String.raw`\b${NUM}\s*(?:(\+|plus)\s*)?(?:(?:-|to)\s*\d{1,2}\s*\+?\s*)?(?:or more\s+)?years?'?\s+(?:of\s+)?(?:(?:(?=[\w/&'#+.-]*[a-z])(?:[\w/&'#+-]|\.(?=\w))+,?\s+){0,6}?(?:experience|exp)\b|(?<=\+\s*years?\s+(?:of\s+)?)(?:working|building|writing|developing|shipping|professional|industry|in|on|as|with)\b)`,
   "gi",
 );
 
