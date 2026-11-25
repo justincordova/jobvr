@@ -7,6 +7,12 @@ const DAY = 24 * HOUR;
 
 export const SCHEDULER_TICK_MS = 5 * MINUTE;
 export const SCHEDULER_FIRST_TICK_MS = 10_000;
+/**
+ * How often the scheduler checks the wall clock for a sleep: timers pause while
+ * the machine sleeps, so a gap this much past the check means it just woke.
+ */
+export const WAKE_CHECK_MS = 15_000;
+export const WAKE_GAP_MS = 60_000;
 export const DUE_TOLERANCE_MS = 60_000;
 
 export const DAY_MS = DAY;

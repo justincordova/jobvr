@@ -19,6 +19,8 @@ import {
   SCHEDULER_FIRST_TICK_MS,
   SCHEDULER_TICK_MS,
   type TierRater,
+  WAKE_CHECK_MS,
+  WAKE_GAP_MS,
 } from "@jobvr/core";
 
 /**
@@ -165,12 +167,23 @@ export const startScheduler = (options: SchedulerOptions) => {
   };
   const first = setTimeout(() => void tick(), SCHEDULER_FIRST_TICK_MS);
   const interval = setInterval(() => void tick(), SCHEDULER_TICK_MS);
+  // After a sleep or hibernate, tick now instead of waiting out the paused interval
+  let lastCheck = Date.now();
+  const wake = setInterval(() => {
+    const now = Date.now();
+    const gap = now - lastCheck;
+    lastCheck = now;
+    if (gap < WAKE_CHECK_MS + WAKE_GAP_MS) return;
+    log.info({ sleptMs: gap }, `woke after ${formatDuration(gap)}: ticking now`);
+    void tick();
+  }, WAKE_CHECK_MS);
   return {
     tick,
     /** Stops ticking, aborts a running poll, and resolves when the running tick is done. */
     stop: async () => {
       clearTimeout(first);
       clearInterval(interval);
+      clearInterval(wake);
       stopping.abort();
       await current;
     },
