@@ -6,6 +6,7 @@ import { api, queryKeys, unwrap } from '@/lib/api'
 import { ScrollNav } from '@/components/scroll-nav'
 import { cn } from '@/lib/cn'
 import { relative } from '@/lib/format'
+import { pollStatus } from '@/lib/poll-status'
 import { useOnline } from '@/lib/use-online'
 
 function Wordmark() {
@@ -36,7 +37,8 @@ function PollStatus({ active }: { active: boolean }) {
   const { data, dataUpdatedAt } = useQuery({
     queryKey: queryKeys.settings,
     queryFn: () => unwrap(api.api.settings.$get()),
-    refetchInterval: 60_000,
+    // Every few seconds while a poll runs, so "polling" turns into "polled" when it's done
+    refetchInterval: (q) => (q.state.data && pollStatus(q.state.data).polling ? 3_000 : 60_000),
   })
   if (!online) {
     return (
@@ -50,19 +52,24 @@ function PollStatus({ active }: { active: boolean }) {
     )
   }
   if (!data) return <span className="w-24" />
-  const last = data.lastPollAt ? new Date(data.lastPollAt).getTime() : 0
+  const { polling, finishedAt } = pollStatus(data)
+  const last = finishedAt ? new Date(finishedAt).getTime() : 0
   // Healthy if a poll landed within roughly two intervals of the last refresh;
   // a new install before its first poll isn't late
   const healthy =
-    !data.lastPollAt || dataUpdatedAt - last < data.settings.pollEveryMinutes * 2 * 60_000 + 60_000
+    polling ||
+    !finishedAt ||
+    dataUpdatedAt - last < data.settings.pollEveryMinutes * 2 * 60_000 + 60_000
   const down = data.sourceOutages.map((o) => o.label)
   return (
     <Link
       to="/logs"
       title={
-        (data.lastPollAt
-          ? `Last poll ${new Date(data.lastPollAt).toLocaleString()} · open the logs`
-          : 'No poll has run yet') + (down.length ? ` · ${down.join(', ')} looks down` : '')
+        (polling
+          ? 'Polling now · open the logs to follow along'
+          : finishedAt
+            ? `Last poll finished ${new Date(finishedAt).toLocaleString()} · open the logs`
+            : 'No poll has run yet') + (down.length ? ` · ${down.join(', ')} looks down` : '')
       }
       className={cn(
         'flex items-center gap-1.5 rounded-md px-2 py-1 font-mono text-[0.7rem] transition-colors duration-200 hover:bg-raised hover:text-dim pointer-coarse:min-h-11',
@@ -72,10 +79,22 @@ function PollStatus({ active }: { active: boolean }) {
       <span
         className={cn(
           'size-1.5 rounded-full',
-          !healthy ? 'bg-stop' : down.length ? 'bg-signal' : 'bg-go',
+          polling
+            ? 'animate-pulse bg-signal'
+            : !healthy
+              ? 'bg-stop'
+              : down.length
+                ? 'bg-signal'
+                : 'bg-go',
         )}
       />
-      polled {relative(data.lastPollAt)}
+      {polling ? (
+        <span role="status" className="text-dim">
+          polling…
+        </span>
+      ) : (
+        <>polled {relative(finishedAt)}</>
+      )}
       {/* Not by colour alone: a late poll says so */}
       {!healthy && <span className="text-stop">· late</span>}
       {down.length > 0 && (

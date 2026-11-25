@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { relative } from '@/lib/format'
+import { pollStatus } from '@/lib/poll-status'
 import type { Settings, SettingsPayload } from '@/lib/types'
 import { ChipsInput } from './chips-input'
 import { LIMITS, PROBLEM_LABELS, useDraft } from './draft'
@@ -116,8 +117,11 @@ function SaveBar({
 
 /** Poll, push and backup at a glance, and anything that's down. */
 function StatusStrip({ payload }: { payload: SettingsPayload }) {
+  const poll = pollStatus(payload)
   const items: { label: string; tone: 'go' | 'stop' | 'dim'; title?: string }[] = [
-    { label: `Polled ${relative(payload.lastPollAt)}`, tone: payload.lastPollAt ? 'go' : 'dim' },
+    poll.polling
+      ? { label: 'Polling now', tone: 'go' }
+      : { label: `Polled ${relative(poll.finishedAt)}`, tone: poll.finishedAt ? 'go' : 'dim' },
     { label: `Pushed ${relative(payload.lastPushAt)}`, tone: 'dim' },
     payload.backup.problem
       ? { label: 'Backups failing', tone: 'stop', title: payload.backup.problem }

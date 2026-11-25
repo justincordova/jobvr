@@ -422,6 +422,7 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
       let window = await loadWindow(database, startedAt, settings);
 
       const targets = pollTargets(registry, settings, companyRows);
+      log.info({ targets: targets.length }, `poll started · ${targets.length} targets`);
       const hash = filtersHash(settings);
       const etagFor = (t: Target) => {
         const s = states.get(t.key);
