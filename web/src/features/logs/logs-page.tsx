@@ -11,6 +11,7 @@ import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { relative, shortDate } from '@/lib/format'
 import type { LogEntry } from '@/lib/types'
+import { highlight, messageText, milestone, moduleText } from './log-style'
 import { logsAsText } from './logs-text'
 
 const POLL_MS = 4_000
@@ -92,7 +93,13 @@ function clock(iso: string) {
 
 function LogRow({ entry }: { entry: LogEntry }) {
   return (
-    <li className="grid grid-cols-[auto_3.25rem_1fr] items-baseline gap-x-3 px-4 py-1.5 font-mono text-xs hover:bg-raised/50">
+    <li
+      className={cn(
+        'grid grid-cols-[auto_3.25rem_1fr] items-baseline gap-x-3 border-l-2 border-l-transparent py-1.5 pr-4 pl-3.5 font-mono text-xs hover:bg-raised/50',
+        milestone(entry) ??
+          ((entry.level === 'error' || entry.level === 'fatal') && 'bg-stop/[0.05]'),
+      )}
+    >
       <time
         dateTime={entry.time}
         title={new Date(entry.time).toLocaleString()}
@@ -104,9 +111,22 @@ function LogRow({ entry }: { entry: LogEntry }) {
         {entry.level}
       </Badge>
       <div className="min-w-0 break-words">
-        {entry.module && <span className="text-dim">{entry.module} · </span>}
-        <span className={cn(entry.level === 'info' ? 'text-paper' : 'text-signal')}>
-          {entry.msg}
+        {entry.module && (
+          <span className={moduleText(entry.module)}>
+            {entry.module}
+            <span className="text-faint"> · </span>
+          </span>
+        )}
+        <span className={messageText(entry)}>
+          {highlight(entry.msg).map((s, i) =>
+            s.className ? (
+              <span key={i} className={s.className}>
+                {s.text}
+              </span>
+            ) : (
+              s.text
+            ),
+          )}
         </span>
         {entry.error && <p className="mt-0.5 text-stop">{entry.error}</p>}
       </div>
