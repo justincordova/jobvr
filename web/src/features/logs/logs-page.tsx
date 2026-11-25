@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { Pause, Play, ScrollText } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { Check, Copy, Pause, Play, ScrollText } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
+import { toast } from '@/components/toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +11,7 @@ import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { relative, shortDate } from '@/lib/format'
 import type { LogEntry } from '@/lib/types'
+import { logsAsText } from './logs-text'
 
 const POLL_MS = 4_000
 /** Matches the server's buffer: everything it still has fits. */
@@ -26,7 +28,19 @@ const SHOWN: Record<LevelFilter, readonly LogEntry['level'][]> = {
   warn: ['warn', 'error', 'fatal'],
   error: ['error', 'fatal'],
 }
+type RangeFilter = 'all' | 'today' | 'hour'
+const RANGE_FILTERS: { id: RangeFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'today', label: 'Today' },
+  { id: 'hour', label: '1h' },
+]
+const since = (range: RangeFilter, now: number) => {
+  if (range === 'hour') return now - 3_600_000
+  if (range === 'today') return new Date(now).setHours(0, 0, 0, 0)
+  return 0
+}
 const TONE = { info: 'neutral', warn: 'signal', error: 'stop', fatal: 'stop' } as const
+const COPIED_MS = 1_800
 
 interface LogState {
   after: number
@@ -100,24 +114,63 @@ function LogRow({ entry }: { entry: LogEntry }) {
   )
 }
 
+/** Copies the lines on screen (the filters decide what), oldest first. */
+function CopyButton({ entries }: { entries: LogEntry[] }) {
+  const [copied, setCopied] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const count = entries.length
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(logsAsText(entries))
+    } catch {
+      toast.error('Couldn’t copy: the browser blocked the clipboard')
+      return
+    }
+    toast(`Copied ${count} log ${count === 1 ? 'line' : 'lines'}`, { tone: 'success' })
+    setCopied(true)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setCopied(false), COPIED_MS)
+  }
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={() => void copy()}
+      disabled={count === 0}
+      title="Copy the lines shown, oldest first. Narrow them with the filters."
+      className={cn(copied && 'text-go hover:text-go')}
+    >
+      {copied ? <Check /> : <Copy />}
+      {copied ? 'Copied' : 'Copy'}
+      <span className="font-mono text-faint tabular-nums">{count}</span>
+    </Button>
+  )
+}
+
 export function LogsPage() {
   const [live, setLive] = useState(true)
   const [level, setLevel] = useState<LevelFilter>('all')
+  const [range, setRange] = useState<RangeFilter>('all')
   const [search, setSearch] = useState('')
   const logs = useLogs(live)
 
-  const shown = useMemo(() => {
+  // Oldest first, as copied; the list shows it reversed
+  const matching = useMemo(() => {
     const entries = logs.data?.entries ?? []
     const words = search.toLowerCase().split(/\s+/).filter(Boolean)
+    // Measured from the last refresh, which is at most a few seconds old while live
+    const from = since(range, logs.dataUpdatedAt)
     return entries
       .filter((e) => SHOWN[level].includes(e.level))
+      .filter((e) => from === 0 || new Date(e.time).getTime() >= from)
       .filter((e) => {
         if (words.length === 0) return true
         const text = `${e.module ?? ''} ${e.msg} ${e.error ?? ''}`.toLowerCase()
         return words.every((w) => text.includes(w))
       })
-      .reverse()
-  }, [logs.data, level, search])
+  }, [logs.data, logs.dataUpdatedAt, level, range, search])
+  const shown = useMemo(() => [...matching].reverse(), [matching])
 
   const total = logs.data?.entries.length ?? 0
 
@@ -140,22 +193,26 @@ export function LogsPage() {
           </>
         }
         actions={
-          <Button size="sm" variant="ghost" onClick={() => setLive((v) => !v)}>
-            {live ? <Pause /> : <Play />}
-            {live ? 'Pause' : 'Resume'}
-            <span
-              aria-hidden
-              className={cn(
-                'size-1.5 rounded-full',
-                live && !logs.isError ? 'animate-pulse bg-go' : 'bg-faint',
-              )}
-            />
-          </Button>
+          <div className="flex items-center gap-1">
+            <CopyButton entries={matching} />
+            <Button size="sm" variant="ghost" onClick={() => setLive((v) => !v)}>
+              {live ? <Pause /> : <Play />}
+              {live ? 'Pause' : 'Resume'}
+              <span
+                aria-hidden
+                className={cn(
+                  'size-1.5 rounded-full',
+                  live && !logs.isError ? 'animate-pulse bg-go' : 'bg-faint',
+                )}
+              />
+            </Button>
+          </div>
         }
       />
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Segmented label="Level" value={level} options={LEVEL_FILTERS} onChange={setLevel} />
+        <Segmented label="Time" value={range} options={RANGE_FILTERS} onChange={setRange} />
         <Input
           type="search"
           aria-label="Filter log lines"
@@ -194,6 +251,7 @@ export function LogsPage() {
                 size="sm"
                 onClick={() => {
                   setLevel('all')
+                  setRange('all')
                   setSearch('')
                 }}
               >
