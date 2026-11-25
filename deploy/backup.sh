@@ -44,17 +44,21 @@ fi
 # A dump cut off by a restart leaves its .tmp behind; KEEP pruning never matches those
 rm -f /backups/jobvr-*.dump.tmp
 
-# PC off or asleep at 03:00: make up for it now rather than waiting another day
-if [ -z "$(find /backups -maxdepth 1 -name 'jobvr-*.dump' -mmin -1500 2>/dev/null | head -1)" ]; then
-  echo "no backup in the last 25 h; taking one now"
-  backup || true
-fi
+recent() { [ -n "$(find /backups -maxdepth 1 -name 'jobvr-*.dump' -mmin -1500 2>/dev/null | head -1)" ]; }
 
 next=$(date -d '03:00' +%s)
 if [ "$next" -le "$(date +%s)" ]; then next=$(date -d 'tomorrow 03:00' +%s); fi
 # Short naps against the wall clock: a single long sleep stops counting while the
-# PC sleeps or hibernates, so 03:00 would slip by the time it was asleep
-while [ "$(date +%s)" -lt "$next" ]; do sleep 300; done
+# PC sleeps or hibernates, so 03:00 would slip by the time it was asleep. PC off
+# or asleep at 03:00, or a catch-up that failed (Postgres still starting after
+# Docker restarts): each nap makes up for it rather than waiting another day.
+while [ "$(date +%s)" -lt "$next" ]; do
+  if ! recent; then
+    echo "no backup in the last 25 h; taking one now"
+    backup || true
+  fi
+  sleep 300
+done
 # Fresh copies of the script (deploy/ is mounted as a folder), so a `git pull`
 # reaches the backup service without recreating it. A failed night is
 # logged, recorded and retried the next night, not fatal.
