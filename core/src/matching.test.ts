@@ -46,6 +46,7 @@ describe("keyword rule", () => {
       "Senior/Staff Software Engineer",
       "Senior Software Engineer / Backend",
       "Embedded Software Engineer / Developer",
+      "Remote Software Tester (Freelance) / Test AT&T U-verse & Cox",
     ]) {
       expect(ats(t, picky), t).toBe(false);
     }
@@ -207,6 +208,8 @@ describe("keyword rule", () => {
     );
     expect(sj("Electrical Engineer New Grad - Rotation Program", "Software")).toBe(false);
     expect(sj("Solution Engineer", "Software Engineering")).toBe(false);
+    expect(ats("Software Solution Engineer")).toBe(false);
+    expect(ats("Sales Engineer, New Grad")).toBe(false);
     expect(ats("Field Services Engineer, New Grad")).toBe(false);
     expect(passesKeywordRule("Associate - Technology Transactions", "ats", S)).toBe(false);
     expect(sj("Senior Software Engineer", "Software")).toBe(false);
@@ -261,6 +264,10 @@ describe("location rule", () => {
     }
     expect(matchedLocationLabels(["Hoboken"], S)).toEqual(["NJ"]);
     expect(matchedLocationLabels(["San Francisco, CA", "Remote in UK"], S)).toEqual([]);
+    // A bare "Remote" beside only foreign places is remote abroad
+    expect(matchedLocationLabels(["Remote", "Europe", "Poland", "United Kingdom"], S)).toEqual([]);
+    expect(matchedLocationLabels(["Remote", "Poland", "United States"], S)).toEqual(["Remote-US"]);
+    expect(matchedLocationLabels(["Remote", "San Francisco"], S)).toEqual(["Remote-US"]);
     const noRemote: Settings = {
       ...S,
       locations: S.locations.map((l) => (l.builtin ? { ...l, enabled: false } : l)),

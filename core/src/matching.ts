@@ -47,6 +47,8 @@ const ALWAYS_EXPERIENCED = [
   "consulting member of technical staff",
   "senior member of technical staff",
 ];
+/** Pre-sales roles, whatever words surround them ("Software Solution Engineer"). */
+const ALWAYS_PRESALES = ["solution engineer", "solutions engineer", "sales engineer", "presales"];
 /** "Mid" as a level ("Engineer (Mid)", "Mid-Senior"), not "Mid-Market" or "Mid-Atlantic". */
 const MID_NOT_LEVEL = new Set(["market", "size", "sized", "atlantic", "west", "western"]);
 const isMidLevel = (tokens: readonly string[]) =>
@@ -200,14 +202,17 @@ const keywordAtEdge = (tokens: readonly string[], keywords: readonly string[], e
  * Title tokens for the exclude check, with an excluded word blanked when it's
  * one alternative beside one that isn't: "Software Engineer (Embedded/Backend)"
  * and "C++ or Python" offer a choice, "Embedded Software Engineer" doesn't.
- * Both sides excluded ("Senior/Staff") still rejects.
+ * Both sides excluded ("Senior/Staff") still rejects, and so does a word fenced
+ * off from the join ("Tester (Freelance) / Test …").
  */
 const maskAlternatives = (title: string, excludes: readonly string[]): string[] => {
-  const parts = title.split(ALTERNATIVE_JOIN).map(tokenize);
+  const raw = title.split(ALTERNATIVE_JOIN);
+  const parts = raw.map(tokenize);
   for (let i = 0; i + 1 < parts.length; i++) {
     const left = parts[i] ?? [];
     const right = parts[i + 1] ?? [];
     if (left.length === 0 || right.length === 0) continue;
+    if (!/[a-z0-9+#]$/i.test(raw[i] ?? "") || !/^[a-z0-9]/i.test(raw[i + 1] ?? "")) continue;
     const l = keywordAtEdge(left, excludes, true);
     const r = keywordAtEdge(right, excludes, false);
     // "Research Engineer / Scientist" offers two jobs, not two tracks: no waiver
@@ -248,6 +253,7 @@ export const passesKeywordRule = (
     return false;
   }
   if (matchesAnyKeyword(tokens, ALWAYS_EXPERIENCED) || isMidLevel(tokens)) return false;
+  if (matchesAnyKeyword(tokens, ALWAYS_PRESALES)) return false;
   const entry = isEntryLevelTitle(title, settings);
   if (isExperiencedLevel(title)) return false;
   const role = matchesAnyKeyword(tokens, settings.roleKeywords);
@@ -351,6 +357,78 @@ const placeMatches = (place: Place, aliases: readonly string[]): boolean => {
   return matchesAnyKeyword(place.city ?? place.tokens, aliases);
 };
 
+/** Places outside the US, for reading a bare "Remote" beside them. */
+const FOREIGN_PLACES = new Set(
+  [
+    "europe",
+    "emea",
+    "apac",
+    "latam",
+    "asia",
+    "uk",
+    "united kingdom",
+    "england",
+    "canada",
+    "mexico",
+    "brazil",
+    "argentina",
+    "colombia",
+    "chile",
+    "ireland",
+    "germany",
+    "france",
+    "spain",
+    "portugal",
+    "italy",
+    "netherlands",
+    "belgium",
+    "switzerland",
+    "austria",
+    "poland",
+    "hungary",
+    "croatia",
+    "romania",
+    "bulgaria",
+    "czech republic",
+    "denmark",
+    "sweden",
+    "norway",
+    "finland",
+    "estonia",
+    "greece",
+    "serbia",
+    "ukraine",
+    "turkey",
+    "israel",
+    "egypt",
+    "india",
+    "singapore",
+    "japan",
+    "korea",
+    "south korea",
+    "china",
+    "philippines",
+    "australia",
+    "new zealand",
+    "london",
+    "toronto",
+    "vancouver",
+    "montreal",
+  ].map((p) => tokenize(p).join(" ")),
+);
+
+/**
+ * A bare "Remote" means the US unless every other place is abroad: ElevenLabs'
+ * "Remote; Poland; United Kingdom" is remote in Europe.
+ */
+const remoteUsHit = (places: readonly Place[]) => {
+  const bare = (p: Place) => p.tokens.length === 1 && p.tokens[0] === "remote";
+  if (places.some((p) => !bare(p) && isRemoteUs(p.raw))) return true;
+  if (!places.some(bare)) return false;
+  const others = places.filter((p) => !bare(p));
+  return others.length === 0 || !others.every((p) => FOREIGN_PLACES.has(p.tokens.join(" ")));
+};
+
 /** Labels of the enabled named locations matched by any of the location strings. */
 export const matchedLocationLabels = (
   locations: readonly string[],
@@ -362,7 +440,7 @@ export const matchedLocationLabels = (
     if (!loc.enabled) continue;
     const hit =
       loc.builtin === "remote_us"
-        ? places.some((p) => isRemoteUs(p.raw))
+        ? remoteUsHit(places)
         : places.some((p) => placeMatches(p, loc.aliases));
     if (hit) labels.push(loc.label);
   }
