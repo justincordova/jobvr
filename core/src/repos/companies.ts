@@ -119,9 +119,6 @@ export const listCompaniesWithHealth = async (
   });
 };
 
-export const getCompany = async (db: DbOrTx, id: string): Promise<CompanyRow | null> =>
-  (await db.select().from(companies).where(eq(companies.id, id)))[0] ?? null;
-
 /** By normalized name, or by one of its aliases (see `mergeCompanyInto`). */
 export const findCompanyByName = async (db: DbOrTx, name: string): Promise<CompanyRow | null> => {
   const normalized = normalizeCompanyName(name);

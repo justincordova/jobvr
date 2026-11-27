@@ -2,16 +2,6 @@ import { STATUS_CODES } from "node:http";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
-// Standard API response format
-export interface ApiResponse<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-  count?: number;
-  details?: unknown[];
-}
-
 // Send successful response (200 OK)
 export const ok = <T>(c: Context, data: T, extras: { message?: string; count?: number } = {}) =>
   c.json({ success: true as const, data, ...extras }, 200);
