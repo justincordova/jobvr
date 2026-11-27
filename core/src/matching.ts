@@ -164,20 +164,31 @@ const isExperiencedLevel = (title: string) => {
 /**
  * Blanks out the words of multi-word role phrases found in the title, so an
  * exclude word inside one ("Member of Technical Staff") doesn't reject it. A
- * phrase that is itself excluded ("machine learning" in both lists) isn't masked.
+ * phrase that is itself excluded ("machine learning" in both lists) isn't
+ * masked, nor one an exclude reaches past ("AI Research" over "Research Engineer").
  */
 const maskRolePhrases = (
   tokens: readonly string[],
   roles: readonly string[],
   excludes: readonly string[],
 ): string[] => {
+  const at = (needle: readonly string[]) =>
+    tokens.flatMap((_, i) =>
+      i + needle.length <= tokens.length && needle.every((w, j) => tokens[i + j] === w)
+        ? [[i, i + needle.length] as const]
+        : [],
+    );
+  const excludeSpans = excludes.flatMap((k) => at(tokenize(k)));
   const excluded = new Set(excludes.map((k) => tokenize(k).join(" ")));
   const out = [...tokens];
   for (const phrase of roles) {
     const needle = tokenize(phrase);
     if (needle.length < 2 || excluded.has(needle.join(" "))) continue;
-    for (let i = 0; i + needle.length <= out.length; i++) {
-      if (needle.every((w, j) => tokens[i + j] === w)) out.fill("", i, i + needle.length);
+    for (const [start, end] of at(needle)) {
+      const reachedPast = excludeSpans.some(
+        ([s, e]) => s < end && e > start && (s < start || e > end),
+      );
+      if (!reachedPast) out.fill("", start, end);
     }
   }
   return out;

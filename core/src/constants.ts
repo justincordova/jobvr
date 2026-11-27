@@ -1,5 +1,5 @@
 /** Bump whenever matching or normalization code changes; forces unconditional refetches. */
-export const FILTER_VERSION = 18;
+export const FILTER_VERSION = 19;
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

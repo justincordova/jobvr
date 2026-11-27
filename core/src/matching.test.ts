@@ -24,6 +24,13 @@ describe("keyword rule", () => {
     expect(ats("Staff Software Engineer")).toBe(false);
   });
 
+  it("an exclude reaching past a role phrase still rejects", () => {
+    const noResearch = { ...S, excludeKeywords: [...S.excludeKeywords, "ai research"] };
+    expect(ats("AI Research Engineer", noResearch)).toBe(false);
+    expect(ats("Campus AI Research Engineer (Full-Time)", noResearch)).toBe(false);
+    expect(ats("Research Engineer, Infrastructure", noResearch)).toBe(true);
+  });
+
   it("an excluded word offered as one alternative doesn't reject; on its own it does", () => {
     const picky = {
       ...S,
