@@ -44,25 +44,24 @@ export const parseLocations = (location: string, workModel: string): string[] =>
   return out;
 };
 
-/** Jobright packs lists into JSON strings ("[\"a\",\"b\"]"); anything unreadable is empty. */
-const jsonList = (raw: unknown): string[] => {
-  if (typeof raw !== "string" || !raw) return [];
+/** A field that's a value, or the same value packed in a JSON string; unreadable is undefined. */
+const unpack = (raw: unknown): unknown => {
+  if (typeof raw !== "string") return raw;
   try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+    return JSON.parse(raw);
   } catch {
-    return [];
+    return undefined;
   }
 };
 
+const jsonList = (raw: unknown): string[] => {
+  const v = unpack(raw);
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+};
+
 const jsonObject = (raw: unknown): Record<string, unknown> => {
-  if (typeof raw !== "string" || !raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
+  const v = unpack(raw);
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 };
 
 const section = (heading: string, lines: readonly string[]) =>
@@ -98,8 +97,8 @@ export const jobrightDetail = (html: string): JobDetail | null => {
     section("Experience", yoe),
     section("Qualifications", list(quals.mustHave)),
     section("Preferred", list(quals.preferredHave)),
-    job.isCitizenOnly === "true" ? "U.S. citizenship required." : "",
-    job.isClearanceRequired === "true" ? "Security clearance required." : "",
+    unpack(job.isCitizenOnly) === true ? "U.S. citizenship required." : "",
+    unpack(job.isClearanceRequired) === true ? "Security clearance required." : "",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -185,7 +184,8 @@ export const jobright: SourceAdapter = {
       });
       return res.status === "ok" ? jobrightDetail(res.data) : null;
     } catch (err) {
-      if (err instanceof HttpError && err.status === 404) return null;
+      // Some pages are gone (404) or locked (403, while others still load): nothing to read
+      if (err instanceof HttpError && (err.status === 404 || err.status === 403)) return null;
       throw err;
     }
   },

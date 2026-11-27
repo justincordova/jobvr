@@ -121,6 +121,27 @@ describe("jobright job page", () => {
     expect(detail?.salary).toEqual({ currency: "USD", interval: "year", min: 80000, max: 100000 });
   });
 
+  it("reads the same fields as plain arrays, objects and booleans (the live page)", () => {
+    const detail = jobrightDetail(
+      page({
+        jobSummary: "Canfield is hiring.",
+        coreResponsibilities: ["Write C++"],
+        detailQualifications: { mustHave: { yoe: ["At least 1 year of experience in C++"] } },
+        qualifications: { mustHave: ["OpenGL"] },
+        isClearanceRequired: true,
+      }),
+    );
+    expect(detail?.description).toBe(
+      [
+        "Canfield is hiring.",
+        "Responsibilities:\nWrite C++",
+        "Experience:\nAt least 1 year of experience in C++",
+        "Qualifications:\nOpenGL",
+        "Security clearance required.",
+      ].join("\n\n"),
+    );
+  });
+
   it("no job on the page (taken down) or no data at all is null; hourly pay is skipped", () => {
     expect(jobrightDetail("<html></html>")).toBeNull();
     expect(jobrightDetail(page(null))).toBeNull();
