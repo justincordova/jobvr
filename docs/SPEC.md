@@ -36,7 +36,7 @@ AWS serverless with minimal change.
 - Usable from Mac and phone anywhere via Tailscale.
 - Cost: $0/month while running on the PC, plus optional OpenAI usage for tier
   ratings (about $0.0003 a company, at most 200 calls a day; without a key,
-  new companies stay Startup, unrated).
+  new companies stay C, unrated).
 
 ## Non-Goals
 
@@ -125,7 +125,10 @@ the api client before the web app.
   next step still runs. The tiers and heal steps each start new work for at
   most 60 s per tick (`UPKEEP_BUDGET_MS`; a call or search in flight finishes,
   the rest waits for the next tick). Disabled with
-  `SCHEDULER_ENABLED=false`. (On AWS this becomes an EventBridge Scheduler rule
+  `SCHEDULER_ENABLED=false`. Timers pause while the PC sleeps, so a wake check
+  reads the wall clock every 15 s (`WAKE_CHECK_MS`); a gap more than 60 s
+  (`WAKE_GAP_MS`) past that means it just woke, and it logs "woke after …" and
+  ticks at once instead of waiting out the paused interval. (On AWS this becomes an EventBridge Scheduler rule
   invoking the same functions.) On SIGTERM the scheduler stops ticking and
   aborts a shared stop signal: a running poll's fetches abort (an aborted poll
   writes nothing and restores `last_poll_at`, so the next start polls again),
@@ -176,11 +179,11 @@ API (its site needs a login); its public GitHub list is the feed used.
 
 | Source       | Endpoint                                                                                      | Posted date                                                                                         | Notes                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------ | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Greenhouse   | `boards-api.greenhouse.io/v1/boards/{slug}/jobs` (no `content`)                               | `first_published`                                                                                   | Never use `updated_at` as a posted date. The list has no description or pay (`content=true` is ~50x larger and uncompressed), so they come from `/jobs/{id}?pay_transparency=true` per matching job (see Poll step 3).                                                                                                                                                                 |
+| Greenhouse   | `boards-api.greenhouse.io/v1/boards/{slug}/jobs` (no `content`)                               | `first_published` (`updated_at` only when it's null, as on a few HRT jobs)                          | `updated_at` changes on every edit, so it's never used when `first_published` exists. The list has no description or pay (`content=true` is ~50x larger and uncompressed), so they come from `/jobs/{id}?pay_transparency=true` per matching job (see Poll step 3).                                                                                                                                                                 |
 | Lever        | `api.lever.co/v0/postings/{slug}?mode=json`                                                   | `createdAt` (epoch ms)                                                                              | Large uncompressed payloads (Gopuff 7.8 MB) → 304s matter. `salaryRange` exists but is rare.                                                                                                                                                                                                                                                                                           |
 | Ashby        | `api.ashbyhq.com/posting-api/job-board/{slug}?includeCompensation=true`                       | `publishedAt`                                                                                       | Structured compensation. Only `isListed` jobs are kept.                                                                                                                                                                                                                                                                                                                                |
 | SmartRecruiters | `api.smartrecruiters.com/v1/companies/{slug}/postings?country=us&limit=100&offset={n}`     | `releasedDate`                                                                                      | US postings only (big employers list thousands worldwide: Bosch ~5,000, 360 in the US). Pages of 100, newest first, at most 20 pages (2,000 postings). Only the first page is conditional: unchanged means the board is, so a posting closing deeper down with nothing new on top waits for the next change. No description in the list: `/postings/{id}` per matching job (see Poll step 3). |
-| Workable     | `apply.workable.com/api/v1/widget/accounts/{slug}`                                            | `published_on` (a date, day precision)                                                              | No ETag. No description or pay in the list: `apply.workable.com/api/v2/accounts/{slug}/jobs/{shortcode}` per matching job (see Poll step 3).                                                                                                                                                                                                                                            |
+| Workable     | `apply.workable.com/api/v1/widget/accounts/{slug}`                                            | the earlier of `published_on` and `created_at` (day precision; a republished role isn't new)        | No ETag. No description or pay in the list: `apply.workable.com/api/v2/accounts/{slug}/jobs/{shortcode}` per matching job (see Poll step 3).                                                                                                                                                                                                                                            |
 | SimplifyJobs | `raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json` | `date_posted` (epoch s; ~30–50% are exact midnight UTC = day precision, the rest are real instants) | ~12 MB (~2 MB gzip), ~19k listings, committed ~every 30 min. Fields: `id, company_name, title, url, locations[], category, active, is_visible, date_posted, date_updated, sponsorship, degrees, source, company_url`. Categories are inconsistent ("Software", "Software Engineering"). Locations look like `NYC`, `New York, NY`, `Jersey City, NJ`, `Remote in USA`, `Remote in UK`. |
 
 ### Adapter interface (defined in `core`)
@@ -250,11 +253,11 @@ today are SimplifyJobs, SpeedyApply and Jobright (the "new-grad lists").
 
 | Adapter      | title                            | locations                                                                                                                                                                                                                                                  | url                                                            | postedAt (precision)                                           | salary                                                                                                                                                                                                     |
 | ------------ | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Greenhouse   | `title`                          | [`location.name`]                                                                                                                                                                                                                                          | `absolute_url`                                                 | `first_published` (instant)                                    | none                                                                                                                                                                                                       |
+| Greenhouse   | `title`                          | [`location.name`]; when it names no place (empty, "Hybrid", "In-Office", "On-site", "Multiple Locations", "Various"), the value(s) of the first `metadata` field whose name says "location(s)" (Cloudflare's "Job Posting Location"), else the vague name | `absolute_url`                                                 | `first_published`, else `updated_at` (instant)                 | none                                                                                                                                                                                                       |
 | Lever        | `text`                           | `categories.allLocations`, else [`categories.location`]; + `Remote - US` when `workplaceType = "remote"` and `country = "US"`                                                                                                                              | `hostedUrl`                                                    | `createdAt` (instant)                                          | `salaryRange` {min, max, currency, interval: `per-hour-wage` → hour, `per-week-salary` → week, `per-month-salary` → month, `per-year-salary` → year; any other interval or a missing `salaryRange` → none} |
 | Ashby        | `title` (only `isListed = true`) | [`location`, ...`secondaryLocations[].location`]; + `Remote - US` when `workplaceType = "Remote"` and `address.postalAddress.addressCountry` ∈ {USA, US, United States, United States of America} (`isRemote` is not used: it is true for Hybrid jobs too) | `jobUrl`                                                       | `publishedAt` (instant)                                        | first `compensation.summaryComponents` item with `compensationType = "Salary"`; interval `1 HOUR`/`1 WEEK`/`1 MONTH`/`1 YEAR` → hour/week/month/year; other intervals → none                               |
 | SmartRecruiters | `name`                        | [`location.fullLocation`, else `city, region, country`]; + `Remote - US` when `location.remote` (every posting asked for is in the US)                                                                                                                      | `jobs.smartrecruiters.com/{company.identifier}/{id}`            | `releasedDate` (instant)                                       | none                                                                                                                                                                                                       |
-| Workable     | `title`                          | each `locations[]` place not marked `hidden`, as `city, region, country`; without `locations[]`, the top-level `city, state, country` (when every place is hidden, none); + `Remote - US` when `telecommuting` and a shown place is in the US (`countryCode` US, or country "United States"/"USA") | `apply.workable.com/{slug}/j/{SHORTCODE}/`                      | `published_on` (day)                                           | from the detail: `salary_from`/`salary_to` in `salary_currency_iso_code`, `salary_frequency` hour/week/month/year; anything missing → none                                                                  |
+| Workable     | `title`                          | each `locations[]` place not marked `hidden`, as `city, region, country`; without `locations[]`, the top-level `city, state, country` (when every place is hidden, none); + `Remote - US` when `telecommuting` and a shown place is in the US (`countryCode` US, or country "United States"/"USA") | `apply.workable.com/{slug}/j/{SHORTCODE}/`                      | earlier of `published_on` / `created_at` (day)                 | from the detail: `salary_from`/`salary_to` in `salary_currency_iso_code`, `salary_frequency` hour/week/month/year; anything missing → none                                                                  |
 | SimplifyJobs | `title`                          | `locations`                                                                                                                                                                                                                                                | `url`                                                          | `date_posted` (day if `date_posted % 86400 = 0`, else instant) | none                                                                                                                                                                                                       |
 | SpeedyApply  | Position cell text               | Location cell: a trailing `+N` dropped; `Remote - City, ST` / `Remote - USA` → the place + `Remote - US`; other `Remote - X` kept as written                                                                                                               | Posting link (the ATS posting itself), tracking params removed | Age `Nd` → midnight UTC N days ago (day)                       | Salary cell `$193k/yr` / `$45/hr` → USD `max` (one figure)                                                                                                                                                 |
 
@@ -275,6 +278,12 @@ counted as invalid items without an id, which holds that poll's closures and
 skips saving the ETag (Poll step 8), so a partial read never closes postings
 it missed.
 
+**Workable**: a role in several cities is listed once per city under one
+shortcode; the adapter merges those into one listing with every place.
+Invalid items are reported by `shortcode` (`validateItems`' `idKey`), so one
+bad item holds only its own job's closure. The account slug is lowercased in
+API URLs (the API is case-sensitive).
+
 For ATS adapters `companyName` = `ctx.companyName` (the company record's name;
 Lever/Ashby responses don't include one). For SimplifyJobs it is
 `company_name`, and `meta` = {`active`, `visible` ← `is_visible`, `category`}.
@@ -283,7 +292,10 @@ Lever/Ashby responses don't include one). For SimplifyJobs it is
 ~900 rows, updated daily): every pipe table in the README (FAANG+, Quant and
 Other; only the first two have a Salary column), cells read by header name.
 `companyName` is the Company cell's text, `sourceJobId` the first 16 hex of the
-SHA-1 of the apply link (rows have no id; the link is stable), `meta` =
+SHA-1 of the apply link (rows have no id; the link is stable; tracking params
+and fragments are dropped, except route-style fragments with a `/`, which carry
+Oracle's job ids), and a row whose link id repeats an earlier row's is dropped
+(a shared careers page would otherwise overwrite one job), `meta` =
 {`active`: true, `visible`: true, `category`: `Software Engineering`} (a
 new-grad SWE list: listed means open). A row whose cell count doesn't match
 its table counts as invalid; a README with no table at all throws (the layout
@@ -366,18 +378,22 @@ retry on other 4xx; sends
 
 ## Data Model (Postgres 18, Drizzle)
 
-All timestamps are `timestamptz`. Migrations (`core/drizzle`, 0000 to 0013)
-run automatically on app start. The latest three: 0011 added `tier_source`
+All timestamps are `timestamptz`. Migrations (`core/drizzle`, 0000 to 0014)
+run automatically on app start (retried every 2 s for up to a minute while
+Postgres is still starting). The latest four: 0011 added `tier_source`
 (existing rows `seed`, auto-added ones `pending`), `tier_reason`, `tiered_at`,
 and turned `track` on for every company with a working board (the Track switch
 was removed; it had left 8 S/A boards off); 0012 added `aliases`; 0013 added
 `needs_review_since` (existing `needs_review` companies start the clock at the
-migration, so none gives up early).
+migration, so none gives up early); 0014 (`letter_tiers`) renamed stored tiers
+Mid → B, Startup → C, Corporate → D and set AI-rated (`auto`) companies back to
+`pending`, so the AI rates them again on the new scale (without a key they keep
+the mapped letter; seed and manual tiers keep theirs).
 
 | Table          | Columns                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `settings`     | single row (`id = 1`): `data` JSONB (Zod `Settings`, parsed with defaults on read so new fields need no migration), `last_visit_at`, `last_poll_at` (poll started), `last_poll_ok_at` (poll finished), `poll_stall_alert_at`, `last_push_at`, `last_cleanup_at`, backup status (`last_backup_at`, `backup_error`, `backup_error_at`, `backup_alert_at`)                                                                                                                                                                                                                                                                                        |
-| `companies`    | `id` uuid, `name`, `normalized_name` (unique; see Normalization helpers; so "Regal" and "Regal Inc" can't coexist), `aliases` text[] (other normalized names it goes by on the lists, from AI merges; default empty), `city`, `state` (free text, e.g. city "Pittsburgh/NYC", state "PA/NY"), `tier` (S/A/Mid/Startup/Corporate), `tier_source` (seed: the starter list; auto: the AI rater; manual: picked by a person, never overwritten; pending: not rated yet), `tier_reason` (the rater's one-line reason, else null), `tiered_at` (when the rater set it), `track` bool (polled; see Company invariants), `ats` (text: a registered ATS adapter id or `other`), `slug` (nullable, case preserved; unique per `ats`, case-insensitive), `careers_url`, `notes` (auto-added companies start with "Added automatically"), `status` (ok/needs_review/manual_only), `needs_review_since` (when it last became `needs_review`; null in every other status; the heal clock), `created_at`, `updated_at` |
+| `companies`    | `id` uuid, `name`, `normalized_name` (unique; see Normalization helpers; so "Regal" and "Regal Inc" can't coexist), `aliases` text[] (other normalized names it goes by on the lists, from AI merges; default empty), `city`, `state` (free text, e.g. city "Pittsburgh/NYC", state "PA/NY"), `tier` (S/A/B/C/D, see [Tiers](#tiers)), `tier_source` (seed: the starter list; auto: the AI rater; manual: picked by a person, never overwritten; pending: not rated yet), `tier_reason` (the rater's one-line reason, else null), `tiered_at` (when the rater set it), `track` bool (polled; see Company invariants), `ats` (text: a registered ATS adapter id or `other`), `slug` (nullable, case preserved; unique per `ats`, case-insensitive), `careers_url`, `notes` (auto-added companies start with "Added automatically"), `status` (ok/needs_review/manual_only), `needs_review_since` (when it last became `needs_review`; null in every other status; the heal clock), `created_at`, `updated_at` |
 | `source_state` | `key` text PK (`<aggregator id>` or `company:<uuid>`), `source`, `company_id` (FK, cascade delete, nullable), `slug` (the slug this state belongs to; null for aggregators), `etag`, `filters_hash`, `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error`, `baselined_at`                                                                                                                                                                                                                                                                                                                                                |
 | `jobs`         | `id` text PK (canonical ID), `company_id` (FK, set null), `company_name`, `title`, `locations` text[], `url`, `primary_source`, `first_seen_at`, `effective_at`, `salary_min_usd`, `salary_max_usd` (annual), `state` (new/saved/hidden/applied), `applied_at` (set the first time it's marked applied and only when empty; kept when it leaves applied, so undoing "Not applied" restores the date; the API shows it only while applied; migration 0010 backfilled earlier marks from `updated_at`), `baseline` bool, `notified_at`, `closed_at`, `updated_at`                                                                                                                                                                                                                                                                                                                                    |
 | `job_sources`  | PK (`source`, `source_job_id`); `job_id` (FK, cascade delete; indexed); `url`, `url_key` (normalized URL or null; indexed), `title`, `category` (aggregators; else null), `posted_at`, `posted_at_precision` (instant/day), `removed_at`, `required_years` (years of experience the description asks for: null = not checked, 0 = none named; see Experience rule), `description` (plain text, capped at 20k characters; kept when a later listing has none; never loaded by the feed list, pushes or the poll's in-memory window). A job can have several rows, including several from the same source (SimplifyJobs has duplicate listings). |
@@ -396,7 +412,15 @@ can't store a value the code doesn't know.
 - `ats = other` ⇒ `status = manual_only` and `track = false`.
 - Supported `ats` with no `slug` ⇒ `track = false` (cannot be polled).
 - Changing a company's `ats` or `slug` deletes its `source_state` row, so the
-  next poll starts fresh with a new baseline.
+  next poll starts fresh with a new baseline. Changing `ats` (without an
+  explicit `status`) also sets the status: onto a supported ATS → `ok` (a board
+  left `manual_only` would never be polled); onto `other` → `manual_only` and
+  `track = false`.
+- When a company's `ats` changes or its board is switched off (`track` true →
+  false), its old board's source rows are marked removed and its jobs with no
+  live source left are closed, since no poll scans that board anymore.
+- Renaming a company keeps the old normalized name as an alias (the lists
+  still use it, and auto-add would otherwise bring it back).
 - `track` is no longer a user choice (the web app has no Track switch; the
   API still accepts it). It means "has a working board": set true whenever a
   company gets a supported board (create defaults it to true when there's a
@@ -464,8 +488,9 @@ A title passes the keyword rule for a source when:
 
 - **All sources**: 0 exclude keywords, AND no contract tag ("(Contract)", "-
   Contractor", "– Contract,"; "Smart Contracts" as a subject is fine), AND no
-  numbered experienced level. Experienced levels: `ii`, `iii`, `iv`, `v`, `vi`,
-  `2`-`5` (bare 6 to 9 aren't levels: "24/7", "Series 7"), and level codes read
+  built-in reject (below), AND no numbered experienced level. Experienced
+  levels: `ii` to `viii`, `2`-`5` (bare 6 to 9 aren't levels: "24/7", "Series
+  7"), Meta-style `E4` and up (new grads start at E3), and level codes read
   as their number (`L`, `IC`, `P`, `SDE`, `SWE` + a digit: "L2", "IC3", "SDE2";
   6 and up count as 5), with two exceptions for big-company ladders: `L3` is
   neutral (Google hires new grads at L3), and `L4` is experienced unless the
@@ -478,16 +503,45 @@ A title passes the keyword rule for a source when:
   keyword, or a level token `i` / `1` (also `L1`, `IC1`, ...; not "I/O" or
   "Tier 1"). So "Software Engineer 3" and "Associate Software Engineer II" are out,
   "Software Engineer 1/2" and "Engineer 2 New Grad" are in.
+- **Built-in rejects** (`core/src/matching.ts`; always on, whatever the
+  editable exclude list says, since stored lists don't pick up new defaults):
+  `ALWAYS_EXPERIENCED` ("leader", "expert", "experienced", "advisory
+  software", "advisory engineer", "consulting member of technical staff",
+  "senior member of technical staff"), "mid" as a level ("Engineer (Mid)",
+  "Mid-Senior"; not "Mid-Market", "Mid-Atlantic", "Mid-West"), and
+  `ALWAYS_PRESALES` ("solution(s) engineer", "sales engineer", "presales"),
+  matched against the whole title.
+- **Exclude-check masks** (the exclude check reads the title with two kinds of
+  words blanked; the other checks read it whole):
+  - `maskAlternatives`: an excluded word offered as one alternative beside one
+    that isn't, across a `/`, `&`, `or` or `and` join, doesn't reject
+    ("Software Engineer (Embedded/Backend)", "C++ or Python"; "Embedded Software
+    Engineer" still rejects). The word must sit directly against the join (a
+    word fenced off by a bracket, "Tester (Freelance) / Test …", still rejects),
+    both sides excluded ("Senior/Staff") still rejects, and a job noun
+    (`engineer`, `engineering`, `developer`, `programmer`) on the other side
+    next to the join means two jobs, not two tracks ("Research Engineer /
+    Scientist" still rejects).
+  - `maskRolePhrases`: multi-word role keywords found in the title are blanked,
+    so an exclude word inside one ("Member of Technical Staff") doesn't reject
+    it; a phrase that is itself on the exclude list isn't blanked.
 - **Any source**: ≥ 1 role keyword passes ("Software Engineer", "AI Engineer").
   A level keyword is only required when "Require a level keyword on company
   boards" (ATS) or "Apply level keywords to Simplify" (aggregator) is on; by
   default plain "Software Engineer" counts, since boards rarely say "new grad".
 - **Without a role keyword**, a generic engineering title (`engineer`,
   `engineering`, `developer`, `programmer`) with no other discipline word
-  (electrical, mechanical, civil, sales, legal, compliance, field, support, services,
-  verification, design, asic, fpga, physical, ...)
+  (electrical, mechanical, civil, sales, legal, compliance, field, support,
+  solution(s), customer, network, services, verification, design, asic, fpga,
+  physical, ...)
   passes when it's entry level on a board ("New Grad Engineer"), or in a
   SimplifyJobs "Trusted category" ("Engineer 2 New Grad - Multiple Teams").
+  A title also counts as generic engineering when one of its parts (split on
+  " - ", " – ", " | " and brackets; `newGradEngineeringPart`) has a generic
+  engineering word and a new-grad word (`new grad`, `new graduate`, `grads`,
+  `entry level`, `early career`) and no discipline word: "Engineer New Grad -
+  Evolve - An Apple Services Rotation Program" names a program, not a
+  discipline, in its other parts.
   "AI Acceleration Specialist" and "Associate Application Consultant" never
   pass, even under SimplifyJobs' Software category.
 
@@ -513,13 +567,21 @@ states`, `united states of america`), meaning anywhere in the US, OR it
   "remote" after tokenization. "Remote", "Remote - US", "Remote in USA",
   "United States (Remote)", "United States" match; "Remote in UK", "Remote - Europe", "Remote (EMEA)", "Remote -
   Latin America", "New York, NY (Remote)" don't (the last one matches NYC instead).
+  A bare "Remote" place means the US unless every other place of the job is a
+  foreign country, region or city named on its own (`FOREIGN_PLACES` in
+  `remoteUsHit`: Europe, EMEA, APAC, UK, Canada, Poland, India, London, Toronto,
+  ...): ElevenLabs' "Remote; Poland; United Kingdom" is remote in Europe.
 
 ### Experience rule
 
-`requiredYears(description)`: the first experience requirement in a job's
-description ("5+ years of experience", "2-5 years of professional software
-experience", "five (5) years of experience", "3+ years working with", "6+ years
-in ..."), or null when it names none. The first one is the headline
+`requiredYears(description)` (`core/src/experience.ts`): the first experience
+requirement in a job's description ("5+ years of experience", "2-5 years of
+professional software experience", "five (5) years of experience": up to 6
+words between "years" and "experience", within one sentence), or, with a `+`
+only, "N+ years" followed by working, building, writing, developing, shipping,
+professional, industry, in, on, as or with ("3+ years working with", "6+ years
+in ...", "7+ years as a software engineer", "3+ years with Kubernetes"); null
+when it names none. Numbers above 20 are ignored. The first one is the headline
 requirement ("Minimum of 5 years building software; minimum of 2 years focused
 on security" is 5; "3+ required, 5+ preferred" is 3). Ignored: degree
 alternatives ("BS or 4 years of experience"), "equivalent experience", and the
@@ -530,7 +592,8 @@ names none, null without a description).
 A source row passes when "Hide board jobs asking for N+ years" is 0 (off), or
 its `required_years` is null or below N, or its title is entry level (a level
 keyword or `I`/`1`: "Software Engineer, New Grad" stays even if it says "3+
-years"). Applied at read time, so changing N needs no refetch.
+years"; "Associate" alone doesn't count here, since banks' Associate roles are
+often 3 to 5 years in). Applied at read time, so changing N needs no refetch.
 
 ### Salary rule
 
@@ -598,7 +661,9 @@ Order: take the poll lock → due check → set `last_poll_at = now` → steps b
 
 1. **Load** into memory: settings, companies, all `source_state` rows, and all
    jobs (with all their `job_sources` rows) where `effective_at ≥ now − max(store
-window, 180 days)` (everything the poll filter can still store).
+window, 180 days)` (everything the poll filter can still store), plus saved and
+   applied jobs of any age, so a long-open posting you marked still closes when
+   it comes down.
 2. **Targets**:
    - Each **company** with `track = true` AND tier in "Tiers to track" AND
      `status ≠ manual_only` AND `ats` is a registered ATS adapter AND `slug` is set
@@ -606,9 +671,12 @@ window, 180 days)` (everything the poll filter can still store).
      polled so they can recover, while the heal step looks for a new board.)
    - Each **aggregator** in "Enabled sources" (today: SimplifyJobs, SpeedyApply, Jobright), once.
 3. **Fetch** all targets in parallel, at most `adapter.concurrency` in flight per
-   source. The run has a 5-minute fetch budget: fetches still running when it
-   expires are aborted and count as failures; targets still queued are skipped
-   (no health change, retried next poll). One target failing never affects others.
+   source. Each source's queue is shuffled every poll (`RunPollOptions.order`;
+   tests fix it), so the same broken boards can't always go first and trip the
+   circuit breaker. The run has a 5-minute fetch budget: when it expires (or on
+   shutdown), fetches still running are aborted and, like targets still
+   queued, skipped (no health change, retried next poll). One target failing
+   never affects others.
    Send `If-None-Match` only if the target's `source_state` row exists, its
    `slug` equals the company's current slug, and its `filters_hash` equals the
    current hash of (`FILTER_VERSION` code constant + locations + role/level/exclude
@@ -659,13 +727,19 @@ window, 180 days)` (everything the poll filter can still store).
       canonical ID is a list's (`sj:`, `sa:`, `jr:`) vs. a job that has an ATS
       source row, or vs. a list-only job with no row from the same list
       (another list's copy of a role at a company with no readable board; one
-      list's own near-duplicates, one per city, stay apart); or an incoming ATS
-      listing vs. a list-only job (id with a list prefix, no ATS row). Requires same company (same
+      list's own near-duplicates, one per city, stay apart); or a list listing
+      whose URL links a board posting (canonical ID `gh:` etc.) vs. a list-only
+      job with no ATS row and no row from the same list (Jobright, with no
+      direct links, found it first); or an incoming ATS listing vs. a job with
+      no live ATS row: a list-only job (id with a list prefix), or one whose
+      rows from another board are all gone (the company moved boards). Requires same company (same
       `company_id`, or same normalized name when either has none) AND title
       token-set Jaccard ≥ 0.85 AND at least one shared named-location label
       (both sides' locations match that label). If several jobs qualify, pick the
       highest Jaccard, then the newest `effective_at`. Listings whose URLs
-      identify different ATS postings are never fuzzy-merged.
+      identify different ATS postings are never fuzzy-merged; an incoming board
+      posting is compared only against postings on its own board (after a
+      move, the old board's say nothing), so reposts on one board stay apart.
    - **Match** → upsert the listing's `job_sources` row (`job_id`, `url`,
      `url_key`, `title`, `category`, `posted_at`, `posted_at_precision`,
      `required_years`; a listing without a description keeps the row's existing
@@ -701,14 +775,19 @@ EXISTS (SELECT 1 FROM job_sources WHERE job_id = $1)`), never based on the
    target's rows are, among in-memory jobs: for an aggregator, every
    `job_sources` row with that source; for a company, rows with source = the
    company's `ats` on jobs whose `company_id` is that company. A row is **live**
-   if its `source_job_id` is in the result and (aggregators) `meta.active` and
+   if its `source_job_id` is in the result, the listing still passes the title
+   and place rules (a role retitled "Senior …" or moved to an untracked place
+   stops counting; age alone doesn't), and (aggregators) `meta.active` and
    `meta.visible` are true; otherwise it is **removed**. Set `removed_at = now` on
    newly removed rows and `removed_at = null` on live rows. Then for each affected
    job: all rows removed → `closed_at = now` (if not already set); any row live →
-   `closed_at = null`. A job with an ATS row counts only its ATS rows: the
-   company's board is the truth and lists lag (SpeedyApply still listed an
-   Abnormal Security role the day Greenhouse dropped it). Rows of targets that are not polled (untracked company,
-   disabled source) and jobs outside the store window are not re-evaluated;
+   `closed_at = null`. A job with an ATS row on a board this poll checks
+   (`ProcessContext.boards`: `companyId|source` of every polled board) counts
+   only those rows: the company's board is the truth and lists lag (SpeedyApply
+   still listed an Abnormal Security role the day Greenhouse dropped it). When
+   no poll checks its board anymore (given up on, moved, switched off), its
+   lists decide. Rows of targets that are not polled (untracked company,
+   disabled source) and jobs outside the in-memory window are not re-evaluated;
    their open/closed status stays as last computed. A listing that failed
    validation but has an `id` keeps its row exactly as it was (neither removed
    nor revived: it's still listed; OpenAI's board had a blank-title posting for
@@ -749,7 +828,9 @@ isn't overwritten with stale state). The same guard applies to step 10.
 failed with network errors, timeouts, 5xx or 429, the ATS is down, not the
 boards: those boards' health isn't written (no streak, no move to
 `needs_review`) and one warning names the source. A board that got a 404
-still counts it (that's about its slug). A circuit breaker in step 3
+still counts it (that's about its slug), and so does an unreadable answer
+(HTML, schema drift): only network errors, timeouts, 5xx and 429 count as
+transient, toward the breaker and outages. A circuit breaker in step 3
 stops requesting a source once its first 3 boards have all failed that way
 with none succeeding; the boards it never requested are left alone too,
 even when a board already in flight then answers (no outage, but they were
@@ -783,7 +864,7 @@ is null, `state ∈ {new, saved}`, effective age ≤ "Max job age", and its tier
 company's tier, or `Unlisted`) is in "Tiers to track", and, when "Entry level
 only" is on, it is entry level (an entry-level title, or on a new-grad list). The tier check uses tier
 only, not the company's `track` flag; so Simplify jobs from a `manual_only`
-Corporate company push, while jobs from a tier removed from "Tiers to track"
+D-tier company push, while jobs from a tier removed from "Tiers to track"
 don't.
 
 Order: take the notify lock → due check → quiet-hours check (inside quiet hours
@@ -816,6 +897,31 @@ Delete jobs with `effective_at < now − (max(store window, 180 days) + 15 days)
 and `state ∈ {new, hidden}` (`job_sources` cascade). Retention must exceed the store window, or a deleted
 job that is still listed would be re-inserted on the next poll. Saved and applied jobs are kept indefinitely.
 
+### Tiers
+
+Company tiers are `S`, `A`, `B`, `C`, `D` (`TIERS` in `core/src/constants.ts`),
+ranked by how good a company is for a new-grad software engineer: first-year
+pay first, then engineering quality and prestige, then size and stability.
+Startups and big enterprises are placed by the same measure, so there is no
+separate "Startup" or "Corporate" tier. Jobs with no company are `Unlisted`.
+
+| Tier | Rough new-grad pay | Examples                                                                                                               |
+| ---- | ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| S    | $200k+             | Google, Meta, OpenAI, Jane Street, Stripe, Databricks, Ramp                                                            |
+| A    | $150-200k          | Datadog, Plaid, Coinbase, Dropbox, Vercel, Render, Mercor; investment banks at most                                    |
+| B    | $110-150k          | SoFi, PayPal, Autodesk, Etsy, Oracle, funded startups with traction                                                    |
+| C    | $80-110k           | banks, insurers, defense primes, retailers, ADP, unproven startups                                                     |
+| D    | weak picks         | staffing and recruiting agencies, IT outsourcers (however large), OPT-only employers, small contractors and consultancies, job boards |
+
+- `UNRATED_TIER` (`core/src/add-company.ts`) is `C`: the tier of auto-added
+  and hand-added companies until the AI rates them (and for good without
+  `OPENAI_API_KEY`). The AI's fallback for a company it doesn't recognize is
+  `D` for a services, staffing or contracting firm, else `C`; unknown companies
+  are never S or A; an acquired company takes its parent's tier.
+- Old names (Mid, Startup, Corporate → B, C, D; `LEGACY_TIERS`) are still read
+  where they can linger: stored `tiersToTrack` (`parseStoredSettings`) and the
+  web app's links and remembered filters (`parseFeedSearch`).
+
 ### Company upkeep
 
 Four scheduler steps after notify keep the company list current with no
@@ -833,7 +939,7 @@ retries sooner, which is harmless). All log under module `companies`.
   added as a polled company (`track`, `ok`; its first poll is a silent
   baseline); answers with no jobs, not found, or no supported board at all →
   added list-only (`ats = other`, `manual_only`) so its list jobs get a tier.
-  Either way: tier Startup, `tier_source = pending`, notes "Added automatically
+  Either way: tier C (`UNRATED_TIER`), `tier_source = pending`, notes "Added automatically
   from <lists> (<ATS> board, N jobs)" or "(no readable job board)". A conflict
   (added meanwhile) is skipped. After any add, every aggregator's ETag is
   cleared, so the lists' next poll refetches in full and their Unlisted jobs
@@ -844,8 +950,11 @@ retries sooner, which is harmless). All log under module `companies`.
   models, at most 300 completion tokens, 30 s timeout) using structured output
   `{ tier, reason, sameAs }`. Input: the name, careers URL, up to 5 recent
   distinct job titles, and (auto-added companies only) every other company's
-  name. The prompt defines S/A/Mid/Startup/Corporate with examples and asks for
-  Startup when unsure; the reason is one plain sentence of at most 15 words. At
+  name. The prompt defines S/A/B/C/D with pay bands and examples (see
+  [Tiers](#tiers)), caps investment banks at A, keeps unknown companies out of
+  S and A, and for an unrecognized company asks for D when it looks like a
+  services, staffing or contracting firm, else C; the reason is one plain
+  sentence of at most 15 words. At
   most 10 a run (within the 60 s upkeep budget) and 200 calls per rolling 24 h
   (the larger of calls made in memory and ratings saved in the last day, so a
   restart doesn't reset it; "cap reached" is logged once a day). A failed
@@ -853,7 +962,7 @@ retries sooner, which is harmless). All log under module `companies`.
   The rating is written only while the company is still `pending` (a tier
   picked meanwhile wins): `tier`, `tier_source = auto`, `tier_reason`,
   `tiered_at`. Seed and manual tiers are never touched. Without a key nothing
-  runs and new companies stay Startup, "not rated".
+  runs and new companies stay C, "not rated".
 - **AI merges**: when the rater's `sameAs` names a company already on the
   list, the company is folded into it (`mergeCompanyInto`) only if (a) it was
   created by auto-add and nobody picked its tier (notes start "Added
@@ -863,14 +972,16 @@ retries sooner, which is harmless). All log under module `companies`.
   merge into an unrelated company. A merge moves its jobs over (they take the
   target's name), adds its normalized name and aliases to the target's
   `aliases` (so the lists' jobs keep resolving), moves its board along when
-  the target has none, and deletes it; two companies that both have a board
+  the target has none (with its status; a board given up on, `manual_only`,
+  stays untracked), and deletes it; two companies that both have a board
   are never merged. A rejected or refused merge is logged and the company is
   rated as usual.
 - **Heal** (`runHealCompanies`, `core/src/heal-companies.ts`): companies in
   `needs_review` (not `other`), oldest `needs_review_since` first, 3 per run
   within the 60 s budget, each searched at most every 6 h. The search
   (`findBoardByName`) tries the name's slug guesses (see `discover`) on every
-  enabled ATS, a few at a time, keeping only guesses whose letters and digits
+  enabled ATS, the ATSes in parallel (separate hosts) and 3 guesses at a time
+  per ATS (registry order, then guess order, breaks ties), keeping only guesses whose letters and digits
   contain the whole name or an alias ("initech-io" for Initech, never "scale"
   for Scale AI); only boards with open jobs count, the most jobs wins, and
   probe errors count as "not there". A different board found → the company
@@ -893,9 +1004,11 @@ retries sooner, which is harmless). All log under module `companies`.
   "Blue Matrix") or the host ("careers.acme.com" → "Acme"); 409 when it (or an
   alias) is already listed. With no board from the link, `findBoardByName`
   searches by name. Board found → polled company; else list-only (`other`,
-  `manual_only`, the link kept as `careers_url`). Tier Startup, `pending`,
-  notes "Added by hand"; the company, its stored list jobs and the cleared list
-  ETags are written in one transaction; then it's rated right away. Hand-added
+  `manual_only`, the link kept as `careers_url`). Tier C (`UNRATED_TIER`),
+  `pending`, notes "Added by hand"; the company, its stored list jobs and the
+  cleared list ETags are written in one transaction; then it's rated right
+  away (the request waits at most 10 s, `RATE_WAIT_MS`, for the rating; a
+  slower one lands in the background). Hand-added
   companies are never merged away.
 - **Delete** (`deleteCompany`): removing is final. In one transaction every
   suggestion the company stood for (name, alias, board, slug as a name) is
@@ -917,11 +1030,11 @@ A stored field that fails validation falls back to its default on read.
 | Setting                                   | Default                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Constraints                                                                                                                                                                                                                                                                  |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Locations                                 | NJ → `nj`, `new jersey`, `jersey city`, `hoboken`, `newark`, `princeton` · PA → `pa`, `pennsylvania`, `philadelphia`, `philly`, `pittsburgh` · NYC → `nyc`, `new york`, `brooklyn`, `manhattan`, `queens`, `bronx`, `long island city` · Remote-US (built-in rule)                                                                                                                                                                                                                                            |
-| Tiers to track                            | S, A, Mid, Startup, Corporate, Unlisted (all)                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Subset of S/A/Mid/Startup/Corporate/Unlisted. Controls which companies are polled, which jobs push, and the feed's default tier filter. `Unlisted` (added to the original list so Simplify jobs from companies not in your list can push) only affects jobs with no company. |
+| Tiers to track                            | S, A, B, C, D, Unlisted (all)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Subset of S/A/B/C/D/Unlisted (stored old names are mapped on read). Controls which companies are polled, which jobs push, and the feed's default tier filter. `Unlisted` (added to the original list so Simplify jobs from companies not in your list can push) only affects jobs with no company. |
 | Entry level only (`entryLevelOnly`)       | Off                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Feed view, "new since last visit" and pushes keep only entry-level jobs (an entry-level title, or on a new-grad list). Replaced the feed's own switch; `level=entry` still works on `GET /api/jobs` |
 | Role keywords (any)                       | software, developer, swe, sde, programmer, full stack, fullstack, backend, back end, frontend, front end, web engineer, mobile engineer, ios, android, product engineer, platform engineer, infrastructure engineer, forward deployed engineer, devops, site reliability, sre, machine learning, ml engineer, ai engineer, applied ai, data engineer, research engineer, cloud engineer, automation engineer, founding engineer, member of technical staff, application development, applications development |
 | Level keywords (any)                      | new grad, new graduate, graduate, grad, entry, junior, jr, early career, early talent, emerging talent, university, college, campus, associate, rotational, apprentice, apprenticeship, residency, development program, 2026, 2027                                                                                                                                                                                                                                                                            |
-| Exclude keywords                          | senior, sr, staff, principal, lead, manager, director, head, vp, vice president, architect, distinguished, intern, internship, co op, postdoc, postdoctoral, scientist, researcher, mid level, intermediate, fellow, part time, temporary, seasonal, fixed term, contract to hire, recruiter, designer, educator, phd, customer support, gtm, go to market, curriculum, instructional, business developer, business development, developer advocate, developer relations, content developer                   |
+| Exclude keywords                          | senior, sr, staff, principal, lead, manager, director, head, vp, vice president, architect, distinguished, intern, internship, co op, postdoc, postdoctoral, scientist, researcher, mid level, intermediate, fellow, part time, temporary, seasonal, fixed term, contract to hire, recruiter, designer, educator, writer, executive assistant, technical support, freelance, industrial placement, phd, customer support, gtm, go to market, curriculum, instructional, business developer, business development, developer advocate, developer relations, content developer                   |
 | Require a level keyword on company boards | Off                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Apply level keywords to Simplify          | Off                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | ;                                                                                                                                                                                                                                                                            |
 | Simplify trusted categories               | Software, Software Engineering (other categories need a role keyword)                                                                                                                                                                                                                                                                                                                                                                                                                                         | Matched case-insensitively against `category`                                                                                                                                                                                                                                |
@@ -948,7 +1061,7 @@ Template variables (`NODE_ENV`, `LOG_LEVEL`, `PORT`, `HOST`, `APP_NAME`,
 | `PUBLIC_URL`        | Push click target, e.g. `https://jobvr.<tailnet>.ts.net`            |
 | `AUTH_MODE`         | `none` (MVP)                                                        |
 | `SCHEDULER_ENABLED` | `true` on the PC; `false` in Mac dev unless testing                 |
-| `OPENAI_API_KEY`    | Optional (secret): the AI tier rater. Unset: new companies stay Startup, unrated |
+| `OPENAI_API_KEY`    | Optional (secret): the AI tier rater. Unset: new companies stay C, unrated |
 | `OPENAI_MODEL`      | The rater's model (default `gpt-5-mini`)                            |
 | `TS_AUTHKEY`        | Tailscale auth key (compose only)                                   |
 | `POSTGRES_PASSWORD` | Database password, letters and digits (compose only)                |
@@ -967,8 +1080,8 @@ core's console logger with the same one-line shape. Core takes a `Logger` port
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `server`    | Database ready (host/name only, migration time), listening (env, scheduler, sources), shutdown, fatal startup errors. In development a busy port is retried for 5 s (tsx restarts before the old process exits).                                                                                                                       |
 | `http`      | One line per `/api` request: `GET /api/jobs 200` plus `responseTime`, `reqId`; successful reads at debug (open tabs check settings every minute), successful writes at info, 4xx warn, 5xx error. `/health` and static files at trace.                                                                                                         |
-| `scheduler` | Start (tick timing, whether pushes are configured), a crashed task (error), a tick skipped because the previous one still runs (warn), tick time (debug).                                                                                                                                                                              |
-| `poll`      | Per target: changes (new/closed/reopened) at info, unchanged at debug, with listings, details fetched, and duration; failures at warn with the streak (`2 in a row`), company/ATS/slug and HTTP status; the move to needs review; a source outage as one warn line (its boards at debug); budget-skipped targets. One summary per run. |
+| `scheduler` | Start (tick timing, whether pushes are configured), a wake from sleep ("woke after …", info), a crashed task (error), a tick skipped because the previous one still runs (warn), tick time (debug).                                                                                                                                    |
+| `poll`      | "poll started · N targets" (info) once a due poll begins; per target: changes (new/closed/reopened) at info, unchanged at debug, with listings, details fetched, and duration; failures at warn with the streak (`2 in a row`), company/ATS/slug and HTTP status; the move to needs review; a source outage as one warn line (its boards at debug); budget-skipped targets. One summary per run ("poll finished in …", a warn when boards failed). |
 | `notify`    | Push sent (count, job ids), push failed (status/cause, no stack), NTFY_URL unset (warned once); not due / quiet hours / nothing new at debug.                                                                                                                                                                                          |
 | `cleanup`   | Jobs deleted and the retention cutoff.                                                                                                                                                                                                                                                                                                 |
 | `companies` | Company upkeep and hand adds: a company added (board and job count, or "no readable job board"), rated (tier and reason, with the model), merged or kept apart (and why), a board found by heal or list boards, a heal giving up, a rating that failed (warn), the daily AI cap reached (once a day); budget-skipped work and not-added suggestions at debug. |
@@ -1007,6 +1120,10 @@ tokens (8+ characters).
 
 All routes under `/api` use the template envelope `{ success, data?, error?,
 message?, count?, details? }`. Job IDs contain `:` and are URL-encoded in paths.
+Outside production the OpenAPI document (`/openapi.json`, Scalar at
+`/reference`) describes every route: write routes list 403 (`writeErrors`,
+the cross-site guard in Edge Cases), and `/health`, a plain route that answers
+before the API is up, is registered by hand.
 
 | Route                                             | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1015,11 +1132,11 @@ message?, count?, details? }`. Job IDs contain `:` and are URL-encoded in paths.
 | `POST /api/jobs/visit`                            | Sets `last_visit_at = now`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `PATCH /api/jobs/:id`                             | Body `{ state: "new" \| "saved" \| "hidden" \| "applied" }`. Any state can move to any other (Undo relies on this). Marking applied sets `applied_at = now` only when it's empty (so a repost or an undone "Not applied" keeps the first date); leaving applied keeps the column as is.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `GET /api/companies`                              | All companies (incl. `tierSource`, `tierReason`) with health joined from `source_state` and `stats` (`roles30d`, `lastRoleAt`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `POST /api/companies/add`                         | Body `{ query }` (1 to 300 characters: a careers or board link, or a name). Adds the company as in [Company upkeep](#company-upkeep) (Add by link or name) and rates its tier at once when a rater is configured. 201 with the company; message says when no board was found. 400 when the linked board doesn't exist or can't be reached, 409 when the name is already listed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `POST /api/companies`, `PATCH /api/companies/:id` | Validated against the company invariants; 409 on a duplicate normalized name or `ats` + `slug`. Setting `status` to `ok` resets `consecutive_failures`. A `tier` in a PATCH makes it `tier_source = manual` (never overwritten; reason cleared); `autoTier: true` hands it back (`pending`, reason cleared) and rates it at once; both together → 400. POST creates `manual` tiers, `track` defaulting to true when there's a slug and the status isn't `manual_only`. The web app uses only `tier` and `autoTier`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `POST /api/companies/add`                         | Body `{ query }` (1 to 300 characters: a careers or board link, or a name). Adds the company as in [Company upkeep](#company-upkeep) (Add by link or name) and rates its tier at once when a rater is configured, waiting at most 10 s (`RATE_WAIT_MS`) so the request stays inside the request timeout (a slower rating lands in the background). 201 with the company (the one it merged into when the AI found it's already listed under another name); message says when no board was found. 400 when the linked board doesn't exist or can't be reached, 409 when the name is already listed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `POST /api/companies`, `PATCH /api/companies/:id` | Validated against the company invariants; 409 on a duplicate normalized name or `ats` + `slug`. Setting `status` to `ok` resets `consecutive_failures`. Changing `ats` without a `status` sets it: a supported ATS → `ok`, `other` → `manual_only` with `track = false`; moving off `other` onto a board with a slug also sets `track = true` unless the PATCH says otherwise. A `tier` in a PATCH makes it `tier_source = manual` (never overwritten; reason cleared); `autoTier: true` hands it back (`pending`, reason cleared) and rates it at once; both together → 400. POST creates `manual` tiers, `track` defaulting to true when there's a slug and the status isn't `manual_only`. The web app uses only `tier` and `autoTier`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `DELETE /api/companies/:id`                       | Deletes it for good: dismisses every suggestion it stood for and keeps its names dismissed (see [Company upkeep](#company-upkeep)); its jobs keep `company_name` with `company_id` set null.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `GET /api/suggestions`                            | Open suggestions with `listing_count > 0`, sorted by `listing_count` desc. The suggestions routes remain (auto-add reads the same rows) but no web page calls them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `POST /api/suggestions/:id/add`                   | Body `{ tier }` (default `Startup`, `tier_source = manual`). Creates a company with `name = display_name`, `city`/`state` null, the suggestion's `ats`/`slug`. Supported `ats` with slug → company with `track = true`, status `ok` (polled from the next run, starting with a baseline). Supported `ats` without slug → `track = false`, status `needs_review`, note "find slug with discover". `other` → `manual_only`, `track = false`. Suggestion → `added`. 409 if a company with the same normalized name or the same `ats` + `slug` exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `POST /api/suggestions/:id/add`                   | Body `{ tier }` (optional). With a tier, `tier_source = manual`; without one, tier C (`UNRATED_TIER`) and `pending`, so the AI rates it. Creates a company with `name = display_name`, `city`/`state` null, the suggestion's `ats`/`slug`. Supported `ats` with slug → company with `track = true`, status `ok` (polled from the next run, starting with a baseline). Supported `ats` without slug → `track = false`, status `needs_review`, note "find slug with discover". `other` → `manual_only`, `track = false`. Suggestion → `added`. 409 if a company with the same normalized name or the same `ats` + `slug` exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `POST /api/suggestions/:id/dismiss`               | Suggestion → `dismissed` (never shown again).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `GET /api/settings`                               | `{ settings, lastPollAt, lastPollOkAt, lastPushAt, lastVisitAt, backup: { lastBackupAt, problem }, sourceOutages, sourceHealth, sources, tierModel }`: `lastPollOkAt` is when the last poll finished (the web app refetches job lists when it moves), `sourceHealth` the aggregators' health, `sources: { id, label, kind }[]` from the registry (the web app builds the Enabled-sources switches and source labels from it), `tierModel` the rater's model or null without `OPENAI_API_KEY`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `PATCH /api/settings`                             | Partial update (see Settings); returns the same payload.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -1036,7 +1153,7 @@ ties to the newest `effective_at`:
 | Freshness  | effective age under 1 day 30, 3 days 24, 7 days 18, 14 days 12, 30 days 6, older 0 |
 | Level      | title is entry level 20; otherwise listed by SimplifyJobs 12                       |
 | Experience | a source's description asks for 2 years: -6 (3+ is hidden)                         |
-| Tier       | S 20, A 15, Mid 8, Startup 8, Corporate 5, Unlisted 0                              |
+| Tier       | S 20, A 15, B 10, C 6, D 3, Unlisted 0                                             |
 | Place      | matches a named location other than Remote-US: 4                                   |
 
 Freshness and level weigh most, so a fresh new-grad role beats a stale plain
@@ -1052,7 +1169,9 @@ shortcuts).
 
 - **Header** (no tab bar): the logo (a radar mark, shared with the tab and
   home-screen icons) and the `jobvr` wordmark, linking home; on the right the
-  poll status ("polled 3 min ago", a dot that is red and says "late" when no
+  poll status ("polling…" with a pulsing dot while a poll runs, refetching
+  every 3 s until it finishes; then "polled 3 min ago", counted from when the
+  last poll finished; a dot that is red and says "late" when no
   poll started for about two intervals, amber with "Lever down" during a source
   outage, "offline · saved data" without a connection), which opens Logs; then
   Companies and Settings icons.
@@ -1063,7 +1182,7 @@ shortcuts).
   (`applied_at`), closed ones included.
 - **Filters**: one compact row: view, age (All, Today, 1h, 3 days, 1 week),
   order (Best / Newest; not shown on Applied), a "Tiers" button opening a
-  checklist menu (tier dots, "Mid, Startup" or "Mid +3" when set, "Clear";
+  checklist menu (tier dots, "B, C" or "B +3" when set, "Clear";
   none picked means the tracked tiers in Feed, every tier elsewhere), then
   search. The place, source and company filters are gone from the UI (places
   are set in Settings, and search covers companies, places and titles); the
@@ -1124,8 +1243,8 @@ shortcuts).
 - **Scroll pill**: on pages at least 400 px taller than the screen, one small
   pill: "Bottom" at the bottom while in the top half (stepping aside for toasts
   and the settings save bar), "Top" under the header past the middle.
-- **Tier colors**, used wherever a tier shows: S amber, A blue, Mid green,
-  Startup plum, Corporate grey, Unlisted faint.
+- **Tier colors**, used wherever a tier shows: S amber, A blue, B green,
+  C plum, D grey, Unlisted faint.
 - **Companies** (read-only list): name (with the AI's reason and city), tier
   badge (with an AI mark when rated, "?" when not rated yet; tooltip says
   where it came from), matching roles in the last 30 days, newest role, and one
@@ -1149,8 +1268,13 @@ shortcuts).
   When the settings change underneath (another tab), untouched fields follow
   and edits in progress stay, also while a save is on its way.
 - **Logs**: the activity log (`GET /api/logs`), newest first, fetched every
-  4 s while live (Pause / Resume), with a level filter (All, Warnings, Errors)
-  and a text filter; a restart starts the list over.
+  4 s while live (Pause / Resume), with a level filter (All, Warnings, Errors),
+  a time filter (All, Today, 1h) and a text filter; a restart starts the list
+  over. A Copy button copies the lines shown, oldest first, as plain text
+  (`2026-11-25 08:13:01 INFO  poll · …`). Each module keeps one color; poll
+  start and finish, pushes and wakes are marked with a colored edge so each
+  poll reads as a block; counts are highlighted (`+N new`, closed, failed,
+  HTTP 4xx/5xx), and a "rated X B:" line shows the tier in its color.
 
 PWA installable on the phone (over Tailscale HTTPS); manifest `id`/`scope` `/`,
 standalone, maskable icon, and home-screen shortcuts to Saved (`/?view=saved`) and Applied (`/?view=applied`). Updates: the
@@ -1169,21 +1293,22 @@ data"; writes fail with "Can't reach jobvr".
 | Constant                                               | Value                                                                                               |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
 | Scheduler tick / first tick after boot / due tolerance | 5 min / 10 s / 60 s                                                                                 |
+| Wake check (`WAKE_CHECK_MS` / `WAKE_GAP_MS`)           | every 15 s; a gap 60 s past that ticks at once                                                      |
 | Poll store window (max effective age stored)           | Setting "Keep jobs posted within" (default 30 days); entry-level board titles 180 days              |
 | In-memory dedupe/closure set                           | max(store window, 180 days)                                                                         |
 | Retention for new/hidden jobs                          | max(store window, 180 days) + 15 days (cleanup every 24 h)                                          |
 | Per-source concurrency (declared by each adapter)      | Greenhouse 3, Lever 3, Ashby 3, SmartRecruiters 2, Workable 2, SimplifyJobs 1, SpeedyApply 1, Jobright 1 |
-| `FILTER_VERSION`                                       | integer in `core` (14 in Nov 2026); bump whenever matching/normalization code changes (forces unconditional refetch) |
+| `FILTER_VERSION`                                       | integer in `core` (19 in late Nov 2026); bump whenever matching/normalization code changes (forces unconditional refetch) |
 | Poll run budget                                        | 5 min                                                                                               |
 | HTTP                                                   | 15 s timeout (60 s for a whole Greenhouse/Lever/Ashby board, not retried after it), 1 retry (1–3 s jitter, `Retry-After` ≤ 30 s), 50 MB cap |
 | Invalid-item threshold                                 | > 50% of a non-empty response → fetch failure                                                       |
 | Fuzzy dedupe                                           | title token-set Jaccard ≥ 0.85                                                                      |
 | Failures before `needs_review`                         | 3 consecutive                                                                                       |
 | Salary annualization                                   | hour × 2080, week × 52, month × 12                                                                  |
-| Backups                                                | nightly `pg_dump` at 03:00 America/New_York (up to ~5 min late, see Edge Cases), keep 14; `backup --once` on demand |
+| Backups                                                | nightly `pg_dump` at 03:00 America/New_York (up to ~5 min late, see Edge Cases), keep 14; a missing one (none in 25 h) retried every 5 min; `backup --once` on demand; alerts after a problem lasts 10 min (`BACKUP_GRACE_MS`) |
 | Company upkeep budget per tick                         | 60 s each for tiers and heal (`UPKEEP_BUDGET_MS`)                                                   |
 | Auto-add                                               | 10 suggestions a run; a board that didn't answer retried after 1 day                               |
-| AI tier rating                                         | 10 a run, 200 calls per rolling day, retry after 1 h; 300 completion tokens, 30 s timeout          |
+| AI tier rating                                         | 10 a run, 200 calls per rolling day, retry after 1 h; 300 completion tokens, 30 s timeout; add by link or name waits at most 10 s (`RATE_WAIT_MS`) |
 | Heal                                                   | 3 companies a run, each every 6 h; gives up 3 days after `needs_review_since`                      |
 | List boards                                            | 5 companies a run, each once a day                                                                  |
 | Activity log                                           | 1000 entries (info and above), 2000 characters per message                                         |
@@ -1249,7 +1374,9 @@ data"; writes fail with "Can't reach jobvr".
   board that keeps returning fewer postings than `totalFound` (over 2,000 US
   postings) never closes anything and is read in full every poll.
 - PC sleep / Windows Update reboots cause missed ticks; the boot tick catches
-  up. Docker Desktop must start at login and PC sleep must be disabled. `/health`
+  up after a reboot, and the scheduler's wake check ticks right away after a
+  sleep (timers pause while asleep). Docker Desktop must start at login and PC
+  sleep should be disabled. `/health`
   and company health expose staleness.
 - Postgres 18 images keep data under `/var/lib/postgresql/18/docker`; the
   compose volume must mount `/var/lib/postgresql` (not `.../data`, which fails
@@ -1260,13 +1387,17 @@ data"; writes fail with "Can't reach jobvr".
   each result in `settings` (`last_backup_at`, `backup_error`,
   `backup_error_at`); the scheduler's backup check (`runBackupCheck`) pushes
   "jobvr backup problem" when the last backup failed or none succeeded for 26
-  h, outside quiet hours, at most once a day (`backup_alert_at`); Settings
+  h, outside quiet hours, at most once a day (`backup_alert_at`), and only once
+  the problem has lasted 10 min (`BACKUP_GRACE_MS`), so waking after a night
+  asleep doesn't alert before the backup service has caught up; Settings
   shows the last backup or the problem. Nothing is reported until a backup was
-  recorded once (none runs on the Mac). A PC that was off at 03:00 backs up
-  when the service starts (no dump in the last 25 h). A single long `sleep`
-  stops counting while the PC sleeps or hibernates, so the script naps 5 min at
-  a time against the wall clock: the nightly dump runs up to ~5 min after
-  03:00, or soon after the PC wakes if it slept through it.
+  recorded once (none runs on the Mac). A single long `sleep` stops counting
+  while the PC sleeps or hibernates, so the script naps 5 min at a time
+  against the wall clock: the nightly dump runs up to ~5 min after 03:00. On
+  every nap it also checks for a dump in the last 25 h and takes one when
+  there's none, so a PC that was off or asleep at 03:00, or a catch-up that
+  failed (Postgres still starting after Docker restarts), is retried every 5
+  minutes instead of the next night.
 - A poll that starts every tick and then crashes leaves only a quiet feed →
   each poll records when it finished (`last_poll_ok_at`; boards failing don't
   count against it), and the scheduler's poll check (`runPollStallCheck`)
@@ -1276,6 +1407,13 @@ data"; writes fail with "Can't reach jobvr".
 - `git pull` replaces `deploy/backup.sh` → compose mounts the `deploy/` folder
   (a single-file mount keeps the old copy) and each night runs a fresh copy of
   the script, so updates apply without recreating the service.
+- An unpinned sidecar image could pull a breaking Tailscale release on any
+  restart → `docker-compose.yml` pins `tailscale/tailscale:v1.104.7`; bump it
+  by hand.
+- Every request reaches the app from the Tailscale sidecar, so one rate-limit
+  bucket would be shared by every device → compose sets `TRUST_PROXY=true`
+  (only Tailscale reaches the app, and it sets `X-Forwarded-For` to the
+  device's tailnet address), so rate limits are per tailnet device.
 - Docker Desktop never rotates container logs → every compose service caps
   them at 5 × 10 MB, and the app logs at `PC_LOG_LEVEL` (default `info`), not
   the `.env` `LOG_LEVEL` meant for the Mac.
@@ -1320,7 +1458,8 @@ Vitest everywhere.
   saved), column-scoped writes not clobbering a concurrent Hide; company
   upkeep (auto-add, AI tiering with a fake rater and the merge guards, heal's
   name check and 3-day clock, add by link or name, slug candidates); level codes
-  (L3, L4, IC3, ranges).
+  (L3, L4, IC3, ranges); built-in rejects, alternatives and role-phrase masks,
+  new-grad engineering parts, and a bare "Remote" beside foreign places.
 - **Integration**: repositories and API routes against Testcontainers Postgres,
   using Hono `testClient`; the scheduler's step order and stop; the activity
   log's redaction and `GET /api/logs`. Web: Vitest + Testing Library for the
