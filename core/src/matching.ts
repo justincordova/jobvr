@@ -1,6 +1,6 @@
 import { ANNUALIZE } from "./constants";
 import { adjustedPostedAt } from "./freshness";
-import { containsSequence, matchesAnyKeyword, tokenize } from "./normalize";
+import { containsSequence, matchesAnyKeyword, matchesKeyword, tokenize } from "./normalize";
 import { maxStoreWindowMs, type Settings, storeWindowMs } from "./settings";
 import type { Salary } from "./sources/types";
 import { stateCode, stateName } from "./us-states";
@@ -161,18 +161,62 @@ const isExperiencedLevel = (title: string) => {
 
 /**
  * Blanks out the words of multi-word role phrases found in the title, so an
- * exclude word inside one ("Member of Technical Staff") doesn't reject it.
+ * exclude word inside one ("Member of Technical Staff") doesn't reject it. A
+ * phrase that is itself excluded ("machine learning" in both lists) isn't masked.
  */
-const maskRolePhrases = (tokens: readonly string[], roles: readonly string[]): string[] => {
+const maskRolePhrases = (
+  tokens: readonly string[],
+  roles: readonly string[],
+  excludes: readonly string[],
+): string[] => {
+  const excluded = new Set(excludes.map((k) => tokenize(k).join(" ")));
   const out = [...tokens];
   for (const phrase of roles) {
     const needle = tokenize(phrase);
-    if (needle.length < 2) continue;
+    if (needle.length < 2 || excluded.has(needle.join(" "))) continue;
     for (let i = 0; i + needle.length <= out.length; i++) {
       if (needle.every((w, j) => tokens[i + j] === w)) out.fill("", i, i + needle.length);
     }
   }
   return out;
+};
+
+/** Joins between alternatives in a title: "Embedded/Backend", "C++ or Python", "Data & ML". */
+const ALTERNATIVE_JOIN = /\s*(?:\/|&|\bor\b|\band\b)\s*/i;
+
+/** Tokens of the longest keyword at the start or end of `tokens` (0 when none). */
+const keywordAtEdge = (tokens: readonly string[], keywords: readonly string[], end: boolean) => {
+  let best = 0;
+  for (const k of keywords) {
+    const n = tokenize(k).length;
+    if (n === 0 || n > tokens.length || n <= best) continue;
+    const edge = end ? tokens.slice(tokens.length - n) : tokens.slice(0, n);
+    if (matchesKeyword(edge, k)) best = n;
+  }
+  return best;
+};
+
+/**
+ * Title tokens for the exclude check, with an excluded word blanked when it's
+ * one alternative beside one that isn't: "Software Engineer (Embedded/Backend)"
+ * and "C++ or Python" offer a choice, "Embedded Software Engineer" doesn't.
+ * Both sides excluded ("Senior/Staff") still rejects.
+ */
+const maskAlternatives = (title: string, excludes: readonly string[]): string[] => {
+  const parts = title.split(ALTERNATIVE_JOIN).map(tokenize);
+  for (let i = 0; i + 1 < parts.length; i++) {
+    const left = parts[i] ?? [];
+    const right = parts[i + 1] ?? [];
+    if (left.length === 0 || right.length === 0) continue;
+    const l = keywordAtEdge(left, excludes, true);
+    const r = keywordAtEdge(right, excludes, false);
+    // "Research Engineer / Scientist" offers two jobs, not two tracks: no waiver
+    const jobTitle = (word: string | undefined) =>
+      matchesAnyKeyword([word ?? ""], GENERIC_ENGINEERING);
+    if (l > 0 && r === 0 && !jobTitle(right[0])) left.fill("", left.length - l);
+    else if (r > 0 && l === 0 && !jobTitle(left.at(-1))) right.fill("", 0, r);
+  }
+  return parts.flat();
 };
 
 /**
@@ -195,7 +239,11 @@ export const passesKeywordRule = (
   category?: string | null,
 ): boolean => {
   const tokens = tokenize(title);
-  const excludable = maskRolePhrases(tokens, settings.roleKeywords);
+  const excludable = maskRolePhrases(
+    maskAlternatives(title, settings.excludeKeywords),
+    settings.roleKeywords,
+    settings.excludeKeywords,
+  );
   if (matchesAnyKeyword(excludable, settings.excludeKeywords) || CONTRACT_TAG.test(title)) {
     return false;
   }

@@ -24,6 +24,33 @@ describe("keyword rule", () => {
     expect(ats("Staff Software Engineer")).toBe(false);
   });
 
+  it("an excluded word offered as one alternative doesn't reject; on its own it does", () => {
+    const picky = {
+      ...S,
+      excludeKeywords: [...S.excludeKeywords, "embedded", "python", "machine learning", "ml"],
+    };
+    for (const t of [
+      "Software Engineer (Embedded/Backend)",
+      "Software Engineer (C++ or Python) - 2027 Grads",
+      "Backend & ML Engineer, New Grad",
+      "Software Engineer - Intern / New Grad",
+    ]) {
+      expect(ats(t, picky), t).toBe(true);
+    }
+    for (const t of [
+      "Embedded Software Engineer",
+      "Software Development Engineer – Early Career - Embedded Systems",
+      "Python Developer",
+      "Machine Learning Engineer, New Grad",
+      "ML Platform Engineer",
+      "Senior/Staff Software Engineer",
+      "Senior Software Engineer / Backend",
+      "Embedded Software Engineer / Developer",
+    ]) {
+      expect(ats(t, picky), t).toBe(false);
+    }
+  });
+
   it("company boards: role keyword, no seniority; level is optional by default", () => {
     for (const t of [
       "Software Engineer, New Grad",
