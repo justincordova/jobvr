@@ -383,7 +383,7 @@ describe("companies routes", () => {
     expect(await badUrl.json()).toMatchObject({ message: "careers URL: Invalid URL" });
     const badInvariant = await client.api.companies[":id"].$patch({
       param: { id: created.data.id },
-      json: { ats: "other" },
+      json: { ats: "other", track: true },
     });
     expect(badInvariant.status).toBe(400);
 

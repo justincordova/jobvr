@@ -239,4 +239,19 @@ describe("companies repo", () => {
       "sj:o": null,
     });
   });
+
+  it("a company moved onto a board is polled again, and off one stops", async () => {
+    const { db } = database;
+    const c = await createCompany(db, {
+      name: "Boardless",
+      tier: "B",
+      ats: "other",
+      track: false,
+      status: "manual_only",
+    });
+    const moved = await updateCompany(db, c.id, { ats: "ashby", slug: "boardless", track: true });
+    expect(moved).toMatchObject({ status: "ok", track: true });
+    const back = await updateCompany(db, c.id, { ats: "other", slug: null });
+    expect(back).toMatchObject({ status: "manual_only", track: false });
+  });
 });

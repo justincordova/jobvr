@@ -238,6 +238,11 @@ export const updateCompany = async (
       const [current] = await tx.select().from(companies).where(eq(companies.id, id)).for("update");
       if (!current) throw new NotFoundError("Company not found");
 
+      const ats = patch.ats ?? current.ats;
+      // Moving onto a readable board (or off one) changes what the status must be:
+      // a board left `manual_only` would never be polled
+      const movedStatus: CompanyStatus | null =
+        ats === current.ats ? null : ats === OTHER_ATS ? "manual_only" : "ok";
       const next = {
         name: patch.name !== undefined ? patch.name.trim() : current.name,
         city: patch.city !== undefined ? clean(patch.city) : current.city,
@@ -245,12 +250,12 @@ export const updateCompany = async (
         tier: patch.tier ?? current.tier,
         tierSource: patch.tierSource ?? current.tierSource,
         tierReason: patch.tierReason !== undefined ? clean(patch.tierReason) : current.tierReason,
-        track: patch.track ?? current.track,
-        ats: patch.ats ?? current.ats,
+        track: patch.track ?? (ats === OTHER_ATS ? false : current.track),
+        ats,
         slug: patch.slug !== undefined ? clean(patch.slug) : current.slug,
         careersUrl: patch.careersUrl !== undefined ? clean(patch.careersUrl) : current.careersUrl,
         notes: patch.notes !== undefined ? clean(patch.notes) : current.notes,
-        status: (patch.status ?? current.status) as CompanyStatus,
+        status: (patch.status ?? movedStatus ?? current.status) as CompanyStatus,
       };
       const normalizedName = normalizeCompanyName(next.name);
       if (!normalizedName) throw new InvalidError("Company name is empty");
