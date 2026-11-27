@@ -179,6 +179,7 @@ describe("keyword rule", () => {
       true,
     );
     expect(sj("Electrical Engineer New Grad - Rotation Program", "Software")).toBe(false);
+    expect(sj("Solution Engineer", "Software Engineering")).toBe(false);
     expect(ats("Field Services Engineer, New Grad")).toBe(false);
     expect(passesKeywordRule("Associate - Technology Transactions", "ats", S)).toBe(false);
     expect(sj("Senior Software Engineer", "Software")).toBe(false);

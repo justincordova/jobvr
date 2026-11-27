@@ -72,6 +72,7 @@ const NON_SOFTWARE = [
   "compliance",
   "field",
   "support",
+  "solution",
   "solutions",
   "customer",
   "network",
