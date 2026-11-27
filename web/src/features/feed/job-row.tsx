@@ -62,6 +62,9 @@ const freshness = (iso: string) => {
   return hours < 24 ? 'text-go' : hours < 72 ? 'text-paper/80' : 'text-faint'
 }
 
+/** "Parsippany, NJ, United States" → "Parsippany, NJ": the country only takes room in a US feed. */
+const TRAILING_US = /,\s*(?:united states(?: of america)?|usa|us)\s*$/i
+
 /** Matching places first ("King of Prussia, PA" before "Farmington Hills, MI"), then a count. */
 function placeSummary(job: Job, shown: number) {
   const rest = job.locations.filter((l) => !job.matchedLocations.includes(l))
@@ -70,7 +73,8 @@ function placeSummary(job: Job, shown: number) {
     (l, _, all) => l !== REMOTE_US || !all.some((o) => o !== l && /remote/i.test(o)),
   )
   const extra = ordered.length - shown
-  return `${ordered.slice(0, shown).join(' · ')}${extra > 0 ? ` +${extra}` : ''}`
+  const places = ordered.slice(0, shown).map((l) => l.replace(TRAILING_US, ''))
+  return `${places.join(' · ')}${extra > 0 ? ` +${extra}` : ''}`
 }
 
 export function JobRow({

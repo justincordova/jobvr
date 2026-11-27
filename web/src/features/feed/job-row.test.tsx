@@ -82,6 +82,16 @@ describe('JobRow', () => {
     expect(screen.getByText('King of Prussia, PA · Farmington Hills, MI +1')).toBeInTheDocument()
   })
 
+  it('drops a trailing United States from places', () => {
+    renderRow(
+      job({
+        locations: ['Parsippany, NJ, United States'],
+        matchedLocations: ['Parsippany, NJ, United States'],
+      }),
+    )
+    expect(screen.getAllByText('Parsippany, NJ')).toHaveLength(2)
+  })
+
   it('notes reposts of the same role', () => {
     renderRow(job({ duplicateIds: ['gh:2', 'gh:3'] }))
     expect(screen.getByText('· 3 postings')).toBeInTheDocument()
