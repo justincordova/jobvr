@@ -40,6 +40,9 @@ services:
       # The app is same-origin behind Tailscale; .env.example's localhost origins are for
       # the Mac and would let a localhost page on any tailnet device read and write jobvr
       ALLOWED_ORIGINS: ""
+      # Only Tailscale reaches the app, and it sets X-Forwarded-For to the device's tailnet
+      # address: each device gets its own rate-limit bucket
+      TRUST_PROXY: "true"
       # .env.example's LOG_LEVEL is for the Mac (debug); set PC_LOG_LEVEL=debug to dig into an issue
       LOG_LEVEL: ${PC_LOG_LEVEL:-info}
     depends_on:
@@ -49,7 +52,8 @@ services:
     logging: *logging
 
   tailscale:
-    image: tailscale/tailscale:stable
+    # Pinned so a restart can't pull a breaking release; bump by hand
+    image: tailscale/tailscale:v1.104.7
     hostname: jobvr
     environment:
       TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY in .env}
