@@ -15,24 +15,35 @@ import { created, ok } from "@/utils/response";
 import type * as routes from "./routes";
 import { assertKnownAts, toCompanyDto, withCreateDefaults, withHealth } from "./services";
 
+/** How long adding a company waits for its AI tier before answering. */
+const RATE_WAIT_MS = 10_000;
+
 /**
  * Rates one company now (when a rater is configured), so its tier shows at once,
  * and returns it. Rating is best effort; when the AI finds it's a company already
- * listed under another name, it's merged and that company is returned.
+ * listed under another name, it's merged and that company is returned. A slow
+ * answer isn't waited out: the request returns after `RATE_WAIT_MS` and the
+ * rating lands in the background.
  */
 const rateNow = async (deps: AppDeps, company: { id: string; name: string }) => {
-  try {
-    await runAutoTier({
-      database: deps.database,
-      rater: deps.tierRater,
-      state: deps.tierState,
-      logger,
-      now: deps.now,
-      ids: [company.id],
-    });
-  } catch (err) {
+  const rating = runAutoTier({
+    database: deps.database,
+    rater: deps.tierRater,
+    state: deps.tierState,
+    logger,
+    now: deps.now,
+    ids: [company.id],
+  }).catch((err) => {
     logger.warn({ err, company: company.name }, `couldn't rate ${company.name} now`);
-  }
+  });
+  let timer: NodeJS.Timeout | undefined;
+  await Promise.race([
+    rating,
+    new Promise((resolve) => {
+      timer = setTimeout(resolve, RATE_WAIT_MS);
+    }),
+  ]);
+  clearTimeout(timer);
   const { db } = deps.database;
   const [found] = await listCompaniesWithHealth(db, company.id);
   if (found) return toCompanyDto(found, found.health, found.stats);

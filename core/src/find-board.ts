@@ -86,24 +86,34 @@ export const findBoardByName = async (
   options: FindBoardOptions,
 ): Promise<BoardHit | null> => {
   const candidates = slugCandidates(name).filter((slug) => options.accept?.(slug) ?? true);
+  const hits: BoardHit[] = [];
+  // ATSes are separate hosts, so they're searched side by side; a few guesses at a time per host
+  await Promise.all(
+    atsAdapters(options).map(async (adapter) => {
+      const probe = adapter.probe?.bind(adapter);
+      if (!probe) return;
+      for (let i = 0; i < candidates.length; i += 3) {
+        if (options.signal?.aborted) return;
+        const batch = candidates.slice(i, i + 3);
+        const results = await Promise.allSettled(
+          batch.map((slug) => probe(slug, { http: options.http, signal: options.signal })),
+        );
+        results.forEach((r, j) => {
+          if (r.status !== "fulfilled" || !r.value.found || r.value.jobCount === 0) return;
+          hits.push({ ats: adapter.id, slug: batch[j] as string, jobCount: r.value.jobCount });
+        });
+      }
+    }),
+  );
+  // Registry order breaks ties, as when the ATSes were searched one by one
+  const order = atsAdapters(options).map((a) => a.id);
   let best: BoardHit | null = null;
-  for (const adapter of atsAdapters(options)) {
-    const probe = adapter.probe?.bind(adapter);
-    if (!probe) continue;
-    // A few at a time per ATS to stay polite
-    for (let i = 0; i < candidates.length; i += 3) {
-      if (options.signal?.aborted) return best;
-      const batch = candidates.slice(i, i + 3);
-      const results = await Promise.allSettled(
-        batch.map((slug) => probe(slug, { http: options.http, signal: options.signal })),
-      );
-      results.forEach((r, j) => {
-        if (r.status !== "fulfilled" || !r.value.found || r.value.jobCount === 0) return;
-        if (!best || r.value.jobCount > best.jobCount) {
-          best = { ats: adapter.id, slug: batch[j] as string, jobCount: r.value.jobCount };
-        }
-      });
-    }
+  for (const hit of hits.sort(
+    (a, b) =>
+      order.indexOf(a.ats) - order.indexOf(b.ats) ||
+      candidates.indexOf(a.slug) - candidates.indexOf(b.slug),
+  )) {
+    if (!best || hit.jobCount > best.jobCount) best = hit;
   }
   return best;
 };
