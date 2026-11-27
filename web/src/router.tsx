@@ -1,11 +1,15 @@
-import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+  redirect,
+} from '@tanstack/react-router'
 import { AppShell } from '@/components/app-shell'
-import { CompaniesPage } from '@/features/companies/companies-page'
 import { FeedPage } from '@/features/feed/feed-page'
 import { parseFeedSearch } from '@/features/feed/search'
-import { LogsPage } from '@/features/logs/logs-page'
-import { SettingsPage } from '@/features/settings/settings-page'
 
+// The feed loads first; the other pages load on the way there (preloaded on hover or tap)
 const rootRoute = createRootRoute({ component: AppShell })
 
 const feedRoute = createRoute({
@@ -28,7 +32,10 @@ const appliedRoute = createRoute({
 const companiesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/companies',
-  component: CompaniesPage,
+  component: lazyRouteComponent(
+    () => import('@/features/companies/companies-page'),
+    'CompaniesPage',
+  ),
 })
 
 // Companies are added automatically now; old links to Suggested land on Companies
@@ -43,13 +50,13 @@ const suggestedRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
-  component: SettingsPage,
+  component: lazyRouteComponent(() => import('@/features/settings/settings-page'), 'SettingsPage'),
 })
 
 const logsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/logs',
-  component: LogsPage,
+  component: lazyRouteComponent(() => import('@/features/logs/logs-page'), 'LogsPage'),
 })
 
 const routeTree = rootRoute.addChildren([
