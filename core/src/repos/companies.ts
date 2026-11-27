@@ -240,6 +240,10 @@ export const updateCompany = async (
       // a board left `manual_only` would never be polled
       const movedStatus: CompanyStatus | null =
         ats === current.ats ? null : ats === OTHER_ATS ? "manual_only" : "ok";
+      const slug = patch.slug !== undefined ? clean(patch.slug) : current.slug;
+      // Off "other" (never tracked) onto a board with a slug: polled from now on
+      const movedTrack =
+        ats === OTHER_ATS ? false : current.ats === OTHER_ATS && slug ? true : current.track;
       const next = {
         name: patch.name !== undefined ? patch.name.trim() : current.name,
         city: patch.city !== undefined ? clean(patch.city) : current.city,
@@ -247,9 +251,9 @@ export const updateCompany = async (
         tier: patch.tier ?? current.tier,
         tierSource: patch.tierSource ?? current.tierSource,
         tierReason: patch.tierReason !== undefined ? clean(patch.tierReason) : current.tierReason,
-        track: patch.track ?? (ats === OTHER_ATS ? false : current.track),
+        track: patch.track ?? movedTrack,
         ats,
-        slug: patch.slug !== undefined ? clean(patch.slug) : current.slug,
+        slug,
         careersUrl: patch.careersUrl !== undefined ? clean(patch.careersUrl) : current.careersUrl,
         notes: patch.notes !== undefined ? clean(patch.notes) : current.notes,
         status: (patch.status ?? movedStatus ?? current.status) as CompanyStatus,

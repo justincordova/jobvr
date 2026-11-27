@@ -249,7 +249,7 @@ describe("companies repo", () => {
       track: false,
       status: "manual_only",
     });
-    const moved = await updateCompany(db, c.id, { ats: "ashby", slug: "boardless", track: true });
+    const moved = await updateCompany(db, c.id, { ats: "ashby", slug: "boardless" });
     expect(moved).toMatchObject({ status: "ok", track: true });
     const back = await updateCompany(db, c.id, { ats: "other", slug: null });
     expect(back).toMatchObject({ status: "manual_only", track: false });
