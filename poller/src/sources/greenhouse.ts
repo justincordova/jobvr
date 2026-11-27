@@ -25,7 +25,31 @@ const RawJob = z.object({
   // Null on a few live jobs (HRT, Nov 2026); then `updated_at` is all there is
   first_published: z.string().nullish(),
   updated_at: z.string().nullish(),
+  metadata: z
+    .array(z.object({ name: z.string().nullish(), value: z.unknown() }))
+    .nullish()
+    .catch(null),
 });
+
+/** A location that names no place: the real one is then in a custom field. */
+const VAGUE_LOCATION = /^(?:hybrid|in[- ]office|on[- ]?site|multiple locations?|various)?$/i;
+
+/**
+ * The listing's places. Cloudflare's board says only "Hybrid" or "In-Office"
+ * for most jobs and puts the cities in a "Job Posting Location" custom field
+ * (Nov 2026); a field named like a location is used when the location is vague.
+ */
+const locationsOf = (j: z.output<typeof RawJob>): string[] => {
+  const raw = j.location?.name ?? "";
+  const name = raw.trim();
+  if (!VAGUE_LOCATION.test(name)) return [raw];
+  const field = j.metadata?.find((m) => /\blocations?\b/i.test(m.name ?? ""))?.value;
+  const values = (Array.isArray(field) ? field : [field]).filter(
+    (v): v is string => typeof v === "string" && v.trim() !== "",
+  );
+  if (values.length > 0) return values.map((v) => v.trim());
+  return name ? [name] : [];
+};
 
 const Response = z.object({ jobs: z.array(z.unknown()) });
 
@@ -124,7 +148,7 @@ export const greenhouse: SourceAdapter = {
         companyName,
         companySlug: ctx.slug,
         title: j.title.trim(),
-        locations: j.location?.name ? [j.location.name] : [],
+        locations: locationsOf(j),
         url: j.absolute_url,
         postedAt: parseDate(posted),
         postedAtPrecision: "instant",

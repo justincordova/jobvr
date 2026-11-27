@@ -81,6 +81,36 @@ describe("greenhouse adapter", () => {
     expect(res.jobs[0]?.postedAt).toEqual(new Date("2026-11-06T16:28:49Z"));
   });
 
+  it("reads the places from a location field when the location is vague", async () => {
+    const job = (id: number, location: string, value: unknown) => ({
+      id,
+      title: "Software Engineer",
+      absolute_url: `https://boards.greenhouse.io/cloudflare/jobs/${id}`,
+      first_published: "2026-11-19T10:00:00Z",
+      location: { name: location },
+      metadata: [
+        { name: "Cost Center", value: "4700 - Security" },
+        { name: "Job Posting Location", value },
+      ],
+    });
+    const { http } = fakeHttp({
+      [GH]: ok({
+        jobs: [
+          job(1, "Hybrid", ["Austin, TX", "New York, NY"]),
+          job(2, "In-Office", null),
+          job(3, "New York, NY", ["London, UK"]),
+        ],
+      }),
+    });
+    const res = await greenhouse.fetch({ slug: "airtable", http });
+    if (res.status !== "ok") throw new Error("expected ok");
+    expect(res.jobs.map((j) => j.locations)).toEqual([
+      ["Austin, TX", "New York, NY"],
+      ["In-Office"],
+      ["New York, NY"],
+    ]);
+  });
+
   it("passes the etag and returns not_modified on 304", async () => {
     const { http, calls } = fakeHttp({ [GH]: { status: "not_modified" } });
     const res = await greenhouse.fetch({ slug: "airtable", etag: '"v1"', http });
