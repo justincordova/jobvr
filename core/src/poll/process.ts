@@ -445,6 +445,7 @@ const insert = async (p: PreparedListing, ctx: ProcessContext, baseline: boolean
     salaryMaxUsd: salary.max,
     state: "new",
     appliedAt: null,
+    stage: null,
     baseline,
     notifiedAt: null,
     closedAt: null,

@@ -5,6 +5,7 @@ import { withViewTransition } from '@/lib/motion'
 import type { Job, JobList } from '@/lib/types'
 
 export type JobState = Job['state']
+export type JobStage = Job['stage']
 
 const JOB_STATE_KEY = ['job-state'] as const
 
@@ -116,5 +117,37 @@ export function useJobActions() {
     },
   })
 
-  return { setState }
+  // How an application went: shown at once, put back if the server refuses
+  const setStage = useMutation({
+    mutationKey: JOB_STATE_KEY,
+    scope: { id: 'job-state' },
+    mutationFn: ({ id, stage }: { id: string; stage: JobStage }) =>
+      unwrap(api.api.jobs[':id'].stage.$patch({ param: { id }, json: { stage } })),
+    onMutate: async ({ id, stage }) => {
+      await qc.cancelQueries({ queryKey: queryKeys.allJobs })
+      const was = qc
+        .getQueriesData<JobList>({ queryKey: queryKeys.allJobs })
+        .flatMap(([, list]) => list?.jobs ?? [])
+        .find((j) => j.id === id)?.stage
+      const put = (to: JobStage) =>
+        qc.setQueriesData<JobList>({ queryKey: queryKeys.allJobs }, (list) =>
+          list
+            ? { ...list, jobs: list.jobs.map((j) => (j.id === id ? { ...j, stage: to } : j)) }
+            : list,
+        )
+      put(stage)
+      return { undo: () => put(was ?? null) }
+    },
+    onError: (err, _vars, ctx) => {
+      ctx?.undo()
+      toast.error(err.message)
+    },
+    onSettled: () => {
+      if (qc.isMutating({ mutationKey: JOB_STATE_KEY }) === 1) {
+        return qc.invalidateQueries({ queryKey: queryKeys.allJobs })
+      }
+    },
+  })
+
+  return { setState, setStage }
 }

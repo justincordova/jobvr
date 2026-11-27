@@ -13,6 +13,7 @@ import {
   JobListQuery,
   JobListResponse,
   JobParams,
+  JobStageBody,
   JobStateBody,
 } from "./schemas";
 
@@ -72,6 +73,26 @@ export const setState = createRoute({
   },
   responses: {
     200: json(NullResponse, "State updated"),
+    400: validationError,
+    404: notFound,
+    ...bodyErrors,
+    ...writeErrors,
+    ...commonErrors,
+  },
+});
+
+export const setStage = createRoute({
+  operationId: "setJobStage",
+  method: "patch",
+  path: "/{id}/stage",
+  tags,
+  summary: "Record how an applied job went: interviewing, offer, rejected, or null",
+  request: {
+    params: JobParams,
+    body: { ...json(JobStageBody, "New stage"), required: true },
+  },
+  responses: {
+    200: json(NullResponse, "Stage updated"),
     400: validationError,
     404: notFound,
     ...bodyErrors,

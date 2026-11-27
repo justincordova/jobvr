@@ -156,7 +156,7 @@ function JobsPage({ search }: { search: FeedSearch }) {
   const { mutate: recordVisit } = useMutation({
     mutationFn: () => unwrap(api.api.jobs.visit.$post()),
   })
-  const { setState } = useJobActions()
+  const { setState, setStage } = useJobActions()
   const { mutate: changeState } = setState
 
   // Back from a posting opened here: offer Mark applied (see apply-prompt.ts). Also
@@ -378,6 +378,7 @@ function JobsPage({ search }: { search: FeedSearch }) {
               onFocusRow={() => keys.focusRow(job.id)}
               onDetails={() => setDetailsId(job.id)}
               onState={(state) => act(job, state)}
+              onStage={(stage) => setStage.mutate({ id: job.id, stage })}
             />
           ))}
         </ul>

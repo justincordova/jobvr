@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, gt, gte, inArray, isNull, type SQL, sql } from "drizzle-orm";
-import type { JobState, TierFilter } from "../constants";
+import type { ApplicationStage, JobState, TierFilter } from "../constants";
 import type { DbOrTx } from "../db/client";
 import { companies, type JobRow, jobSources, jobs } from "../db/schema";
-import { NotFoundError } from "../errors";
+import { InvalidError, NotFoundError } from "../errors";
 import { type KeyLine, keyLines } from "../key-lines";
 import {
   isEntryLevelTitle,
@@ -72,6 +72,7 @@ export interface JobRecord {
   salaryMaxUsd: number | null;
   state: JobState;
   appliedAt: Date | null;
+  stage: ApplicationStage | null;
   baseline: boolean;
   closedAt: Date | null;
   notifiedAt: Date | null;
@@ -225,6 +226,7 @@ const toView = (job: JobRow, tier: TierFilter, sources: JobSourceView[]): JobRec
   salaryMaxUsd: job.salaryMaxUsd,
   state: job.state as JobState,
   appliedAt: job.appliedAt,
+  stage: job.stage as ApplicationStage | null,
   baseline: job.baseline,
   closedAt: job.closedAt,
   notifiedAt: job.notifiedAt,
@@ -421,6 +423,24 @@ export const setJobState = async (
     .where(eq(jobs.id, id))
     .returning({ id: jobs.id });
   if (!row) throw new NotFoundError("Job not found");
+};
+
+/** Records how an application went (null: no answer yet). Only applied jobs have one. */
+export const setJobStage = async (
+  db: DbOrTx,
+  id: string,
+  stage: ApplicationStage | null,
+  now: Date,
+): Promise<void> => {
+  const [row] = await db
+    .update(jobs)
+    .set({ stage, updatedAt: now })
+    .where(and(eq(jobs.id, id), eq(jobs.state, "applied")))
+    .returning({ id: jobs.id });
+  if (row) return;
+  const [exists] = await db.select({ id: jobs.id }).from(jobs).where(eq(jobs.id, id));
+  if (!exists) throw new NotFoundError("Job not found");
+  throw new InvalidError("Only an applied job has a stage");
 };
 
 export interface JobDetails {

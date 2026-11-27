@@ -63,6 +63,19 @@ describe('appliedStats', () => {
     expect(appliedStats([{ appliedAt: null, tier: 'B' }], NOW).perDay).toBeNull()
   })
 
+  it('counts applications at each stage', () => {
+    const s = appliedStats(
+      [
+        { appliedAt: at(17), tier: 'B', stage: 'interviewing' },
+        { appliedAt: at(17), tier: 'B', stage: 'offer' },
+        { appliedAt: at(16), tier: 'B', stage: 'rejected' },
+        { appliedAt: at(16), tier: 'B', stage: null },
+      ],
+      NOW,
+    )
+    expect(s.stages).toEqual({ interviewing: 1, offer: 1, rejected: 1 })
+  })
+
   it('keeps a streak alive until the day is over', () => {
     const s = appliedStats(
       [

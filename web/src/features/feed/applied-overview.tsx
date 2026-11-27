@@ -313,6 +313,7 @@ export const AppliedOverview = memo(function AppliedOverview({ active }: { activ
 
   const shown = stats.weeks.slice(-weeks)
   const delta = stats.thisWeek - stats.lastWeek
+  const interviews = stats.stages.interviewing + stats.stages.offer
   return (
     <section
       aria-label="Applications overview"
@@ -358,6 +359,21 @@ export const AppliedOverview = memo(function AppliedOverview({ active }: { activ
               value={String(stats.bestDay.count)}
               label={`best day · ${longDate(stats.bestDay.date)}`}
             />
+          )}
+          {/* Outcomes, once any are marked: an offer counts as an interview too */}
+          {interviews + stats.stages.rejected > 0 && (
+            <Stat
+              value={String(interviews)}
+              label="interviews"
+              tone={interviews > 0 ? 'go' : undefined}
+              note={{
+                text: `${Math.round((interviews / stats.total) * 100)}%`,
+                title: `${interviews} of ${stats.total} applications reached an interview; ${stats.stages.rejected} rejected`,
+              }}
+            />
+          )}
+          {stats.stages.offer > 0 && (
+            <Stat value={String(stats.stages.offer)} label="offers" tone="go" />
           )}
         </div>
         <button

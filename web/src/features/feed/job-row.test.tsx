@@ -19,6 +19,7 @@ const job = (extra: Partial<Job> = {}): Job => ({
   salaryMaxUsd: 150000,
   state: 'new',
   appliedAt: null,
+  stage: null,
   baseline: false,
   closedAt: null,
   isNew: false,
@@ -92,6 +93,16 @@ describe('JobRow', () => {
     expect(screen.getAllByText('Parsippany, NJ')).toHaveLength(2)
   })
 
+  it('splits places packed into one string', () => {
+    renderRow(
+      job({
+        locations: ['New York, NY | Austin, TX | King of Prussia, PA'],
+        matchedLocations: ['New York, NY | Austin, TX | King of Prussia, PA'],
+      }),
+    )
+    expect(screen.getByText('New York, NY · Austin, TX +1')).toBeInTheDocument()
+  })
+
   it('notes reposts of the same role', () => {
     renderRow(job({ duplicateIds: ['gh:2', 'gh:3'] }))
     expect(screen.getByText('· 3 postings')).toBeInTheDocument()
@@ -134,5 +145,25 @@ describe('JobRow', () => {
     expect(screen.getByText('Applied 3 d ago')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /not applied/i }))
     expect(onState).toHaveBeenCalledWith('new')
+  })
+
+  it('sets an applied job’s stage from its badge', async () => {
+    const user = userEvent.setup()
+    const onStage = vi.fn()
+    render(
+      <ul>
+        <JobRow
+          job={job({ state: 'applied', appliedAt: new Date().toISOString(), stage: null })}
+          highlighted={false}
+          sourceLabel={(id) => id}
+          onState={vi.fn()}
+          onStage={onStage}
+          busy={false}
+        />
+      </ul>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Application status: Waiting' }))
+    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Interviewing' }))
+    expect(onStage).toHaveBeenCalledWith('interviewing')
   })
 })

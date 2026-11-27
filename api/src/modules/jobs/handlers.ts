@@ -1,5 +1,5 @@
 import type { RouteHandler } from "@hono/zod-openapi";
-import { getJobDetails, listJobs, markVisit, setJobState } from "@jobvr/core";
+import { getJobDetails, listJobs, markVisit, setJobStage, setJobState } from "@jobvr/core";
 import type { AppBindings } from "@/lib/create-app";
 import { ok } from "@/utils/response";
 import type * as routes from "./routes";
@@ -36,4 +36,10 @@ export const setStateHandler: RouteHandler<typeof routes.setState, AppBindings> 
 export const detailsHandler: RouteHandler<typeof routes.details, AppBindings> = async (c) => {
   const { database } = c.var.deps;
   return ok(c, await getJobDetails(database.db, c.req.valid("param").id));
+};
+
+export const setStageHandler: RouteHandler<typeof routes.setStage, AppBindings> = async (c) => {
+  const { database, now } = c.var.deps;
+  await setJobStage(database.db, c.req.valid("param").id, c.req.valid("json").stage, now());
+  return ok(c, null);
 };

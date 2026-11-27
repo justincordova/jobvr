@@ -32,6 +32,8 @@ export interface AppliedStats {
   /** One column per week, Monday first; the last column is this week. */
   weeks: HeatDay[][]
   tiers: { tier: TierFilter; count: number }[]
+  /** Applications at each stage; the rest are still waiting to hear back. */
+  stages: { interviewing: number; offer: number; rejected: number }
 }
 
 const DAY = 86_400_000
@@ -42,7 +44,7 @@ const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), 
 const startOfWeek = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) % 7))
 
 export function appliedStats(
-  jobs: readonly { appliedAt: string | null; tier: TierFilter }[],
+  jobs: readonly { appliedAt: string | null; tier: TierFilter; stage?: string | null }[],
   now = new Date(),
   weekCount = 16,
 ): AppliedStats {
@@ -114,5 +116,10 @@ export function appliedStats(
       tier,
       count: jobs.filter((j) => j.tier === tier).length,
     })).filter((t) => t.count > 0),
+    stages: {
+      interviewing: jobs.filter((j) => j.stage === 'interviewing').length,
+      offer: jobs.filter((j) => j.stage === 'offer').length,
+      rejected: jobs.filter((j) => j.stage === 'rejected').length,
+    },
   }
 }

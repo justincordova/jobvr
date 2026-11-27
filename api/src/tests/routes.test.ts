@@ -321,6 +321,34 @@ describe("jobs routes", () => {
     ]);
   });
 
+  it("records an applied job's stage; others can't have one", async () => {
+    await insertJob("gh:1");
+    const param = { id: "gh:1" };
+    const stage = client.api.jobs[":id"].stage;
+    expect((await stage.$patch({ param, json: { stage: "interviewing" } })).status).toBe(400);
+    expect(
+      (await stage.$patch({ param: { id: "gh:none" }, json: { stage: "offer" } })).status,
+    ).toBe(404);
+    await client.api.jobs[":id"].$patch({ param, json: { state: "applied" } });
+    expect((await stage.$patch({ param, json: { stage: "interviewing" } })).status).toBe(200);
+    const applied = await body<{ data: { jobs: { id: string; stage: string | null }[] } }>(
+      await client.api.jobs.$get({ query: { view: "applied" } }),
+    );
+    expect(applied.data.jobs[0]).toMatchObject({ id: "gh:1", stage: "interviewing" });
+    // Kept while it's out of applied (an undo brings it back), shown only while applied
+    await client.api.jobs[":id"].$patch({ param, json: { state: "new" } });
+    const feed = await body<{ data: { jobs: { stage: string | null }[] } }>(
+      await client.api.jobs.$get({ query: {} }),
+    );
+    expect(feed.data.jobs[0]?.stage).toBeNull();
+    await client.api.jobs[":id"].$patch({ param, json: { state: "applied" } });
+    await stage.$patch({ param, json: { stage: null } });
+    const cleared = await body<{ data: { jobs: { stage: string | null }[] } }>(
+      await client.api.jobs.$get({ query: { view: "applied" } }),
+    );
+    expect(cleared.data.jobs[0]?.stage).toBeNull();
+  });
+
   it("lists applied jobs latest applied first, keeping the date on a repeat", async () => {
     await insertJob("gh:old", { effectiveAt: at(48) });
     await insertJob("gh:fresh");

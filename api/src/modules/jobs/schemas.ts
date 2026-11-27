@@ -1,5 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import {
+  APPLICATION_STAGES,
   JOB_AGES,
   JOB_SORTS,
   JOB_STATES,
@@ -36,6 +37,8 @@ export const JobSchema = z
     state: z.enum(JOB_STATES),
     /** When it was marked applied (null unless `state` is applied). */
     appliedAt: isoNullable,
+    /** How the application went (null unless applied, or no answer yet). */
+    stage: z.enum(APPLICATION_STAGES).nullable(),
     baseline: z.boolean(),
     closedAt: isoNullable,
     isNew: z.boolean(),
@@ -104,3 +107,7 @@ export const JobParams = z.object({
 });
 
 export const JobStateBody = z.object({ state: z.enum(JOB_STATES) }).openapi("JobStateBody");
+
+export const JobStageBody = z
+  .object({ stage: z.enum(APPLICATION_STAGES).nullable() })
+  .openapi("JobStageBody");

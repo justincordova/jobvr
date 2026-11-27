@@ -76,6 +76,9 @@ export const TIER_FILTERS = [...TIERS, "Unlisted"] as const;
 export const TIER_SOURCES = ["seed", "auto", "manual", "pending"] as const;
 
 export const JOB_STATES = ["new", "saved", "hidden", "applied"] as const;
+/** How an application went; none yet means it's waiting to hear back. */
+export const APPLICATION_STAGES = ["interviewing", "offer", "rejected"] as const;
+export type ApplicationStage = (typeof APPLICATION_STAGES)[number];
 export const COMPANY_STATUSES = ["ok", "needs_review", "manual_only"] as const;
 export const SUGGESTION_STATES = ["open", "dismissed", "added"] as const;
 

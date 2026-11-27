@@ -16,6 +16,7 @@ import { relative, safeHref, salaryRange, shortAge } from '@/lib/format'
 import { vtName } from '@/lib/motion'
 import type { Job } from '@/lib/types'
 import { noteOpened } from './apply-prompt'
+import { StageMenu } from './stage-menu'
 import { FEED_GRID } from './columns'
 
 const REMOTE_US = 'Remote - US'
@@ -31,6 +32,8 @@ interface JobRowProps {
   onFocusRow?: () => void
   /** Opens the detail panel. */
   onDetails?: () => void
+  /** Sets an applied job's stage (interviewing, offer, rejected). */
+  onStage?: (stage: Job['stage']) => void
 }
 
 /** An icon-only row action, unboxed like the rest; the label is its accessible name and tooltip. */
@@ -70,11 +73,18 @@ const TRAILING_US = /,\s*(?:united states(?: of america)?|usa|us)\s*$/i
 function placeSummary(job: Job, shown: number) {
   const rest = job.locations.filter((l) => !job.matchedLocations.includes(l))
   // "Remote - US" is added by the adapters for matching; redundant next to "Remote (US)"
-  const ordered = [...job.matchedLocations, ...rest].filter(
-    (l, _, all) => l !== REMOTE_US || !all.some((o) => o !== l && /remote/i.test(o)),
-  )
+  // Some lists pack several places into one string ("New York, NY | Austin, TX")
+  const ordered = [
+    ...new Set(
+      [...job.matchedLocations, ...rest]
+        .filter((l, _, all) => l !== REMOTE_US || !all.some((o) => o !== l && /remote/i.test(o)))
+        .flatMap((l) => l.split(/\s*[;|]\s*/))
+        .map((l) => l.replace(TRAILING_US, '').trim())
+        .filter(Boolean),
+    ),
+  ]
   const extra = ordered.length - shown
-  const places = ordered.slice(0, shown).map((l) => l.replace(TRAILING_US, ''))
+  const places = ordered.slice(0, shown)
   return `${places.join(' · ')}${extra > 0 ? ` +${extra}` : ''}`
 }
 
@@ -87,6 +97,7 @@ export function JobRow({
   selected = false,
   onFocusRow,
   onDetails,
+  onStage,
 }: JobRowProps) {
   const salary = salaryRange(job.salaryMinUsd, job.salaryMaxUsd)
   const sources = [...new Set(job.sources.map((s) => sourceLabel(s.source)))].join(' · ')
@@ -104,6 +115,8 @@ export function JobRow({
         FEED_GRID,
         'group relative scroll-my-24 border-b border-line/70 py-3 pr-1 transition-colors duration-150 hover:bg-panel/60 lg:items-center lg:py-2.5',
         highlighted && 'bg-signal-soft/40 hover:bg-signal-soft/60',
+        // A rejection stays for the record, out of the way
+        job.state === 'applied' && job.stage === 'rejected' && 'opacity-55 hover:opacity-100',
         selected && 'bg-raised/70 hover:bg-raised/70',
       )}
     >
@@ -195,11 +208,14 @@ export function JobRow({
           {closed && <Badge tone="stop">Closed</Badge>}
           {/* Its own line, under the badges and sources */}
           {job.state === 'applied' && (
-            <span
-              className="basis-full font-mono text-[0.68rem] text-go"
-              title={job.appliedAt ? new Date(job.appliedAt).toLocaleString() : undefined}
-            >
-              Applied{job.appliedAt && ` ${relative(job.appliedAt)}`}
+            <span className="flex basis-full items-center gap-2">
+              <span
+                className="font-mono text-[0.68rem] text-go"
+                title={job.appliedAt ? new Date(job.appliedAt).toLocaleString() : undefined}
+              >
+                Applied{job.appliedAt && ` ${relative(job.appliedAt)}`}
+              </span>
+              {onStage && <StageMenu stage={job.stage} disabled={busy} onChange={onStage} />}
             </span>
           )}
         </div>

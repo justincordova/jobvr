@@ -13,7 +13,14 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { COMPANY_STATUSES, JOB_STATES, SUGGESTION_STATES, TIER_SOURCES, TIERS } from "../constants";
+import {
+  APPLICATION_STAGES,
+  COMPANY_STATUSES,
+  JOB_STATES,
+  SUGGESTION_STATES,
+  TIER_SOURCES,
+  TIERS,
+} from "../constants";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 
@@ -116,6 +123,8 @@ export const jobs = pgTable(
     state: text("state").notNull().default("new"),
     /** When it was first marked applied; kept when it leaves applied, so an undo keeps the date. */
     appliedAt: ts("applied_at"),
+    /** How the application went (null: no answer yet); kept like `appliedAt` so undo restores it. */
+    stage: text("stage"),
     baseline: boolean("baseline").notNull().default(false),
     notifiedAt: ts("notified_at"),
     closedAt: ts("closed_at"),
@@ -126,6 +135,7 @@ export const jobs = pgTable(
     index("jobs_unnotified_idx").on(t.effectiveAt).where(sql`${t.notifiedAt} is null`),
     index("jobs_company_id_idx").on(t.companyId),
     check("jobs_state_check", oneOf(t.state, JOB_STATES)),
+    check("jobs_stage_check", oneOf(t.stage, APPLICATION_STAGES)),
   ],
 );
 
