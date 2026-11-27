@@ -24,8 +24,11 @@ export interface PushMessage {
   title: string;
   body: string;
   clickUrl?: string;
-  /** Buttons that open a URL (ntfy shows up to 3). */
-  actions?: { label: string; url: string }[];
+  /**
+   * Buttons (ntfy shows up to 3): open a URL, or, with `method`, send a JSON
+   * request from the phone in the background (Save, Hide).
+   */
+  actions?: { label: string; url: string; method?: "PATCH"; body?: string }[];
 }
 
 /** Push port (ntfy today). */
@@ -57,7 +60,20 @@ export const createNtfyNotifier = (
         tags: ["briefcase"],
         ...(message.clickUrl && { click: message.clickUrl }),
         ...(message.actions?.length && {
-          actions: message.actions.map((a) => ({ action: "view", label: a.label, url: a.url })),
+          actions: message.actions.map((a) =>
+            a.method
+              ? {
+                  action: "http",
+                  label: a.label,
+                  url: a.url,
+                  method: a.method,
+                  headers: { "Content-Type": "application/json" },
+                  body: a.body,
+                  // Done: the notification goes away
+                  clear: true,
+                }
+              : { action: "view", label: a.label, url: a.url },
+          ),
         }),
       }),
       // Under the 8 s shutdown grace, so a send is never cut off after ntfy took it
@@ -121,14 +137,26 @@ export const buildPush = (
       .filter(Boolean)
       .join(" · ");
   };
-  const clickUrl = publicUrl ? `${publicUrl.replace(/\/$/, "")}/?sort=newest` : undefined;
+  const base = publicUrl?.replace(/\/$/, "");
+  const clickUrl = base ? `${base}/?sort=newest` : undefined;
   const [first] = roles;
   if (roles.length === 1 && first) {
+    // Triage from the notification. A role posted twice would leave its other copy behind
+    const stateAction = (label: string, state: "saved" | "hidden") => ({
+      label,
+      url: `${base}/api/jobs/${encodeURIComponent(first.id)}`,
+      method: "PATCH" as const,
+      body: JSON.stringify({ state }),
+    });
+    const triage =
+      base && first.duplicateIds.length === 0
+        ? [stateAction("Save", "saved"), stateAction("Hide", "hidden")]
+        : [];
     return {
       title: `New job: ${clip(first.companyName, 40)}`,
       body: line(first, false),
       ...(clickUrl && { clickUrl }),
-      actions: [{ label: "Open posting", url: first.url }],
+      actions: [{ label: "Open posting", url: first.url }, ...triage],
     };
   }
   const shown = roles.slice(0, PUSH_LINES).map((j) => line(j, true));

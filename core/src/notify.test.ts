@@ -172,7 +172,10 @@ describe("ntfy notifier", () => {
       title: "New job: HRT",
       body: "Software Engineer (C++ or Python) – 2027 Grads · NYC",
       clickUrl: "https://jobvr.ts.net/?sort=newest",
-      actions: [{ label: "Open posting", url: "https://x.test/1" }],
+      actions: [
+        { label: "Open posting", url: "https://x.test/1" },
+        { label: "Hide", url: "https://jobvr.ts.net/api/jobs/gh%3A1", method: "PATCH", body: "{}" },
+      ],
     });
     expect(calls[0]?.url).toBe("https://ntfy.sh/");
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
@@ -181,7 +184,18 @@ describe("ntfy notifier", () => {
       message: "Software Engineer (C++ or Python) – 2027 Grads · NYC",
       tags: ["briefcase"],
       click: "https://jobvr.ts.net/?sort=newest",
-      actions: [{ action: "view", label: "Open posting", url: "https://x.test/1" }],
+      actions: [
+        { action: "view", label: "Open posting", url: "https://x.test/1" },
+        {
+          action: "http",
+          label: "Hide",
+          url: "https://jobvr.ts.net/api/jobs/gh%3A1",
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+          clear: true,
+        },
+      ],
     });
   });
 });
@@ -226,6 +240,33 @@ describe("runNotify", () => {
       body: "Software Engineer, New Grad · NYC",
       actions: [{ label: "Open posting", url: "https://x.test/c" }],
     });
+  });
+
+  it("a single role's push can save or hide it from the notification", async () => {
+    await addJob("solo");
+    const { sent, notifier } = recorder();
+    await runNotify({
+      database,
+      registry,
+      notifier,
+      publicUrl: "https://jobvr.example.ts.net/",
+      now: () => NOW,
+    });
+    expect(sent[0]?.actions).toEqual([
+      { label: "Open posting", url: "https://x.test/solo" },
+      {
+        label: "Save",
+        url: "https://jobvr.example.ts.net/api/jobs/solo",
+        method: "PATCH",
+        body: '{"state":"saved"}',
+      },
+      {
+        label: "Hide",
+        url: "https://jobvr.example.ts.net/api/jobs/solo",
+        method: "PATCH",
+        body: '{"state":"hidden"}',
+      },
+    ]);
   });
 
   it("holds pushes during quiet hours and doesn't touch last_push_at when nothing is new", async () => {
