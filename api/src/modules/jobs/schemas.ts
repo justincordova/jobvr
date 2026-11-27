@@ -94,6 +94,8 @@ export const JobDetailsResponse = envelope(
           text: z.string(),
         }),
       ),
+      /** Why the company has its tier, when the AI (or a person) recorded one. */
+      tierReason: z.string().nullable(),
     })
     .openapi("JobDetails"),
 );

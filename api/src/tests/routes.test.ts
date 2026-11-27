@@ -227,6 +227,8 @@ describe("jobs routes", () => {
           { topic: "degree", text: "Bachelor's degree in Computer Science required." },
           { topic: "workplace", text: "Hybrid in our NYC office." },
         ],
+        // No company on the list, so no tier to explain
+        tierReason: null,
       },
     });
     expect((await client.api.jobs[":id"].details.$get({ param: { id: "gh:none" } })).status).toBe(

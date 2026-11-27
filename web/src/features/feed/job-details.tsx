@@ -91,6 +91,11 @@ export function JobDetailsDialog({
             <dd>{job.sources.map((s) => sourceLabel(s.source)).join(' · ')}</dd>
           </div>
         </dl>
+        {data?.tierReason && job.tier !== 'Unlisted' && (
+          <p className="-mt-2 mb-4 text-xs leading-relaxed text-dim">
+            <span className="font-mono text-faint">Why {job.tier}:</span> {data.tierReason}
+          </p>
+        )}
 
         <section
           aria-labelledby="key-lines"

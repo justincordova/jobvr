@@ -449,6 +449,8 @@ export interface JobDetails {
   source: string | null;
   description: string | null;
   keyLines: KeyLine[];
+  /** Why the company has its tier (the AI's reason), when one is recorded. */
+  tierReason: string | null;
 }
 
 /**
@@ -458,8 +460,9 @@ export interface JobDetails {
  */
 export const getJobDetails = async (db: DbOrTx, id: string): Promise<JobDetails> => {
   const [job] = await db
-    .select({ primarySource: jobs.primarySource })
+    .select({ primarySource: jobs.primarySource, tierReason: companies.tierReason })
     .from(jobs)
+    .leftJoin(companies, eq(companies.id, jobs.companyId))
     .where(eq(jobs.id, id));
   if (!job) throw new NotFoundError("Job not found");
   const rows = await db
@@ -471,5 +474,11 @@ export const getJobDetails = async (db: DbOrTx, id: string): Promise<JobDetails>
     withText.find((r) => r.source === job.primarySource) ??
     withText.sort((a, b) => (b.description?.length ?? 0) - (a.description?.length ?? 0))[0];
   const description = pick?.description ?? null;
-  return { id, source: pick?.source ?? null, description, keyLines: keyLines(description) };
+  return {
+    id,
+    source: pick?.source ?? null,
+    description,
+    keyLines: keyLines(description),
+    tierReason: job.tierReason,
+  };
 };
