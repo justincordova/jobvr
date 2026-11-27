@@ -15,6 +15,7 @@ import { cn } from '@/lib/cn'
 import { relative, safeHref, salaryRange, shortAge } from '@/lib/format'
 import { vtName } from '@/lib/motion'
 import type { Job } from '@/lib/types'
+import { noteOpened } from './apply-prompt'
 import { FEED_GRID } from './columns'
 
 const REMOTE_US = 'Remote - US'
@@ -140,6 +141,8 @@ export function JobRow({
             href={safeHref(job.url)}
             target="_blank"
             rel="noreferrer"
+            onClick={() => noteOpened(job.id)}
+            onAuxClick={() => noteOpened(job.id)}
             className={cn(
               'inline-flex max-w-full items-baseline gap-1.5 rounded-sm text-[0.95rem] leading-snug font-semibold tracking-tight text-paper decoration-signal/60 underline-offset-4 visited:text-dim hover:underline',
               closed && 'text-dim line-through decoration-faint',

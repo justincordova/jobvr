@@ -9,12 +9,14 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Bookmark, CloudOff, EyeOff, Keyboard, LoaderCircle, Radar, Send } from 'lucide-react'
 import { type ComponentType, useEffect, useRef, useState } from 'react'
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/page'
+import { toast } from '@/components/toast'
 import { Button } from '@/components/ui/button'
 import { Reveal } from '@/components/ui/reveal'
 import { api, queryKeys, unwrap } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import type { JobList } from '@/lib/types'
 import { AppliedOverview } from './applied-overview'
+import { takeReturned } from './apply-prompt'
 import { FEED_GRID } from './columns'
 import { FilterBar } from './filter-bar'
 import { JobDetailsDialog } from './job-details'
@@ -155,6 +157,36 @@ function JobsPage({ search }: { search: FeedSearch }) {
     mutationFn: () => unwrap(api.api.jobs.visit.$post()),
   })
   const { setState } = useJobActions()
+  const { mutate: changeState } = setState
+
+  // Back from a posting opened here: offer Mark applied (see apply-prompt.ts). Also
+  // once the list loads, for an installed app reloaded while the posting was open
+  const listReady = jobs.data !== undefined
+  useEffect(() => {
+    if (!listReady) return
+    const askAboutReturn = () => {
+      if (document.visibilityState !== 'visible') return
+      const id = takeReturned()
+      if (!id) return
+      const job = qc
+        .getQueriesData<JobList>({ queryKey: queryKeys.allJobs })
+        .flatMap(([, cached]) => cached?.jobs ?? [])
+        .find((j) => j.id === id)
+      if (!job || (job.state !== 'new' && job.state !== 'saved')) return
+      const title = job.title.length > 50 ? `${job.title.slice(0, 48).trimEnd()}…` : job.title
+      toast(`Did you apply to ${title} at ${job.companyName}?`, {
+        tone: 'info',
+        duration: 20_000,
+        action: {
+          label: 'Mark applied',
+          onClick: () => changeState({ id: job.id, state: 'applied', also: job.duplicateIds }),
+        },
+      })
+    }
+    askAboutReturn()
+    document.addEventListener('visibilitychange', askAboutReturn)
+    return () => document.removeEventListener('visibilitychange', askAboutReturn)
+  }, [listReady, qc, changeState])
 
   const plainFeed = countsAsVisit(search)
   useEffect(() => {

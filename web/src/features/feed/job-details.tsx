@@ -7,6 +7,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { api, unwrap } from '@/lib/api'
 import { relative, safeHref, salaryRange } from '@/lib/format'
 import type { Job } from '@/lib/types'
+import { noteOpened } from './apply-prompt'
 
 const TOPIC_LABEL = {
   experience: 'Experience',
@@ -150,7 +151,13 @@ export function JobDetailsDialog({
         <div className="mt-5 flex flex-wrap items-center gap-2">
           {href && (
             <Button variant="primary" asChild>
-              <a href={href} target="_blank" rel="noreferrer">
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => noteOpened(job.id)}
+                onAuxClick={() => noteOpened(job.id)}
+              >
                 <ExternalLink /> Open posting
               </a>
             </Button>
