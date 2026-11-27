@@ -174,6 +174,12 @@ describe("keyword rule", () => {
     expect(sj("Associate Data Engineer", "AI/ML/Data")).toBe(true);
     expect(sj("Data Analyst - Transplant Nephrology", "AI/ML/Data")).toBe(false);
     expect(sj("Junior Electrical Engineer", "Hardware")).toBe(false);
+    // Another discipline's word only elsewhere in the title (a program name) doesn't count
+    expect(sj("Engineer New Grad - Evolve - An Apple Services Rotation Program", "Software")).toBe(
+      true,
+    );
+    expect(sj("Electrical Engineer New Grad - Rotation Program", "Software")).toBe(false);
+    expect(ats("Field Services Engineer, New Grad")).toBe(false);
     expect(passesKeywordRule("Associate - Technology Transactions", "ats", S)).toBe(false);
     expect(sj("Senior Software Engineer", "Software")).toBe(false);
     const strict = { ...S, applyLevelToSimplify: true };

@@ -84,6 +84,21 @@ const NON_SOFTWARE = [
 ];
 
 /**
+ * One dash- or bracket-separated part of the title is a plain new-grad
+ * engineering title: "Engineer New Grad - Evolve - An Apple Services Rotation
+ * Program" names a program, not a discipline, in its other parts.
+ */
+const newGradEngineeringPart = (title: string) =>
+  title.split(/\s[-–—|]\s|[()[\]]/).some((part) => {
+    const tokens = tokenize(part);
+    return (
+      matchesAnyKeyword(tokens, GENERIC_ENGINEERING) &&
+      matchesAnyKeyword(tokens, NEW_GRAD_WORDS) &&
+      !matchesAnyKeyword(tokens, NON_SOFTWARE)
+    );
+  });
+
+/**
  * A contract tag: "(Contract)", "- Contractor", ", Contract (Remote)". Contracts
  * as the subject ("Smart Contract Engineer") don't count.
  */
@@ -193,7 +208,8 @@ export const passesKeywordRule = (
     return !settings.requireLevelOnBoards || entry;
   }
   const genericEngineering =
-    matchesAnyKeyword(tokens, GENERIC_ENGINEERING) && !matchesAnyKeyword(tokens, NON_SOFTWARE);
+    (matchesAnyKeyword(tokens, GENERIC_ENGINEERING) && !matchesAnyKeyword(tokens, NON_SOFTWARE)) ||
+    newGradEngineeringPart(title);
   if (kind === "aggregator") {
     if (settings.applyLevelToSimplify && !entry) return false;
     return genericEngineering && categoryAllowed(category, settings);
