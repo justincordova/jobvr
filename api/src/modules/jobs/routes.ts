@@ -6,6 +6,7 @@ import {
   NullResponse,
   notFound,
   validationError,
+  writeErrors,
 } from "@/lib/routes";
 import {
   JobDetailsResponse,
@@ -39,6 +40,7 @@ export const visit = createRoute({
   summary: "Record a feed visit (for 'new since last visit')",
   responses: {
     200: json(NullResponse, "Visit recorded"),
+    ...writeErrors,
     ...commonErrors,
   },
 });
@@ -73,6 +75,7 @@ export const setState = createRoute({
     400: validationError,
     404: notFound,
     ...bodyErrors,
+    ...writeErrors,
     ...commonErrors,
   },
 });

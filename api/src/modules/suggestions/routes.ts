@@ -7,6 +7,7 @@ import {
   NullResponse,
   notFound,
   validationError,
+  writeErrors,
 } from "@/lib/routes";
 import { CompanyResponse } from "@/modules/companies/schemas";
 import { AddSuggestionBody, SuggestionListResponse, SuggestionParams } from "./schemas";
@@ -41,6 +42,7 @@ export const add = createRoute({
     404: notFound,
     409: conflict,
     ...bodyErrors,
+    ...writeErrors,
     ...commonErrors,
   },
 });
@@ -56,6 +58,7 @@ export const dismiss = createRoute({
     200: json(NullResponse, "Dismissed"),
     400: validationError,
     404: notFound,
+    ...writeErrors,
     ...commonErrors,
   },
 });

@@ -1,5 +1,5 @@
 import { createRoute } from "@hono/zod-openapi";
-import { bodyErrors, commonErrors, json, validationError } from "@/lib/routes";
+import { bodyErrors, commonErrors, json, validationError, writeErrors } from "@/lib/routes";
 import { SettingsPatchBody, SettingsResponse } from "./schemas";
 
 const tags = ["settings"];
@@ -27,6 +27,7 @@ export const update = createRoute({
     200: json(SettingsResponse, "Updated settings"),
     400: validationError,
     ...bodyErrors,
+    ...writeErrors,
     ...commonErrors,
   },
 });

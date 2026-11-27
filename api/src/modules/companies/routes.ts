@@ -7,6 +7,7 @@ import {
   NullResponse,
   notFound,
   validationError,
+  writeErrors,
 } from "@/lib/routes";
 import {
   AddCompanyBody,
@@ -43,6 +44,7 @@ export const create = createRoute({
     400: validationError,
     409: conflict,
     ...bodyErrors,
+    ...writeErrors,
     ...commonErrors,
   },
 });
@@ -59,6 +61,7 @@ export const add = createRoute({
     400: validationError,
     409: conflict,
     ...bodyErrors,
+    ...writeErrors,
     ...commonErrors,
   },
 });
@@ -79,6 +82,7 @@ export const update = createRoute({
     404: notFound,
     409: conflict,
     ...bodyErrors,
+    ...writeErrors,
     ...commonErrors,
   },
 });
@@ -94,6 +98,7 @@ export const remove = createRoute({
     200: json(NullResponse, "Deleted"),
     400: validationError,
     404: notFound,
+    ...writeErrors,
     ...commonErrors,
   },
 });

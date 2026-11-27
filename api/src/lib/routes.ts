@@ -36,6 +36,11 @@ export const commonErrors = {
   503: json(ErrorResponse, "Request timed out"),
 };
 
+/** Errors for routes that change data: the cross-site guard refuses foreign pages. */
+export const writeErrors = {
+  403: json(ErrorResponse, "Cross-site request refused"),
+};
+
 /** Additional errors for routes that accept a JSON body. */
 export const bodyErrors = {
   413: json(ErrorResponse, "Request body too large"),

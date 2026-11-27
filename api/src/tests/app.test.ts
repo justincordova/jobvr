@@ -158,8 +158,17 @@ describe("App", () => {
     const doc = (await res.json()) as { openapi: string; paths: Record<string, unknown> };
     expect(doc.openapi).toBe("3.1.0");
     expect(Object.keys(doc.paths)).toEqual(
-      expect.arrayContaining(["/api/jobs", "/api/jobs/{id}", "/api/companies", "/api/settings"]),
+      expect.arrayContaining([
+        "/health",
+        "/api/jobs",
+        "/api/jobs/{id}",
+        "/api/companies",
+        "/api/settings",
+      ]),
     );
+    const paths = doc.paths as Record<string, Record<string, { responses: object }>>;
+    expect(Object.keys(paths["/api/settings"]?.patch?.responses ?? {})).toContain("403");
+    expect(Object.keys(paths["/api/settings"]?.get?.responses ?? {})).not.toContain("403");
   });
 });
 
