@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { getTableColumns, gte, inArray, or, sql } from "drizzle-orm";
 import {
   FILTER_VERSION,
+  LIST_DETAILS_PER_POLL,
   POLL_BUDGET_MS,
   POLL_LOCK_KEY,
   SOURCE_OUTAGE_MIN_TARGETS,
@@ -443,10 +444,14 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
       }
       const enrich: Enrich = async (t, result, signal) => {
         const { adapter } = t;
-        const slug = t.kind === "company" ? t.company.slug : null;
-        if (result.status !== "ok" || !adapter.fetchDetail || !slug) {
+        // A list has no slug; its job pages are found by id alone (Jobright)
+        const slug = t.kind === "company" ? t.company.slug : "";
+        if (result.status !== "ok" || !adapter.fetchDetail || slug === null) {
           return { fetched: 0, incomplete: false };
         }
+        // A list's backlog (hundreds of pages the first time) is spread over a few polls
+        const cap =
+          adapter.kind === "aggregator" ? LIST_DETAILS_PER_POLL : Number.POSITIVE_INFINITY;
         let fetchedCount = 0;
         let incomplete = false;
         for (const listing of result.jobs) {
@@ -466,7 +471,7 @@ export const runPoll = async (options: RunPollOptions): Promise<PollSummary> => 
             }
             continue;
           }
-          if (signal.aborted) {
+          if (signal.aborted || fetchedCount >= cap) {
             incomplete = true;
             break;
           }

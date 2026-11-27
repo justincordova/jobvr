@@ -36,6 +36,8 @@ export const SOURCE_OUTAGE_MIN_TARGETS = 3;
 export const CLEANUP_INTERVAL_MS = DAY;
 
 export const POLL_BUDGET_MS = 5 * MINUTE;
+/** Job pages read per poll for a list (Jobright); the first poll's backlog spreads over a few. */
+export const LIST_DETAILS_PER_POLL = 30;
 /**
  * Polling is stalled when no poll has finished for this many poll intervals
  * (counting from boot, so a fresh process gets time for its first poll).

@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { LIST_DETAILS_PER_POLL } from "../constants";
 import type { Database } from "../db/client";
 import { companies, jobSources, jobs, sourceState, suggestions } from "../db/schema";
 import { HttpError } from "../http";
@@ -281,6 +282,31 @@ describe("runPoll: job details and the experience rule", () => {
     await updateSettings(database.db, { experienceCutoffYears: 0 });
     const all = await listJobs(database.db, env.registry, {}, clock);
     expect(all.jobs.map((j) => j.id)).toContain("gh:1");
+  });
+
+  it("reads a list's job pages a batch per poll, then not again", async () => {
+    const agg = env.registry.find((a) => a.id === "simplify") as SourceAdapter;
+    const read: string[] = [];
+    agg.fetchDetail = async (_slug, id) => {
+      read.push(id);
+      return { description: id === "s0" ? "5+ years of experience required" : "Build things." };
+    };
+    const count = LIST_DETAILS_PER_POLL + 3;
+    env.setSimplify(
+      Array.from({ length: count }, (_, i) =>
+        sjJob(`s${i}`, `Co ${i}`, "Software Engineer", `https://co${i}.test/jobs/${i}`),
+      ),
+    );
+    await poll();
+    expect(read).toHaveLength(LIST_DETAILS_PER_POLL);
+    clock = new Date(T0.getTime() + HOUR);
+    read.length = 0;
+    await poll();
+    expect(read).toHaveLength(3);
+    read.length = 0;
+    await poll();
+    expect(read).toEqual([]);
+    expect((await rowsOf("sj:s0"))[0]?.requiredYears).toBe(5);
   });
 
   it("retries a failed detail on the next poll instead of trusting the board's ETag", async () => {

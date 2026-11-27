@@ -136,7 +136,7 @@ export function JobDetailsDialog({
             <p className="text-sm text-dim">
               {data?.description
                 ? 'Nothing about years, degree, visa, location or pay stood out. Skim the full text below.'
-                : 'No description yet: the new-grad lists have none, and the board’s is fetched on the next poll. Open the posting to read it.'}
+                : 'No description here yet (some lists don’t carry one). Open the posting to read it.'}
             </p>
           )}
         </section>

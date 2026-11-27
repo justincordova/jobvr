@@ -1,4 +1,4 @@
-import { type SourceAdapter, validateItems } from "@jobvr/core";
+import { HttpError, type JobDetail, type SourceAdapter, validateItems } from "@jobvr/core";
 import { z } from "zod";
 import { cellLink, cellText, parseTables, type TableRow, withoutTracking } from "./markdown";
 import { REMOTE_US } from "./shared";
@@ -44,10 +44,81 @@ export const parseLocations = (location: string, workModel: string): string[] =>
   return out;
 };
 
+/** Jobright packs lists into JSON strings ("[\"a\",\"b\"]"); anything unreadable is empty. */
+const jsonList = (raw: unknown): string[] => {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+};
+
+const jsonObject = (raw: unknown): Record<string, unknown> => {
+  if (typeof raw !== "string" || !raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+};
+
+const section = (heading: string, lines: readonly string[]) =>
+  lines.length > 0 ? [`${heading}:`, ...lines.map((l) => l.trim())].join("\n") : "";
+
+/**
+ * The job page's text, from the data the page embeds (`__NEXT_DATA__`):
+ * summary, responsibilities, qualifications and the years asked for, so list
+ * jobs get the same experience check and key lines as board jobs. Null when
+ * the page has no job (taken down).
+ */
+export const jobrightDetail = (html: string): JobDetail | null => {
+  const m = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/.exec(html);
+  if (!m?.[1]) return null;
+  let job: Record<string, unknown> | undefined;
+  try {
+    job = JSON.parse(m[1])?.props?.pageProps?.dataSource?.jobResult;
+  } catch {
+    return null;
+  }
+  if (!job || typeof job !== "object") return null;
+  const quals = jsonObject(job.qualifications);
+  const detail = jsonObject(job.detailQualifications);
+  const mustHave = (detail.mustHave ?? {}) as Record<string, unknown>;
+  const yoe = Array.isArray(mustHave.yoe)
+    ? mustHave.yoe.filter((x): x is string => typeof x === "string")
+    : [];
+  const list = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  const description = [
+    typeof job.jobSummary === "string" ? job.jobSummary.trim() : "",
+    section("Responsibilities", jsonList(job.coreResponsibilities)),
+    section("Experience", yoe),
+    section("Qualifications", list(quals.mustHave)),
+    section("Preferred", list(quals.preferredHave)),
+    job.isCitizenOnly === "true" ? "U.S. citizenship required." : "",
+    job.isClearanceRequired === "true" ? "Security clearance required." : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const min = Number(job.minSalary);
+  const max = Number(job.maxSalary);
+  const yearly = typeof job.salaryDesc === "string" && /\/yr/i.test(job.salaryDesc);
+  return {
+    description,
+    ...(yearly &&
+      min > 0 &&
+      max >= min && { salary: { currency: "USD", interval: "year" as const, min, max } }),
+  };
+};
+
 /**
  * Jobright's public new-grad SWE list (a README; Jobright itself has no public
  * API). Its links go to Jobright's page for the job, not the posting, so jobs
- * dedupe with other sources by company and title, and take their link.
+ * dedupe with other sources by company and title, and take their link. The
+ * page itself has the description (`fetchDetail`).
  */
 export const jobright: SourceAdapter = {
   id: "jobright",
@@ -105,5 +176,17 @@ export const jobright: SourceAdapter = {
       invalidCount: invalidCount + malformed,
       invalidIds,
     };
+  },
+
+  async fetchDetail(_slug, sourceJobId, ctx): Promise<JobDetail | null> {
+    try {
+      const res = await ctx.http.getText(`https://jobright.ai/jobs/info/${sourceJobId}`, {
+        signal: ctx.signal,
+      });
+      return res.status === "ok" ? jobrightDetail(res.data) : null;
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 404) return null;
+      throw err;
+    }
   },
 };

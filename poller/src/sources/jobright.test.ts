@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { fakeHttp } from "@jobvr/core/testing";
 import { describe, expect, it } from "vitest";
-import { JOBRIGHT_URL, jobright, parseLocations, parsePostedDate } from "./jobright";
+import {
+  JOBRIGHT_URL,
+  jobright,
+  jobrightDetail,
+  parseLocations,
+  parsePostedDate,
+} from "./jobright";
 import { REMOTE_US } from "./shared";
 
 const fixture = readFileSync(new URL("./fixtures/jobright.md", import.meta.url), "utf8");
@@ -78,5 +84,54 @@ describe("jobright adapter", () => {
   it("returns not_modified on 304", async () => {
     const { http } = fakeHttp({ [JOBRIGHT_URL]: { status: "not_modified" } });
     expect(await jobright.fetch({ http, etag: '"jr1"' })).toEqual({ status: "not_modified" });
+  });
+});
+
+describe("jobright job page", () => {
+  const page = (job: unknown) =>
+    `<html><script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
+      props: { pageProps: { dataSource: { jobResult: job } } },
+    })}</script></html>`;
+
+  it("reads summary, duties, years and qualifications, and yearly pay", () => {
+    const detail = jobrightDetail(
+      page({
+        jobSummary: "Magnite is hiring an Engineer I.",
+        coreResponsibilities: JSON.stringify(["Build automation", "Ship services"]),
+        detailQualifications: JSON.stringify({
+          mustHave: { yoe: ["5+ years of professional software development experience."] },
+        }),
+        qualifications: JSON.stringify({ mustHave: ["TypeScript"], preferredHave: ["Go"] }),
+        isCitizenOnly: "true",
+        salaryDesc: "$80K/yr - $100K/yr",
+        minSalary: "80000",
+        maxSalary: "100000",
+      }),
+    );
+    expect(detail?.description).toBe(
+      [
+        "Magnite is hiring an Engineer I.",
+        "Responsibilities:\nBuild automation\nShip services",
+        "Experience:\n5+ years of professional software development experience.",
+        "Qualifications:\nTypeScript",
+        "Preferred:\nGo",
+        "U.S. citizenship required.",
+      ].join("\n\n"),
+    );
+    expect(detail?.salary).toEqual({ currency: "USD", interval: "year", min: 80000, max: 100000 });
+  });
+
+  it("no job on the page (taken down) or no data at all is null; hourly pay is skipped", () => {
+    expect(jobrightDetail("<html></html>")).toBeNull();
+    expect(jobrightDetail(page(null))).toBeNull();
+    const hourly = jobrightDetail(
+      page({
+        salaryDesc: "$40/hr",
+        minSalary: "40",
+        maxSalary: "50",
+        coreResponsibilities: "oops",
+      }),
+    );
+    expect(hourly).toEqual({ description: "" });
   });
 });
