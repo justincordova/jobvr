@@ -69,6 +69,26 @@ describe('JobRow', () => {
     expect(screen.queryByText(/yrs/)).not.toBeInTheDocument()
   })
 
+  it('on a phone, puts the age by the title and the actions on the badge line', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    try {
+      renderRow(job())
+      const age = screen.getByText('2h')
+      expect(screen.getByRole('link').parentElement).toContainElement(age)
+      expect(screen.getByText('Entry level').parentElement).toContainElement(
+        screen.getByRole('button', { name: 'Applied' }),
+      )
+      expect(screen.queryByText('Greenhouse · simplify')).not.toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('leads with the matching location and skips the Unlisted tier', () => {
     renderRow(
       job({

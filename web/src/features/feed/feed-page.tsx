@@ -86,10 +86,11 @@ function SkeletonRows() {
       {Array.from({ length: 6 }, (_, i) => (
         <li
           key={i}
-          className="grid grid-cols-[3.25rem_1fr] gap-3 border-b border-line/60 py-4 sm:grid-cols-[3.75rem_1fr]"
+          className="grid grid-cols-[1fr_auto] gap-3 border-b border-line/60 py-4 pl-3 sm:grid-cols-[3.75rem_1fr] sm:pl-0"
           style={{ opacity: 1 - i * 0.14 }}
         >
-          <Skeleton className="ml-auto h-4 w-7" />
+          {/* Phones put the age after the title, like the rows */}
+          <Skeleton className="ml-auto h-4 w-7 max-sm:order-last" />
           <div className="space-y-2">
             <Skeleton className="h-4 w-2/3" />
             <Skeleton className="h-3 w-1/3 bg-raised/70" />
