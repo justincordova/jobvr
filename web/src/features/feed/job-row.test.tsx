@@ -43,7 +43,7 @@ const job = (extra: Partial<Job> = {}): Job => ({
 
 const renderRow = (j: Job, highlighted = false) => {
   const onState = vi.fn()
-  render(
+  const { unmount } = render(
     <ul>
       <JobRow
         job={j}
@@ -54,7 +54,7 @@ const renderRow = (j: Job, highlighted = false) => {
       />
     </ul>,
   )
-  return { onState }
+  return { onState, unmount }
 }
 
 describe('JobRow', () => {
@@ -165,5 +165,14 @@ describe('JobRow', () => {
     await user.click(screen.getByRole('button', { name: 'Application status: Waiting' }))
     await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Interviewing' }))
     expect(onStage).toHaveBeenCalledWith('interviewing')
+  })
+
+  it('flags an application still waiting after three weeks, not one with an answer', () => {
+    const old = new Date(Date.now() - 22 * 86_400_000).toISOString()
+    const { unmount } = renderRow(job({ state: 'applied', appliedAt: old, stage: null }))
+    expect(screen.getByText('No reply in 3+ weeks')).toBeInTheDocument()
+    unmount()
+    renderRow(job({ state: 'applied', appliedAt: old, stage: 'rejected' }))
+    expect(screen.queryByText('No reply in 3+ weeks')).not.toBeInTheDocument()
   })
 })

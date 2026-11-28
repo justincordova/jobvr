@@ -16,3 +16,11 @@ export const STAGES: {
 
 export const stageInfo = (stage: Job['stage']) =>
   STAGES.find((s) => s.value === (stage ?? null)) ?? STAGES[0]!
+
+export const QUIET_AFTER_DAYS = 21
+
+/** Still "Waiting" three weeks on: most companies that will answer have by then. */
+export const isQuiet = (job: Pick<Job, 'stage' | 'appliedAt'>, now = Date.now()) =>
+  !job.stage &&
+  !!job.appliedAt &&
+  now - new Date(job.appliedAt).getTime() >= QUIET_AFTER_DAYS * 86_400_000

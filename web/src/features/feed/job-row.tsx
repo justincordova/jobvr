@@ -17,6 +17,7 @@ import { vtName } from '@/lib/motion'
 import type { Job } from '@/lib/types'
 import { noteOpened } from './apply-prompt'
 import { StageMenu } from './stage-menu'
+import { isQuiet } from './stages'
 import { FEED_GRID } from './columns'
 
 const REMOTE_US = 'Remote - US'
@@ -216,6 +217,14 @@ export function JobRow({
                 Applied{job.appliedAt && ` ${relative(job.appliedAt)}`}
               </span>
               {onStage && <StageMenu stage={job.stage} disabled={busy} onChange={onStage} />}
+              {isQuiet(job) && (
+                <span
+                  className="font-mono text-[0.68rem] text-faint"
+                  title="No answer in 3 weeks: follow up, or mark it Rejected to keep your stats honest"
+                >
+                  No reply in 3+ weeks
+                </span>
+              )}
             </span>
           )}
         </div>
