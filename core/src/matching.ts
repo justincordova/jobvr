@@ -533,9 +533,9 @@ export interface VisibilityInput {
 
 /**
  * A source row's description doesn't ask for too much experience: off when
- * the cutoff is 0, unknown (null) passes, and a title that clearly says it's
- * entry level ("Software Engineer, New Grad"; "Associate" alone isn't enough)
- * always passes.
+ * the cutoff is 0, unknown (null) passes, and a title that says in words it's
+ * entry level ("Software Engineer, New Grad") always passes. "Associate" or a
+ * bare "Engineer I" isn't enough: those often ask for 3 years.
  */
 export const passesExperienceRule = (
   row: { title: string; requiredYears?: number | null },
@@ -544,9 +544,10 @@ export const passesExperienceRule = (
   settings.experienceCutoffYears === 0 ||
   row.requiredYears == null ||
   row.requiredYears < settings.experienceCutoffYears ||
-  isEntryLevelTitle(row.title, {
-    levelKeywords: settings.levelKeywords.filter((k) => !WEAK_LEVEL_KEYWORDS.has(k.toLowerCase())),
-  });
+  matchesAnyKeyword(
+    levelTokens(row.title),
+    settings.levelKeywords.filter((k) => !WEAK_LEVEL_KEYWORDS.has(k.toLowerCase())),
+  );
 
 /** Visibility rules V, applied at read time with current settings. */
 export const isVisible = (

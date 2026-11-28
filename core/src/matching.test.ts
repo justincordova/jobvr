@@ -179,6 +179,9 @@ describe("keyword rule", () => {
     expect(years("Junior Software Engineer")).toBe(true);
     // Banks' "Associate" is often several years in
     expect(years("Associate, Software Engineer")).toBe(false);
+    // Oscar "Operations Engineer I": "3+ years experience in a technical role"
+    expect(years("Operations Engineer I")).toBe(false);
+    expect(years("Software Engineer 1, New Grad")).toBe(true);
   });
 
   it("a keyword's last word also matches its plural", () => {
